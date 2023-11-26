@@ -10,3 +10,4 @@ dependencies:
   - netcdf4
   - imageio
   - pip
+  - geopy
