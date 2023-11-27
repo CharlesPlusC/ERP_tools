@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.11  # Specify the version of Python you want to use
+  - python=3.11
   - numpy
   - matplotlib
   - cartopy
@@ -11,3 +11,5 @@ dependencies:
   - imageio
   - pip
   - geopy
+  - sgp4 
+  - pyproj
