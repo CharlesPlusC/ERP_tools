@@ -1,6 +1,20 @@
-# ERP Tools
+[![HitCount](https://hits.dwyl.com/CharlesPlusC/ERP_tools.svg?style=flat-square&show=unique)](http://hits.dwyl.com/CharlesPlusC/ERP_tools)
 
-Calculate and visualize the radiative flux reaching a given satellite along its trajectory using ERP Tools. This toolset allows users to process satellite data and visualize radiative fluxes in various forms.
+<p align="center">
+  <img src="misc/UCL-logo-black.jpg" alt="University Logo" width="200"><br/>
+  <img src="misc/SGNL_logo_ColouronBlack.jpg" alt="Research Group Logo" width="200">
+</p>
+
+<h3 align="center">ERP_tools</h3>
+
+<p align="center">
+    Calculate and visualize the radiative flux reaching a given satellite along its trajectory using ERP Tools. This toolset allows users to process satellite data and visualize radiative fluxes in various forms.
+  <br />
+  <a href="https://github.com/CharlesPlusC/ERP_tools/issues">Report Bug</a>
+  ·
+  <a href="https://github.com/CharlesPlusC/ERP_tools/pulls">Request Feature</a>
+</p>
+
 
 ## Installation
 
