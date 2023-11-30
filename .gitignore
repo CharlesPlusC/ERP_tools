@@ -1,3 +1,5 @@
 *.nc
 *.png
 *.nc
+*.pyc
+*__pycache__/

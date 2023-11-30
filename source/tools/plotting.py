@@ -126,9 +126,9 @@ def plot_fov_radiance(variable_name, time_index, radiation_data, lat, lon, sat_l
     distances = distances * 1000
     P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) #this aligns with equation 11 in the paper- although does not include the ADM anisotropic factor
 
-    print("radiation flux reaching satellite:", np.sum(P_rad))
-    print("force due to radiation:", np.sum(P_rad) / 299792458)
-    print("acceleration into a 1000kg satellite:", (np.sum(P_rad) / 299792458) / 1000)
+    # print("radiation flux reaching satellite:", np.sum(P_rad))
+    # print("force due to radiation:", np.sum(P_rad) / 299792458)
+    # print("acceleration into a 1000kg satellite:", (np.sum(P_rad) / 299792458) / 1000)
 
     # Plotting P_rad
     fig = plt.figure(figsize=(10, 7))
