@@ -11,27 +11,25 @@ from .utilities import find_nearest_index, lla_to_ecef, eci2ecef_astropy, ecef_t
 
 def sgp4_prop_TLE(TLE: str, jd_start: float, jd_end: float, dt: float, alt_series: bool = False):
     """
-    Given a TLE, a start time, end time, and time step, propagate the TLE and return the time-series of Cartesian coordinates and accompanying time-stamps (MJD).
-    
-    This is simply a wrapper for the SGP4 routine in the sgp4.api package (Brandon Rhodes).
+    Propagate a Two-Line Element (TLE) set over a specified time range using the SGP4 algorithm.
 
-    Parameters
+    Parameters:
     ----------
     TLE : str
-        TLE to be propagated.
+        The TLE string representing the satellite's orbital elements.
     jd_start : float
-        Start time of propagation in Julian Date format.
+        The starting Julian Date for the propagation.
     jd_end : float
-        End time of propagation in Julian Date format.
+        The ending Julian Date for the propagation.
     dt : float
-        Time step of propagation in seconds.
+        The time step in seconds for propagation.
     alt_series : bool, optional
-        If True, return the altitude series as well as the position series. Defaults to False.
+        If True, the function also returns the altitude series. Default is False.
 
-    Returns
+    Returns:
     -------
     list
-        List of lists containing the time-series of Cartesian coordinates, and accompanying time-stamps (MJD).
+        A list of lists containing the ephemeris: each inner list contains Julian Date, position (km), and velocity (km/s) vectors.
     """
     if jd_start > jd_end:
         print('jd_start must be less than jd_end')
@@ -70,7 +68,23 @@ def sgp4_prop_TLE(TLE: str, jd_start: float, jd_end: float, dt: float, alt_serie
 
 def sat_normal_surface_angle_vectorized(sat_lat, sat_lon, pixel_lats, pixel_lons):
     """
-    Vectorized calculation of the angle between satellite normal and pixel surface normals.
+    Compute the angle between the satellite's normal vector and the normal vectors at each pixel location on the Earth's surface.
+
+    Parameters:
+    ----------
+    sat_lat : float
+        Latitude of the satellite in degrees.
+    sat_lon : float
+        Longitude of the satellite in degrees.
+    pixel_lats : array-like
+        Array of latitudes for the pixels.
+    pixel_lons : array-like
+        Array of longitudes for the pixels.
+
+    Returns:
+    -------
+    numpy.ndarray
+        An array of cosine of angles between the satellite normal and each pixel surface normal.
     """
     sat_alt = 1200  # km
     # Convert satellite position from LLA to ECEF (including altitude)
@@ -93,7 +107,25 @@ def sat_normal_surface_angle_vectorized(sat_lat, sat_lon, pixel_lats, pixel_lons
 
 def is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, point_lats, point_lons):
     """
-    Vectorized check if points are within the satellite's field of view.
+    Vectorized computation to check if given points are within the satellite's field of view (FoV).
+
+    Parameters:
+    ----------
+    sat_lat : float
+        Latitude of the satellite in degrees.
+    sat_lon : float
+        Longitude of the satellite in degrees.
+    horizon_dist : float
+        The horizon distance or the maximum distance visible from the satellite in kilometers.
+    point_lats : numpy.ndarray
+        Array of latitudes for the points.
+    point_lons : numpy.ndarray
+        Array of longitudes for the points.
+
+    Returns:
+    -------
+    numpy.ndarray
+        A boolean array indicating whether each point is within the satellite's FoV.
     """
     R = 6371.0  # Radius of the Earth in kilometers
 
@@ -111,19 +143,64 @@ def is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, point_lats, point_l
     distance = R * c
     return distance <= horizon_dist
 
-# Function to calculate the satellite's FoV
 def calculate_satellite_fov(altitude):
+    """
+    Calculate the horizon distance or field of view (FoV) distance for a satellite at a given altitude.
+
+    Parameters:
+    ----------
+    altitude : float
+        Altitude of the satellite above the Earth's surface in kilometers.
+
+    Returns:
+    -------
+    float
+        The horizon distance in kilometers.
+    """
     earth_radius_km = 6371  # Average radius of the Earth in kilometers
     satellite_radius_km = earth_radius_km + altitude
     horizon_distance_km = math.sqrt(satellite_radius_km**2 - earth_radius_km**2)
     return horizon_distance_km
 
-# Function to check if a point is within the satellite's FoV
 def is_within_fov(sat_lat, sat_lon, horizon_dist, point_lat, point_lon):
+    """
+    Check if a given point on the Earth's surface is within the field of view (FoV) of a satellite.
+
+    Parameters:
+    ----------
+    sat_lat : float
+        Latitude of the satellite in degrees.
+    sat_lon : float
+        Longitude of the satellite in degrees.
+    horizon_dist : float
+        The horizon distance or the maximum distance visible from the satellite in kilometers.
+    point_lat : float
+        Latitude of the point in degrees.
+    point_lon : float
+        Longitude of the point in degrees.
+
+    Returns:
+    -------
+    bool
+        True if the point is within the satellite's FoV, False otherwise.
+    """
     distance = great_circle((sat_lat, sat_lon), (point_lat, point_lon)).kilometers
     return distance <= horizon_dist
 
 def extract_hourly_ceres_data(data):
+    """
+    Extract hourly CERES data including times, latitudes, longitudes, LW, and SW radiation data.
+
+    Parameters:
+    ----------
+    data : netCDF4.Dataset
+        The CERES dataset in netCDF format.
+
+    Returns:
+    -------
+    tuple
+        A tuple containing arrays of time, latitude, longitude, LW radiation data, and SW radiation data from the CERES dataset.
+    """
     # Extract the time, latitude, and longitude variables
     ceres_times = data.variables['time'][:]  # Array of time points in the CERES dataset
     lat = data.variables['lat'][:]
@@ -138,6 +215,21 @@ def extract_hourly_ceres_data(data):
     return ceres_times, lat, lon, lw_radiation_data, sw_radiation_data
 
 def combine_lw_sw_data(lw_radiation_data, sw_radiation_data):
+    """
+    Combine longwave (LW) and shortwave (SW) radiation data arrays.
+
+    Parameters:
+    ----------
+    lw_radiation_data : numpy.ndarray
+        Array of longwave radiation data.
+    sw_radiation_data : numpy.ndarray
+        Array of shortwave radiation data.
+
+    Returns:
+    -------
+    numpy.ndarray
+        The combined LW and SW radiation data.
+    """
     # Check dimensions
     assert lw_radiation_data.shape == sw_radiation_data.shape, "LW and SW Data dimensions do not match"
 
@@ -146,6 +238,21 @@ def combine_lw_sw_data(lw_radiation_data, sw_radiation_data):
     return combined_radiation_data
 
 def process_trajectory(ephemeris, ceres_times):
+    """
+    Process satellite trajectory ephemeris data to extract latitude, longitude, altitude, and corresponding CERES time indices.
+
+    Parameters:
+    ----------
+    ephemeris : list
+        List of ephemeris data including position and velocity.
+    ceres_times : numpy.ndarray
+        Array of time points in the CERES dataset.
+
+    Returns:
+    -------
+    tuple
+        A tuple containing arrays of latitudes, longitudes, altitudes, and CERES time indices corresponding to the ephemeris data.
+    """
 
     ecef_pos_list = []
     ecef_vel_list = []
