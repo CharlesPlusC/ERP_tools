@@ -11,15 +11,13 @@ def main(dataset_path, TLE, jd_start, jd_end, dt, number_of_items=150):
     data = nc.Dataset(dataset_path)
 
     # TLE for OneWeb satellite
-    oneweb_test_tle = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993 \n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
-    oneweb_tle_time = 2460069.5000000 #force time to be within the CERES dataset
-    oneweb_sgp4_ephem = sgp4_prop_TLE(TLE = TLE, jd_start = jd_start, jd_end = jd_end, dt = dt)
+    sgp4_ephem = sgp4_prop_TLE(TLE = TLE, jd_start = jd_start, jd_end = jd_end, dt = dt)
 
     ceres_times, lat, lon, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
 
     combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
-    lats, lons, alts, ceres_indices = process_trajectory(oneweb_sgp4_ephem, ceres_times)
+    lats, lons, alts, ceres_indices = process_trajectory(sgp4_ephem, ceres_times)
 
     # Create animation frames
     output_folder = "output/FOV_sliced_data"
