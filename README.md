@@ -53,16 +53,16 @@ This particular animation combines both longwave and shortwave radiative fluxes:
 The ERP Tools generate several GIFs that visualize the radiative flux. Here are some examples:
 
 Longwave Hourly Flux:
-![Longwave Hourly Flux](output/FOV_sliced_data/oneweb_lw_hrly_flux.gif)
+![Longwave Hourly Flux](output/animations/oneweb_lw_hrly_flux.gif)
 
 Longwave Hourly Radiance at TOA:
-![Longwave Hourly](output/FOV_sliced_data/oneweb_lw_hrly.gif)
+![Longwave Hourly](output/animations/oneweb_lw_hrly.gif)
 
 Shortwave Hourly Flux:
-![Shortwave Hourly Flux](output/FOV_sliced_data/oneweb_sw_hrly_flux.gif)
+![Shortwave Hourly Flux](output/animations/oneweb_sw_hrly_flux.gif)
 
 Shortwave Hourly Radiance at TOA:
-![Shortwave Hourly](output/FOV_sliced_data/oneweb_sw_hrly.gif)
+![Shortwave Hourly](output/animations/oneweb_sw_hrly.gif)
 
 ## Contributing
 Contributions and Issues to ERP Tools are welcome.
