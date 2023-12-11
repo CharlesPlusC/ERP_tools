@@ -278,3 +278,45 @@ def process_trajectory(ephemeris, ceres_times):
     ceres_indices = [find_nearest_index(ceres_times, t) for t in ceres_time]
 
     return lats, lons, alts, ceres_indices
+
+def calculate_bearing(sat_lat, sat_lon, lat, lon):
+    sat_lat_rad = np.radians(sat_lat)
+    sat_lon_rad = np.radians(sat_lon)
+    lat_rad = np.radians(lat)
+    lon_rad = np.radians(lon)
+
+    dlon_rad = lon_rad - sat_lon_rad
+
+    x = np.sin(dlon_rad) * np.cos(lat_rad)
+    y = np.cos(sat_lat_rad) * np.sin(lat_rad) - np.sin(sat_lat_rad) * np.cos(lat_rad) * np.cos(dlon_rad)
+
+    initial_bearing = np.arctan2(x, y)
+    initial_bearing = np.degrees(initial_bearing)
+    bearing = (initial_bearing + 360) % 360
+
+    return bearing
+
+def latlon_to_fov_coordinates(lat, lon, sat_lat, sat_lon, fov_radius):
+    angular_distance = []
+    bearing = []
+
+    for point_lat, point_lon in zip(lat, lon):
+        # Calculate angular distance
+        distance = great_circle((sat_lat, sat_lon), (point_lat, point_lon)).kilometers
+        angular_distance.append(distance)
+
+        # Calculate bearing
+        brng = calculate_bearing(sat_lat, sat_lon, point_lat, point_lon)
+        bearing.append(brng)
+
+    # Convert to numpy arrays
+    angular_distance = np.array(angular_distance)
+    bearing = np.array(bearing)
+
+    # Scale radial distances to match the actual FOV radius
+    r = angular_distance / np.max(angular_distance) * fov_radius
+
+    # Convert bearings to angles in radians
+    theta = np.radians(bearing)
+
+    return r, theta

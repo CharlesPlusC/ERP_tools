@@ -3,7 +3,7 @@ import netCDF4 as nc
 import os
 from itertools import islice
 from tools.data_processing import calculate_satellite_fov, process_trajectory, sgp4_prop_TLE ,combine_lw_sw_data, extract_hourly_ceres_data
-from tools.plotting import plot_radiance_animation
+from tools.plotting import plot_radiance_animation, plot_radiance_geiger
 
 def main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=150):
     # Load the CERES dataset
@@ -21,14 +21,15 @@ def main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=150):
     # Process the satellite trajectory
     lats, lons, alts, ceres_indices = process_trajectory(sgp4_ephem, ceres_times)
 
-    # Set the output folder for animations
-    output_folder = "output/FOV_sliced_data"
+    # # Call the plot_radiance_animation function with the necessary parameters
+    # plot_radiance_animation(alts=alts, lats=lats, lons=lons, ceres_indices=ceres_indices, 
+    #                         lw_radiation_data=lw_radiation_data, sw_radiation_data=sw_radiation_data, 
+    #                         combined_radiation_data=combined_radiation_data, lat=lat, lon=lon, ceres_times=ceres_times, 
+    #                         number_of_tsteps=number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder=output_folder)
 
-    # Call the plot_radiance_animation function with the necessary parameters
-    plot_radiance_animation(alts=alts, lats=lats, lons=lons, ceres_indices=ceres_indices, 
-                            lw_radiation_data=lw_radiation_data, sw_radiation_data=sw_radiation_data, 
-                            combined_radiation_data=combined_radiation_data, lat=lat, lon=lon, ceres_times=ceres_times, 
-                            number_of_tsteps=number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder=output_folder)
+    plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, 
+                         combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, 
+                         lw=False, sw=True, lwsw=False, output_folder="output/FOV_sliced_data/geiger_plots")
 
 if __name__ == "__main__":
     # Configuration for OneWeb TLE and CERES dataset
@@ -39,4 +40,4 @@ if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
     # Execute the main function
-    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=12)
+    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=50)

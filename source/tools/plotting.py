@@ -4,12 +4,13 @@ This module contains functions for plotting data, including FoV radiance in diff
 
 """
 import numpy as np
+from scipy.interpolate import griddata
 import os
 import imageio
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from itertools import islice
-from .data_processing import calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
+from .data_processing import latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 from .utilities import convert_ceres_time_to_date, lla_to_ecef
 
 def plot_fov_radiation_mesh(variable_name, time_index, radiation_data, lat, lon, sat_lat, sat_lon, horizon_dist, output_path, ceres_times):
@@ -54,8 +55,7 @@ def compute_radiance_at_sc(variable_name, time_index, radiation_data, lat, lon, 
     # Mesh grid creation
     lon2d, lat2d = np.meshgrid(lon, lat)
 
-    # lla_to_ecef function calls and FOV calculations
-    ecef_x, ecef_y, ecef_z = lla_to_ecef(lat2d, lon2d, np.zeros_like(lat2d))
+    #FOV calculations
     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[time_index, :, :])
     cos_thetas = sat_normal_surface_angle_vectorized(sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
@@ -67,6 +67,7 @@ def compute_radiance_at_sc(variable_name, time_index, radiation_data, lat, lon, 
 
     # Satellite position and distance calculations
     sat_ecef = np.array(lla_to_ecef(sat_lat, sat_lon, sat_alt))
+    ecef_x, ecef_y, ecef_z = lla_to_ecef(lat2d, lon2d, np.zeros_like(lat2d))
     ecef_pixels = np.stack((ecef_x, ecef_y, ecef_z), axis=-1)
     vector_diff = sat_ecef.reshape((1, 1, 3)) - ecef_pixels
     distances = np.linalg.norm(vector_diff, axis=2) * 1000  # Convert to meters
@@ -156,38 +157,92 @@ def create_animation(filenames, animation_path):
     images = [imageio.imread(filename) for filename in filenames]
     imageio.mimsave(animation_path, images, duration=0.5)
 
+
+
+def plot_fov_radiation(sat_lat, sat_lon, fov_radius, radiation_data, lat, lon, output_path, title):
+    fig, ax = plt.subplots(subplot_kw={'aspect': 'equal'}, figsize=(8, 8))
+
+    # Create meshgrid for lat/lon
+    lon2d, lat2d = np.meshgrid(lon, lat)
+
+    # Compute the mask for the FOV
+    fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, fov_radius, lat2d, lon2d)
+    radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data)
+
+    # Transform each lat/lon to FOV coordinates
+    r, theta = latlon_to_fov_coordinates(lat2d[fov_mask], lon2d[fov_mask], sat_lat, sat_lon, fov_radius)
+
+    # Convert polar coordinates (r, theta) to Cartesian coordinates (X, Y)
+    X = r * np.cos(theta)
+    Y = r * np.sin(theta)
+
+    # Define a grid to interpolate onto
+    grid_x, grid_y = np.mgrid[-fov_radius:fov_radius:500j, -fov_radius:fov_radius:500j]
+
+    # Interpolate the radiation data onto the grid
+    grid_radiation = griddata((X, Y), radiation_data_fov[fov_mask].flatten(), (grid_x, grid_y), method='cubic', fill_value=0)
+
+    # Apply circular mask to the grid
+    D = np.sqrt(grid_x**2 + grid_y**2)
+    grid_radiation_masked = np.ma.masked_where(D > fov_radius, grid_radiation)
+
+    # Plotting
+    img = ax.imshow(grid_radiation_masked, extent=(-fov_radius, fov_radius, -fov_radius, fov_radius), origin='lower')
+    plt.colorbar(img, label='Radiation (J/m²)')
+    ax.set_title(title)
+    ax.set_xlabel('FOV X Coordinate (km)')
+    ax.set_ylabel('FOV Y Coordinate (km)')
+
+    plt.savefig(output_path)
+    plt.close(fig)
+
 def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data"):
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize cumulative radiation data arrays
-    cumulative_lw = np.zeros_like(lw_radiation_data[0, :, :]) if lw else None
-    cumulative_sw = np.zeros_like(sw_radiation_data[0, :, :]) if sw else None
-    cumulative_lwsw = np.zeros_like(combined_radiation_data[0, :, :]) if lwsw else None
+    cumulative_lw = None
+    cumulative_sw = None
+    cumulative_lwsw = None
 
+    # Iterate over each time step
     for idx, (alt, sat_lat, sat_lon, ceres_idx) in enumerate(zip(alts, lats, lons, ceres_indices)):
         if idx >= number_of_tsteps:
             break
 
         horizon_dist = calculate_satellite_fov(alt)
 
-        # Update cumulative radiation data
-        if lw:
-            _, _, _, _, lw_P_rad, _, _, _ = compute_radiance_at_sc("LW", ceres_idx, lw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
-            cumulative_lw += lw_P_rad
-        if sw:
-            _, _, _, _, sw_P_rad, _, _, _ = compute_radiance_at_sc("SW", ceres_idx, sw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
-            cumulative_sw += sw_P_rad
-        if lwsw:
-            _, _, _, _, lwsw_P_rad, _, _, _ = compute_radiance_at_sc("LWSW", ceres_idx, combined_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
-            cumulative_lwsw += lwsw_P_rad
+        # Compute time step duration in seconds for the current time step
+        time_step_duration = (ceres_times[ceres_idx + 1] - ceres_times[ceres_idx]) * 24 * 60 * 60
 
-        # Plot cumulative radiation data
+        # Compute FOV-masked radiation data for each type at the current time step
+        _, _, _, _, lw_P_rad, _, _, _ = compute_radiance_at_sc("LW", ceres_idx, lw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times) if lw else (None,)*8
+        _, _, _, _, sw_P_rad, _, _, _ = compute_radiance_at_sc("SW", ceres_idx, sw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times) if sw else (None,)*8
+        _, _, _, _, lwsw_P_rad, _, _, _ = compute_radiance_at_sc("LWSW", ceres_idx, combined_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times) if lwsw else (None,)*8
+
+        # Scale radiation data by time step duration and accumulate
         if lw:
-            lw_output_path = os.path.join(output_folder, f"cumulative_lw_{idx}.png")
-            plot_local_fov(lon, lat, cumulative_lw, lw_output_path, "Cumulative LW Radiation")
+            if cumulative_lw is None:
+                cumulative_lw = np.zeros_like(lw_P_rad)
+            cumulative_lw += lw_P_rad * time_step_duration
+
         if sw:
-            sw_output_path = os.path.join(output_folder, f"cumulative_sw_{idx}.png")
-            plot_local_fov(lon, lat, cumulative_sw, sw_output_path, "Cumulative SW Radiation")
+            if cumulative_sw is None:
+                cumulative_sw = np.zeros_like(sw_P_rad)
+            cumulative_sw += sw_P_rad * time_step_duration
+
         if lwsw:
-            lwsw_output_path = os.path.join(output_folder, f"cumulative_lwsw_{idx}.png")
-            plot_local_fov(lon, lat, cumulative_lwsw, lwsw_output_path, "Cumulative LWSW Radiation")
+            if cumulative_lwsw is None:
+                cumulative_lwsw = np.zeros_like(lwsw_P_rad)
+            cumulative_lwsw += lwsw_P_rad * time_step_duration
+
+        # Plot at each step or after the loop to see cumulative effect
+        if idx == number_of_tsteps - 1:
+            if lw:
+                lw_output_path = os.path.join(output_folder, f"cumulative_lw_{idx}.png")
+                plot_fov_radiation(sat_lat, sat_lon, horizon_dist, cumulative_lw, lat, lon, lw_output_path, "Cumulative LW Radiation (J/m²)")
+            if sw:
+                sw_output_path = os.path.join(output_folder, f"cumulative_sw_{idx}.png")
+                plot_fov_radiation(sat_lat, sat_lon, horizon_dist, cumulative_sw, lat, lon, sw_output_path, "Cumulative SW Radiation (J/m²)")
+            if lwsw:
+                lwsw_output_path = os.path.join(output_folder, f"cumulative_lwsw_{idx}.png")
+                plot_fov_radiation(sat_lat, sat_lon, horizon_dist, cumulative_lwsw, lat, lon, lwsw_output_path, "Cumulative LWSW Radiation (J/m²)")
