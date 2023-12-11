@@ -97,7 +97,7 @@ def plot_data_map(lon2d, lat2d, data, label, output_path, ceres_times, time_inde
     plt.savefig(modified_output_path)
     plt.close(fig)
 
-def plot_radiance_maps(time_index, variable_name, radiation_data, lat, lon, sat_lat, sat_lon, sat_alt, horizon_dist, output_path, ceres_times, plot_cosine_factors=True, plot_distances=True, plot_radiation=True):
+def plot_radiance_maps(time_index, variable_name, radiation_data, lat, lon, sat_lat, sat_lon, sat_alt, horizon_dist, output_path, ceres_times, plot_cosine_factors=False, plot_distances=False, plot_radiation=True):
     # Call compute_radiance_at_sc to get the necessary data
     lon2d, lat2d, cosine_factors_2d, distances, P_rad, _, _, _ = compute_radiance_at_sc(variable_name, time_index, radiation_data, lat, lon, sat_lat, sat_lon, sat_alt, horizon_dist, ceres_times)
     print("variable_name:", variable_name)
