@@ -8,6 +8,7 @@ from scipy.interpolate import griddata
 import os
 import imageio
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import cartopy.crs as ccrs
 from itertools import islice
 from .data_processing import latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
@@ -198,36 +199,81 @@ def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize cumulative radiation data arrays for local coordinates
-    #should be a roughly circular set of arrays
-    local_fov_radiation = np.zeros((number_of_tsteps, 180, 180)) #this is like the geiger counter
+    local_fov_radiation_lw = np.zeros((number_of_tsteps, 180, 180))
+    local_fov_radiation_sw = np.zeros((number_of_tsteps, 180, 180))
+    local_fov_radiation_lwsw = np.zeros((number_of_tsteps, 180, 180))
+
+    plot_paths = []
 
     for idx, (alt, sat_lat, sat_lon, ceres_idx) in enumerate(zip(alts, lats, lons, ceres_indices)):
         if idx >= number_of_tsteps:
             break
+        print("idx:", idx)
 
         horizon_dist = calculate_satellite_fov(alt)
         time_step_duration = (ceres_times[ceres_idx + 1] - ceres_times[ceres_idx]) * 24 * 60
 
+        # Process LW, SW, and LWSW radiation data
+        if lw:
+            _, _, _, _, lw_P_rad, _, _, _ = compute_radiance_at_sc("LW", ceres_idx, lw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
+            local_lw = convert_to_xy(lw_P_rad, sat_lat, sat_lon, horizon_dist, lat, lon) * time_step_duration
+            local_lw = np.pad(local_lw, ((0, 180-local_lw.shape[0]), (0, 180-local_lw.shape[1])), 'constant', constant_values=0)
+            local_fov_radiation_lw[idx, :, :] += local_lw
+
         if sw:
             _, _, _, _, sw_P_rad, _, _, _ = compute_radiance_at_sc("SW", ceres_idx, sw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
-            local_sw = convert_to_xy(sw_P_rad, sat_lat, sat_lon, horizon_dist, lat, lon) * time_step_duration # W/m^2 * min = J/m^2
+            local_sw = convert_to_xy(sw_P_rad, sat_lat, sat_lon, horizon_dist, lat, lon) * time_step_duration
             local_sw = np.pad(local_sw, ((0, 180-local_sw.shape[0]), (0, 180-local_sw.shape[1])), 'constant', constant_values=0)
-            local_fov_radiation[idx, :, :] += local_sw
+            local_fov_radiation_sw[idx, :, :] += local_sw
 
-        # Plot at every 10th time step
+        if lwsw:
+            _, _, _, _, lwsw_P_rad, _, _, _ = compute_radiance_at_sc("LWSW", ceres_idx, combined_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
+            local_lwsw = convert_to_xy(lwsw_P_rad, sat_lat, sat_lon, horizon_dist, lat, lon) * time_step_duration
+            local_lwsw = np.pad(local_lwsw, ((0, 180-local_lwsw.shape[0]), (0, 180-local_lwsw.shape[1])), 'constant', constant_values=0)
+            local_fov_radiation_lwsw[idx, :, :] += local_lwsw
+
+        # Plot at every 5th time step
         if idx % 5 == 0 and idx > 0:
-            print("plotting idx:", idx)
-            if sw:
-                sw_output_path = os.path.join(output_folder, f"cumulative_sw_{idx}.png")
-                #now sum all the local_fov_radiation up to this point and plot it
-                sum_cum_local_sw = np.sum(local_fov_radiation[:idx, :, :], axis=0)
-                plt.figure(figsize=(10, 7))
-                plt.imshow(sum_cum_local_sw, cmap='nipy_spectral')
-                plt.colorbar()
-                plt.title(f'SW - {idx}')
-                plt.savefig(sw_output_path)
-                # plt.show()
-                plt.close()
+            if lw or sw or lwsw:
+                output_path = os.path.join(output_folder, f"cumulative_radiation_{idx}.png")
+                plot_paths.append(output_path)
+                fig, axes = plt.subplots(1, (lw + sw + lwsw), figsize=(15, 5))
+
+                # Determine the maximum radiation value across all types for consistent colorbar scale
+                max_radiation_value = max(
+                    np.sum(local_fov_radiation_lw[:idx, :, :], axis=0).max(),
+                    np.sum(local_fov_radiation_sw[:idx, :, :], axis=0).max(),
+                    np.sum(local_fov_radiation_lwsw[:idx, :, :], axis=0).max()
+                )
+
+                formatted_time = convert_ceres_time_to_date(ceres_times[ceres_idx])
+
+                if lw:
+                    ax = axes[0] if (lw + sw + lwsw) > 1 else axes
+                    sum_cum_local_lw = np.sum(local_fov_radiation_lw[:idx, :, :], axis=0)
+                    im = ax.imshow(sum_cum_local_lw, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
+                    ax.set_title('Cumulative LW Radiation\n CERES Time:' + formatted_time)
+                    fig.colorbar(im, ax=ax, label='Joules/m²')
+
+                if sw:
+                    ax = axes[1] if lw else axes[0]
+                    sum_cum_local_sw = np.sum(local_fov_radiation_sw[:idx, :, :], axis=0)
+                    im = ax.imshow(sum_cum_local_sw, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
+                    ax.set_title('Cumulative LW Radiation\n CERES Time:' + formatted_time)
+                    fig.colorbar(im, ax=ax, label='Joules/m²')
+
+                if lwsw:
+                    ax = axes[-1]
+                    sum_cum_local_lwsw = np.sum(local_fov_radiation_lwsw[:idx, :, :], axis=0)
+                    im = ax.imshow(sum_cum_local_lwsw, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
+                    ax.set_title('Cumulative LW Radiation\n CERES Time:' + formatted_time)
+                    fig.colorbar(im, ax=ax, label='Joules/m²')
+
+                plt.savefig(output_path)
+                plt.close(fig)
+
+    combined_animation_path = os.path.join(output_folder, 'cumulative_flux_anim.gif')
+    create_animation(plot_paths, combined_animation_path)
 
 def convert_to_xy(radiation_data, sat_lat, sat_lon, fov_radius, lat, lon):
     # Create meshgrid for lat/lon

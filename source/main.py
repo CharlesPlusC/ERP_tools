@@ -29,7 +29,7 @@ def main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=150):
 
     plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, 
                          combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, 
-                         lw=False, sw=True, lwsw=False, output_folder="output/FOV_sliced_data/geiger_plots")
+                         lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data/geiger_plots")
 
 if __name__ == "__main__":
     # Configuration for OneWeb TLE and CERES dataset
@@ -40,4 +40,4 @@ if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
     # Execute the main function
-    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=100)
+    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=500)
