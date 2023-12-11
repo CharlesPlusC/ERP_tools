@@ -187,7 +187,7 @@ def plot_fov_radiation(sat_lat, sat_lon, fov_radius, radiation_data, lat, lon, o
     grid_radiation_masked = np.ma.masked_where(D > fov_radius, grid_radiation)
 
     # Plotting
-    img = ax.imshow(grid_radiation_masked, extent=(-fov_radius, fov_radius, -fov_radius, fov_radius), origin='lower')
+    img = ax.imshow(grid_radiation_masked, extent=(-fov_radius, fov_radius, -fov_radius, fov_radius), origin='lower', cmap='nipy_spectral')
     plt.colorbar(img, label='Radiation (J/m²)')
     ax.set_title(title)
     ax.set_xlabel('FOV X Coordinate (km)')
@@ -200,42 +200,35 @@ def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize cumulative radiation data arrays
-    cumulative_lw = None
-    cumulative_sw = None
-    cumulative_lwsw = None
+    cumulative_lw = cumulative_sw = cumulative_lwsw = None
 
     # Iterate over each time step
     for idx, (alt, sat_lat, sat_lon, ceres_idx) in enumerate(zip(alts, lats, lons, ceres_indices)):
         if idx >= number_of_tsteps:
             break
+        print("idx:", idx)
 
         horizon_dist = calculate_satellite_fov(alt)
-
-        # Compute time step duration in seconds for the current time step
         time_step_duration = (ceres_times[ceres_idx + 1] - ceres_times[ceres_idx]) * 24 * 60 * 60
 
-        # Compute FOV-masked radiation data for each type at the current time step
-        _, _, _, _, lw_P_rad, _, _, _ = compute_radiance_at_sc("LW", ceres_idx, lw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times) if lw else (None,)*8
-        _, _, _, _, sw_P_rad, _, _, _ = compute_radiance_at_sc("SW", ceres_idx, sw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times) if sw else (None,)*8
-        _, _, _, _, lwsw_P_rad, _, _, _ = compute_radiance_at_sc("LWSW", ceres_idx, combined_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times) if lwsw else (None,)*8
-
-        # Scale radiation data by time step duration and accumulate
+        # Compute and accumulate radiation data for each type
         if lw:
-            if cumulative_lw is None:
-                cumulative_lw = np.zeros_like(lw_P_rad)
+            _, _, _, _, lw_P_rad, _, _, _ = compute_radiance_at_sc("LW", ceres_idx, lw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
+            cumulative_lw = np.zeros_like(lw_P_rad) if cumulative_lw is None else cumulative_lw
             cumulative_lw += lw_P_rad * time_step_duration
 
         if sw:
-            if cumulative_sw is None:
-                cumulative_sw = np.zeros_like(sw_P_rad)
+            _, _, _, _, sw_P_rad, _, _, _ = compute_radiance_at_sc("SW", ceres_idx, sw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
+            cumulative_sw = np.zeros_like(sw_P_rad) if cumulative_sw is None else cumulative_sw
             cumulative_sw += sw_P_rad * time_step_duration
+            print("Current cumulative SW radiance:", np.sum(cumulative_sw))
 
         if lwsw:
-            if cumulative_lwsw is None:
-                cumulative_lwsw = np.zeros_like(lwsw_P_rad)
+            _, _, _, _, lwsw_P_rad, _, _, _ = compute_radiance_at_sc("LWSW", ceres_idx, combined_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
+            cumulative_lwsw = np.zeros_like(lwsw_P_rad) if cumulative_lwsw is None else cumulative_lwsw
             cumulative_lwsw += lwsw_P_rad * time_step_duration
 
-        # Plot at each step or after the loop to see cumulative effect
+        # Plot at the last step
         if idx == number_of_tsteps - 1:
             if lw:
                 lw_output_path = os.path.join(output_folder, f"cumulative_lw_{idx}.png")
