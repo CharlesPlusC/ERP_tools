@@ -194,9 +194,6 @@ def plot_fov_radiation(sat_lat, sat_lon, fov_radius, radiation_data, lat, lon, o
     plt.savefig(output_path)
     plt.close(fig)
 
-import numpy as np
-from scipy.interpolate import griddata
-
 def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data"):
     os.makedirs(output_folder, exist_ok=True)
 
@@ -213,24 +210,24 @@ def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_
 
         if sw:
             _, _, _, _, sw_P_rad, _, _, _ = compute_radiance_at_sc("SW", ceres_idx, sw_radiation_data, lat, lon, sat_lat, sat_lon, alt, horizon_dist, ceres_times)
-            local_sw = convert_to_xy(sw_P_rad, sat_lat, sat_lon, horizon_dist, lat, lon) * time_step_duration
-            #stretch the local_sw to be (180,180)- normally it is smaller
+            local_sw = convert_to_xy(sw_P_rad, sat_lat, sat_lon, horizon_dist, lat, lon) * time_step_duration # W/m^2 * min = J/m^2
             local_sw = np.pad(local_sw, ((0, 180-local_sw.shape[0]), (0, 180-local_sw.shape[1])), 'constant', constant_values=0)
             local_fov_radiation[idx, :, :] += local_sw
 
-        # Plot at each step
-        if sw:
-            sw_output_path = os.path.join(output_folder, f"cumulative_sw_{idx}.png")
-            #now sum all the local_fov_radiation up to this point and plot it
-            sum_cum_local_sw = np.sum(local_fov_radiation[:idx, :, :], axis=0)
-            
-            plt.figure(figsize=(10, 7))
-            plt.imshow(sum_cum_local_sw, cmap='nipy_spectral')
-            plt.colorbar()
-            plt.title(f'SW - {idx}')
-            plt.savefig(sw_output_path)
-            # plt.show()
-            plt.close()
+        # Plot at every 10th time step
+        if idx % 5 == 0 and idx > 0:
+            print("plotting idx:", idx)
+            if sw:
+                sw_output_path = os.path.join(output_folder, f"cumulative_sw_{idx}.png")
+                #now sum all the local_fov_radiation up to this point and plot it
+                sum_cum_local_sw = np.sum(local_fov_radiation[:idx, :, :], axis=0)
+                plt.figure(figsize=(10, 7))
+                plt.imshow(sum_cum_local_sw, cmap='nipy_spectral')
+                plt.colorbar()
+                plt.title(f'SW - {idx}')
+                plt.savefig(sw_output_path)
+                # plt.show()
+                plt.close()
 
 def convert_to_xy(radiation_data, sat_lat, sat_lon, fov_radius, lat, lon):
     # Create meshgrid for lat/lon
@@ -243,8 +240,9 @@ def convert_to_xy(radiation_data, sat_lat, sat_lon, fov_radius, lat, lon):
     # Convert polar coordinates (r, theta) to Cartesian coordinates (X, Y)
     X = r * np.cos(theta)
     Y = r * np.sin(theta)
-    # Define a grid to interpolate onto
-    grid_x, grid_y = np.mgrid[-fov_radius:fov_radius:180, -fov_radius:fov_radius:360]
+    # Define a 180x180 grid to interpolate onto
+    grid_x, grid_y = np.mgrid[-fov_radius:fov_radius:180j, -fov_radius:fov_radius:180j] # Adjust to create a 180x180 grid
     # Interpolate the radiation data onto the grid
     grid_radiation = griddata((X, Y), radiation_data_fov[fov_mask].flatten(), (grid_x, grid_y), method='linear', fill_value=0)
     return grid_radiation
+
