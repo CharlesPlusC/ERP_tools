@@ -29,15 +29,16 @@ def main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=150):
 
     plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, 
                          combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, 
-                         lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data/geiger_plots")
+                         lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data/geiger_plots/starlink/")
 
 if __name__ == "__main__":
     # Configuration for OneWeb TLE and CERES dataset
-    TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    # TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    TLE_2 = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset
     jd_end = jd_start + 1
     dt = 60  # Seconds
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
     # Execute the main function
-    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=500)
+    main(dataset_path, TLE_2, jd_start, jd_end, dt, number_of_tsteps=500)

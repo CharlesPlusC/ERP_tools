@@ -208,7 +208,7 @@ def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_
     for idx, (alt, sat_lat, sat_lon, ceres_idx) in enumerate(zip(alts, lats, lons, ceres_indices)):
         if idx >= number_of_tsteps:
             break
-        print("idx:", idx)
+        print("radiance geiger step:", idx)
 
         horizon_dist = calculate_satellite_fov(alt)
         time_step_duration = (ceres_times[ceres_idx + 1] - ceres_times[ceres_idx]) * 24 * 60
@@ -248,27 +248,40 @@ def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_
 
                 formatted_time = convert_ceres_time_to_date(ceres_times[ceres_idx])
 
-                if lw:
-                    ax = axes[0] if (lw + sw + lwsw) > 1 else axes
-                    sum_cum_local_lw = np.sum(local_fov_radiation_lw[:idx, :, :], axis=0)
-                    im = ax.imshow(sum_cum_local_lw, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
-                    ax.set_title('Cumulative LW Radiation\n CERES Time:' + formatted_time)
+                for ax_idx, radiation_type in enumerate(['LW', 'SW', 'LWSW']):
+                    if radiation_type == 'LW' and lw:
+                        sum_cum_local = np.sum(local_fov_radiation_lw[:idx, :, :], axis=0)
+                    elif radiation_type == 'SW' and sw:
+                        sum_cum_local = np.sum(local_fov_radiation_sw[:idx, :, :], axis=0)
+                    elif radiation_type == 'LWSW' and lwsw:
+                        sum_cum_local = np.sum(local_fov_radiation_lwsw[:idx, :, :], axis=0)
+                    else:
+                        continue
+
+                    ax = axes[ax_idx] if (lw + sw + lwsw) > 1 else axes
+                    im = ax.imshow(sum_cum_local, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
+                    ax.set_title(f'Cumulative {radiation_type} Radiation\n CERES Time: {formatted_time}')
                     fig.colorbar(im, ax=ax, label='Joules/m²')
 
-                if sw:
-                    ax = axes[1] if lw else axes[0]
-                    sum_cum_local_sw = np.sum(local_fov_radiation_sw[:idx, :, :], axis=0)
-                    im = ax.imshow(sum_cum_local_sw, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
-                    ax.set_title('Cumulative LW Radiation\n CERES Time:' + formatted_time)
-                    fig.colorbar(im, ax=ax, label='Joules/m²')
+                    # Set aspect ratio and add grid lines
+                    ax.set_aspect('equal')
+                    for radius in range(25, 180, 25):
+                        circle = plt.Circle((90, 90), radius, color='white', fill=False)
+                        ax.add_patch(circle)
 
-                if lwsw:
-                    ax = axes[-1]
-                    sum_cum_local_lwsw = np.sum(local_fov_radiation_lwsw[:idx, :, :], axis=0)
-                    im = ax.imshow(sum_cum_local_lwsw, cmap='nipy_spectral', vmin=0, vmax=max_radiation_value)
-                    ax.set_title('Cumulative LW Radiation\n CERES Time:' + formatted_time)
-                    fig.colorbar(im, ax=ax, label='Joules/m²')
+                    # Add thin center crosshair
+                    ax.axhline(y=90, color='white', linestyle='-', linewidth=1)
+                    ax.axvline(x=90, color='white', linestyle='-', linewidth=1)
 
+                    # Hide the square frame
+                    ax.set_xlim(0, 180)
+                    ax.set_ylim(0, 180)
+
+                    # Label axes
+                    ax.set_xlabel('FOV x (\N{DEGREE SIGN})')
+                    ax.set_ylabel('FOV y (\N{DEGREE SIGN})')
+
+                plt.tight_layout()
                 plt.savefig(output_path)
                 plt.close(fig)
 
