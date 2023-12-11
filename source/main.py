@@ -40,4 +40,4 @@ if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
     # Execute the main function
-    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=50)
+    main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps=500)
