@@ -4,69 +4,12 @@ This module contains functions and classes for processing satellite and CERES da
 
 """
 import numpy as np
-from sgp4.api import Satrec
 import math
 from geopy.distance import great_circle
 from .utilities import find_nearest_index, lla_to_ecef, eci2ecef_astropy, ecef_to_lla, julian_day_to_ceres_time
 
-def sgp4_prop_TLE(TLE: str, jd_start: float, jd_end: float, dt: float, alt_series: bool = False):
-    """
-    Propagate a Two-Line Element (TLE) set over a specified time range using the SGP4 algorithm.
 
-    Parameters:
-    ----------
-    TLE : str
-        The TLE string representing the satellite's orbital elements.
-    jd_start : float
-        The starting Julian Date for the propagation.
-    jd_end : float
-        The ending Julian Date for the propagation.
-    dt : float
-        The time step in seconds for propagation.
-    alt_series : bool, optional
-        If True, the function also returns the altitude series. Default is False.
-
-    Returns:
-    -------
-    list
-        A list of lists containing the ephemeris: each inner list contains Julian Date, position (km), and velocity (km/s) vectors.
-    """
-    if jd_start > jd_end:
-        print('jd_start must be less than jd_end')
-        return
-
-    ephemeris = []
-    
-    #convert dt from seconds to julian day
-    dt_jd = dt/86400
-
-    #split at the new line
-    split_tle = TLE.split('\n')
-    s = split_tle[0]
-    r = split_tle[1]
-
-    fr = 0.0 # precise fraction (SGP4 docs for more info)
-    
-    #create a satellite object
-    satellite = Satrec.twoline2rv(s, r)
-
-    time = jd_start
-    # for i in range (jd_start, jd_end, dt):
-    while time < jd_end:
-        # propagate the satellite to the next time step
-        # Position is in idiosyncratic True Equator Mean Equinox coordinate frame used by SGP4
-        # Velocity is the rate at which the position is changing, expressed in kilometers per second
-        error, position, velocity = satellite.sgp4(time, fr)
-        if error != 0:
-            print('Satellite position could not be computed for the given date')
-            break
-        else:
-            ephemeris.append([time,position, velocity]) #jd time, pos, vel
-        time += dt_jd
-
-    return ephemeris
-
-def sat_normal_surface_angle_vectorized(sat_lat, sat_lon, pixel_lats, pixel_lons):
+def sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, pixel_lats, pixel_lons):
     """
     Compute the angle between the satellite's normal vector and the normal vectors at each pixel location on the Earth's surface.
 
@@ -86,7 +29,6 @@ def sat_normal_surface_angle_vectorized(sat_lat, sat_lon, pixel_lats, pixel_lons
     numpy.ndarray
         An array of cosine of angles between the satellite normal and each pixel surface normal.
     """
-    sat_alt = 1200  # km
     # Convert satellite position from LLA to ECEF (including altitude)
     sat_ecef = np.array(lla_to_ecef(sat_lat, sat_lon, sat_alt))
 

@@ -6,108 +6,6 @@ from pyproj import Transformer
 from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
 
-def tle_convert(tle_dict: dict) -> dict:
-    """
-    Convert a TLE dictionary into the corresponding Keplerian elements.
-
-    Parameters
-    ----------
-    tle_dict : dict
-        Dictionary of TLE data.
-
-    Returns
-    -------
-    dict
-        Dictionary containing Keplerian elements.
-    """
-    # Standard gravitational parameter for the Earth
-    GM = 398600.4415 * (1e3)**3 # m^3/s^2
-
-    # Convert RAAN from degrees to radians
-    RAAN = np.radians(float(tle_dict['right ascension of the ascending node']))
-    
-    # Convert argument of perigee from degrees to radians
-    arg_p = np.radians(float(tle_dict['argument of perigee']))
-    
-    # Convert mean motion from revolutions per day to radians per second
-    mean_motion = float(tle_dict['mean motion']) * (2 * np.pi / 86400)
-    
-    # Compute the period of the orbit in seconds
-    period = 2 * np.pi / mean_motion
-    
-    # Compute the semi-major axis
-    n = mean_motion # mean motion in radians per second
-    a = (GM / (n ** 2)) ** (1/3) / 1000 # in km
-    
-    # Convert mean anomaly from degrees to radians
-    M = np.radians(float(tle_dict['mean anomaly']))
-    
-    # Extract eccentricity as decimal value
-    e = float("0." + tle_dict['eccentricity'])
-    
-    # Convert inclination from degrees to radians
-    inclination = np.radians(float(tle_dict['inclination']))
-    
-    # Initial Guess at Eccentric Anomaly
-    if M < np.pi:
-        E = M + (e / 2)
-    else:
-        E = M - (e / 2)
-
-    # Numerical iteration for Eccentric Anomaly
-    f = lambda E: E - e * np.sin(E) - M
-    fp = lambda E: 1 - e * np.cos(E)
-    E = np.float64(E)
-    r_tol = 1e-8 # set the convergence tolerance for the iteration
-    max_iter = 50 # set the maximum number of iterations allowed
-    for it in range(max_iter):
-        f_value = f(E)
-        fp_value = fp(E)
-        E_new = E - f_value / fp_value
-        if np.abs(E_new - E) < r_tol:
-            E = E_new
-            break
-        E = E_new
-    else:
-        raise ValueError("Eccentric anomaly did not converge")
-        
-    eccentric_anomaly = E
-
-    # Compute True Anomaly
-    true_anomaly = 2 * np.arctan2(np.sqrt(1 + e) * np.sin(eccentric_anomaly / 2),
-                                  np.sqrt(1 - e) * np.cos(eccentric_anomaly / 2))
-
-    # Dictionary of Keplerian elements
-    keplerian_dict = {'a': a, 'e': e, 'i': inclination, 'RAAN': RAAN, 'arg_p': arg_p, 'true_anomaly': np.degrees(true_anomaly)}
-    return keplerian_dict
-
-def TLE_time(TLE: str) -> float:
-    """
-    Find the time of a TLE in Julian Day format.
-
-    Parameters
-    ----------
-    TLE : str
-        The TLE string.
-
-    Returns
-    -------
-    float
-        Time in Julian Day format.
-    """
-    #find the epoch section of the TLE
-    epoch = TLE[18:32]
-    #convert the first two digits of the epoch to the year
-    year = 2000+int(epoch[0:2])
-    
-    # the rest of the digits are the day of the year and fractional portion of the day
-    day = float(epoch[2:])
-    #convert the day of the year to a day, month, year format
-    date = datetime.datetime(year, 1, 1) + datetime.timedelta(day - 1)
-    #convert the date to a julian date
-    jd = (date - datetime.datetime(1858, 11, 17)).total_seconds() / 86400.0 + 2400000.5
-    return jd
-
 def ecef_to_lla(x, y, z):
     """
     Convert Earth-Centered, Earth-Fixed (ECEF) coordinates to Latitude, Longitude, Altitude (LLA).
@@ -192,6 +90,8 @@ def eci2ecef_astropy(eci_pos, eci_vel, mjd):
     return ecef_pos, ecef_vel
 
 def convert_ceres_time_to_date(ceres_time, ceres_ref_date=datetime(2000, 3, 1)):
+    #TODO: make sure to remove this default date
+
     # Separate days and fractional days
     days = int(ceres_time)
     fractional_day = ceres_time - days
@@ -228,3 +128,23 @@ def find_nearest_index(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return idx
+
+def jd_to_utc(jd: float) -> datetime:
+    """
+    Convert Julian Date to UTC time tag (datetime object) using Astropy.
+
+    Parameters
+    ----------
+    jd : float
+        Julian Date.
+
+    Returns
+    -------
+    datetime
+        UTC time tag.
+    """
+    #convert jd to astropy time object
+    time = Time(jd, format='jd', scale='utc')
+    #convert astropy time object to datetime object
+    utc = time.datetime
+    return utc

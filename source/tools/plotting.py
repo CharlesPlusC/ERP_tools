@@ -195,7 +195,7 @@ def plot_fov_radiation(sat_lat, sat_lon, fov_radius, radiation_data, lat, lon, o
     plt.savefig(output_path)
     plt.close(fig)
 
-def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data"):
+def                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data"):
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize cumulative radiation data arrays for local coordinates
