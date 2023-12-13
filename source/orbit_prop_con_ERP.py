@@ -56,15 +56,20 @@ if __name__ == "__main__":
     dt = 60  # Seconds
     sgp4_ephem = sgp4_prop_TLE(TLE=TLE, jd_start=jd_start, jd_end=jd_end, dt=dt)
     # tle_time = TLE_time(TLE) The TLE I have is not actually in the daterange of the CERES dataset I downloaded
-
     utc_start = jd_to_utc(jd_start)
-    print(utc_start)
 
-    #segment
+    # Segment the time stamp into year, month, day, hour, minute, second components
+    YYYY = int(utc_start.strftime("%Y"))
+    MM = int(utc_start.strftime("%m"))
+    DD = int(utc_start.strftime("%d"))
+    H = int(utc_start.strftime("%H"))
+    M = int(utc_start.strftime("%M"))
+    S = float(utc_start.strftime("%S"))
 
     #convert JD start epoch to UTC and pass to AbsoluteDate
-    # utc = TimeScalesFactory.getUTC() #instantiate UTC time scale
-    # TLE_epochDate = AbsoluteDate(YYYY, MM, DD, H, M, SS.SSS, utc)
+    utc = TimeScalesFactory.getUTC() #instantiate UTC time scale
+    TLE_epochDate = AbsoluteDate(YYYY, MM, DD, H, M, S, utc)
+    print("orekit AbsoluteDate:", TLE_epochDate)
     #Convert the initial position and velocity to keplerian elements
 
     # CAR2KEP - Make sure to use degrees for the angles
