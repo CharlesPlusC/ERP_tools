@@ -38,7 +38,7 @@ orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
 
-from math import radians, degrees
+import numpy as np
 
 from tools.utilities import jd_to_utc
 from tools.data_processing import extract_hourly_ceres_data
@@ -70,55 +70,57 @@ if __name__ == "__main__":
     utc = TimeScalesFactory.getUTC() #instantiate UTC time scale
     TLE_epochDate = AbsoluteDate(YYYY, MM, DD, H, M, S, utc)
     print("orekit AbsoluteDate:", TLE_epochDate)
+
     #Convert the initial position and velocity to keplerian elements
+    tle_dict = twoLE_parse(TLE)
+    print("tle_dict:", tle_dict)
+    kep_elems = tle_convert(tle_dict)
+    print("kep_elems dict:", kep_elems)
 
-    # CAR2KEP - Make sure to use degrees for the angles
-    # a,e,i,omega,OMEGA,nu = CAR2KEP(r,v,mu)
+    a = float(kep_elems['a'])*1000
+    e = float(kep_elems['e'])
+    i = float(kep_elems['i'])
+    omega = float(kep_elems['arg_p'])
+    raan = float(kep_elems['RAAN'])
+    lv = (float(kep_elems['true_anomaly']))
+
     ## Instantiate the inertial frame where the orbit is defined
-    # inertialFrame = FramesFactory.getEME2000()
-
-    # tle_dict = twoLE_parse(TLE)
-
-    # kep_elems = tle_convert(tle_dict)
-
-    # print("initial keplerian elements:")
-    # print(kep_elems)
+    inertialFrame = FramesFactory.getEME2000()
 
     # ## Orbit construction as Keplerian
-    # initialOrbit = KeplerianOrbit(a, e, i, omega, raan, lv,
-    #                             PositionAngleType.TRUE,
-    #                             inertialFrame, TLE_epochDate, Constants.WGS84_EARTH_MU)
-    # initialOrbit
+    initialOrbit = KeplerianOrbit(a, e, i, omega, raan, lv,
+                                PositionAngleType.TRUE,
+                                inertialFrame, TLE_epochDate, Constants.WGS84_EARTH_MU)
+    print("initial orekit orbit:", initialOrbit)
 
-    # # #Set parameters for numerical propagation
-    # # minStep = 0.001
-    # # maxstep = 1000.0
-    # # initStep = 60.0
-    # # positionTolerance = 1.0 
-    # # tolerances = NumericalPropagator.tolerances(positionTolerance, 
-    # #                                             initialOrbit, 
-    # #                                             initialOrbit.getType())
-    # # integrator = DormandPrince853Integrator(minStep, maxstep, 
-    # #     JArray_double.cast_(tolerances[0]),  # Double array of doubles needs to be casted in Python
-    # #     JArray_double.cast_(tolerances[1]))
-    # # integrator.setInitialStepSize(initStep)
-    # # satellite_mass = 500.0  # The models need a spacecraft mass, unit kg. 500kg is a complete guesstimate.
+    # #Set parameters for numerical propagation
+    minStep = 0.001
+    maxstep = 1000.0
+    initStep = 60.0
+    positionTolerance = 1.0 
+    tolerances = NumericalPropagator.tolerances(positionTolerance, 
+                                                initialOrbit, 
+                                                initialOrbit.getType())
+    integrator = DormandPrince853Integrator(minStep, maxstep, 
+        JArray_double.cast_(tolerances[0]),  # Double array of doubles needs to be casted in Python
+        JArray_double.cast_(tolerances[1]))
+    integrator.setInitialStepSize(initStep)
+    satellite_mass = 500.0  # The models need a spacecraft mass, unit kg. 500kg is a complete guesstimate.
 
-    # # #Initial state
-    # # initialState = SpacecraftState(initialOrbit, satellite_mass) 
+    #Initial state
+    initialState = SpacecraftState(initialOrbit, satellite_mass) 
+    propagator_num = NumericalPropagator(integrator)
+    propagator_num.setOrbitType(OrbitType.CARTESIAN)
+    propagator_num.setInitialState(initialState)
+    gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
+    propagator_num.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
+    # customForceModel = CustomForceModel()
+    # propagator_num.addForceModel(customForceModel)
+    end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 1))
+    end_state
 
-    # # propagator_num = NumericalPropagator(integrator)
-    # # propagator_num.setOrbitType(OrbitType.CARTESIAN)
-    # # propagator_num.setInitialState(initialState)
-    # # gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
-    # # propagator_num.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
-    # # #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
-    # # # customForceModel = CustomForceModel()
-    # # # propagator_num.addForceModel(customForceModel)
-    # # end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 1))
-    # # end_state
-
-    # # print("Initial state:")
-    # # print(initialState)
-    # # print("Final state:")
-    # # print(end_state)
+    print("Initial state:")
+    print(initialState)
+    print("Final state:")
+    print(end_state)
