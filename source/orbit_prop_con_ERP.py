@@ -1,7 +1,7 @@
 import netCDF4 as nc
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir
-from org.hipparchus.geometry.euclidean.threed import Vector3D
+from org.hipparchus.geometry.euclidean.threed import Vector3D, FieldVector3D
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from org.orekit.forces import PythonForceModel
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel
@@ -44,6 +44,41 @@ from tools.utilities import jd_to_utc
 from tools.data_processing import extract_hourly_ceres_data
 from tools.TLE_tools import twoLE_parse, tle_convert, TLE_time, sgp4_prop_TLE
 
+class CustomForceModel(PythonForceModel):
+    print("CustomForceModel instantiated")
+    def __init__(self):
+        super().__init__()
+        print('CustomForceModel init')
+
+    def acceleration(self, fieldSpacecraftState, tArray):
+        """
+            Compute simple acceleration.
+
+        """
+        acceleration = Vector3D(1, 0, 0)
+        print("field spacecraft state:", fieldSpacecraftState)
+        print("tArray:", tArray)
+        # FieldVector3D = fieldSpacecraftState.getPosition()
+        # print("FieldVector3D:", FieldVector3D)
+        return acceleration
+
+    def addContribution(self, fieldSpacecraftState, fieldTimeDerivativesEquations):
+        print("addContribution called")
+        pass
+
+    def getParametersDrivers(self):
+        print("getParametersDrivers called")
+        return Collections.emptyList()
+
+    def init(self, fieldSpacecraftState, fieldAbsoluteDate):
+        print("init called")
+        pass
+
+    def getEventDetectors(self):
+        print("getEventDetectors called")
+        return Stream.empty()
+
+
 if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
@@ -73,9 +108,7 @@ if __name__ == "__main__":
 
     #Convert the initial position and velocity to keplerian elements
     tle_dict = twoLE_parse(TLE)
-    print("tle_dict:", tle_dict)
     kep_elems = tle_convert(tle_dict)
-    print("kep_elems dict:", kep_elems)
 
     a = float(kep_elems['a'])*1000
     e = float(kep_elems['e'])
@@ -112,11 +145,15 @@ if __name__ == "__main__":
     propagator_num = NumericalPropagator(integrator)
     propagator_num.setOrbitType(OrbitType.CARTESIAN)
     propagator_num.setInitialState(initialState)
+
+    # Add 10x10 gravity field
     gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
     propagator_num.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    
     #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
-    # customForceModel = CustomForceModel()
-    # propagator_num.addForceModel(customForceModel)
+    customForceModel = CustomForceModel()
+    propagator_num.addForceModel(customForceModel)
+
     end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 1))
     end_state
 
