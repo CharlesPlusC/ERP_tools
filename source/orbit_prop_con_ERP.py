@@ -113,14 +113,18 @@ class AltitudeDependentForceModel(PythonForceModel):
         self.altitude = 0.0
 
     def acceleration(self, spacecraftState, doubleArray):
-        # Compute the current altitude
-        # print("altitude:", altitude)
-        altitude=500000.0
+        # Compute the current altitude within the acceleration method
+        pos = spacecraftState.getPVCoordinates().getPosition()
+        current_altitude = pos.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+        
         # Apply the constant acceleration only if below the threshold altitude
-        if altitude < self.threshold_altitude:
+        if current_altitude < self.threshold_altitude:
+            print("current altitude:", current_altitude)
+            print("applying constant acceleration:", self.constant_acceleration)
             return self.constant_acceleration
         else:
-            return self.constant_acceleration
+            # print("not applying constant acceleration")
+            return Vector3D.ZERO
 
     def addContribution(self, spacecraftState, timeDerivativesEquations):
         # Add the conditional acceleration to the propagator
@@ -214,12 +218,12 @@ if __name__ == "__main__":
     
     #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
     # Example usage
-    threshold_altitude = 500000.0  # 500 km
-    const_acceleration = Vector3D(-1.0, -1.0, -1.0) # 1 m/s^2
+    threshold_altitude = 1204959.0 
+    const_acceleration = Vector3D(-10.0, -10.0, -10.0) # 1 m/s^2
     simple_force_model = AltitudeDependentForceModel(const_acceleration, threshold_altitude)
     propagator_num.addForceModel(simple_force_model)
 
-    end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 24* 30))
+    end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 24))
     end_state
 
     print("Initial state:")
