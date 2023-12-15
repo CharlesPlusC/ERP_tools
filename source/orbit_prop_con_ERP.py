@@ -78,32 +78,66 @@ from tools.TLE_tools import twoLE_parse, tle_convert, TLE_time, sgp4_prop_TLE
 #         print("getEventDetectors called")
 #         return Stream.empty()
 
-class SimpleConstantForceModel(PythonForceModel):
-    def __init__(self, acceleration):
+# class SimpleConstantForceModel(PythonForceModel):
+#     def __init__(self, acceleration):
+#         super().__init__()
+#         self.constant_acceleration = acceleration
+
+#     def acceleration(self, spacecraftState, doubleArray):
+#         # This method returns a constant acceleration
+#         # regardless of the spacecraft state or parameters.
+#         return self.constant_acceleration
+
+#     def addContribution(self, spacecraftState, timeDerivativesEquations):
+#         # Add the constant acceleration to the propagator
+#         timeDerivativesEquations.addNonKeplerianAcceleration(self.acceleration(spacecraftState, None))
+
+#     def getParametersDrivers(self):
+#         # This simple model does not have any adjustable parameters
+#         return Collections.emptyList()
+
+#     def init(self, spacecraftState, absoluteDate):
+#         # No specific initialization required for this simple model
+#         pass
+
+#     def getEventDetectors(self):
+#         # No event detectors are used in this simple model
+#         return Stream.empty()
+
+
+class AltitudeDependentForceModel(PythonForceModel):
+    def __init__(self, acceleration, threshold_altitude):
         super().__init__()
         self.constant_acceleration = acceleration
+        self.threshold_altitude = threshold_altitude
+        self.altitude = 0.0
 
     def acceleration(self, spacecraftState, doubleArray):
-        # This method returns a constant acceleration
-        # regardless of the spacecraft state or parameters.
-        return self.constant_acceleration
+        # Compute the current altitude
+        # print("altitude:", altitude)
+        altitude=500000.0
+        # Apply the constant acceleration only if below the threshold altitude
+        if altitude < self.threshold_altitude:
+            return self.constant_acceleration
+        else:
+            return self.constant_acceleration
 
     def addContribution(self, spacecraftState, timeDerivativesEquations):
-        # Add the constant acceleration to the propagator
+        # Add the conditional acceleration to the propagator
         timeDerivativesEquations.addNonKeplerianAcceleration(self.acceleration(spacecraftState, None))
 
     def getParametersDrivers(self):
-        # This simple model does not have any adjustable parameters
+        # This model does not have any adjustable parameters
         return Collections.emptyList()
 
     def init(self, spacecraftState, absoluteDate):
-        # No specific initialization required for this simple model
+        pos = spacecraftState.getPVCoordinates().getPosition()
+        self.altitude = pos.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
         pass
 
     def getEventDetectors(self):
-        # No event detectors are used in this simple model
+        # No event detectors are used in this model
         return Stream.empty()
-
 
 if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
@@ -116,7 +150,7 @@ if __name__ == "__main__":
     jd_end = jd_start + 1 # 1 day later
     dt = 60  # Seconds
     sgp4_ephem = sgp4_prop_TLE(TLE=TLE, jd_start=jd_start, jd_end=jd_end, dt=dt)
-    # tle_time = TLE_time(TLE) The TLE I have is not actually in the daterange of the CERES dataset I downloaded
+    # tle_time = TLE_time(TLE) ##The TLE I have is not actually in the daterange of the CERES dataset I downloaded so not using this now
     utc_start = jd_to_utc(jd_start)
 
     # Segment the time stamp into year, month, day, hour, minute, second components
@@ -180,8 +214,9 @@ if __name__ == "__main__":
     
     #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
     # Example usage
-    const_acceleration = Vector3D(-1.0, -1.0, -10.0)  # Constant acceleration of 0.001 m/s² in the X direction
-    simple_force_model = SimpleConstantForceModel(const_acceleration)
+    threshold_altitude = 500000.0  # 500 km
+    const_acceleration = Vector3D(-1.0, -1.0, -1.0) # 1 m/s^2
+    simple_force_model = AltitudeDependentForceModel(const_acceleration, threshold_altitude)
     propagator_num.addForceModel(simple_force_model)
 
     end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 24* 30))
