@@ -11,6 +11,9 @@ dependencies:
   - imageio
   - pip
   - geopy
+  - scipy
   - sgp4 
   - pyproj
-  
+  - orekit
+  - netCDF4s
+  - astropy

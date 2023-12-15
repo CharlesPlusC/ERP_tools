@@ -78,7 +78,6 @@ class CustomForceModel(PythonForceModel):
         print("getEventDetectors called")
         return Stream.empty()
 
-
 if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 

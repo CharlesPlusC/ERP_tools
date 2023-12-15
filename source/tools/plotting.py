@@ -59,7 +59,7 @@ def compute_radiance_at_sc(variable_name, time_index, radiation_data, lat, lon, 
     #FOV calculations
     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[time_index, :, :])
-    cos_thetas = sat_normal_surface_angle_vectorized(sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
+    cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
     cosine_factors_2d = np.zeros_like(radiation_data_fov)
     cosine_factors_2d[fov_mask] = cos_thetas
 

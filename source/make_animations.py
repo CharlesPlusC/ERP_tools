@@ -1,9 +1,8 @@
-import numpy as np
 import netCDF4 as nc
-import os
 from itertools import islice
-from tools.data_processing import calculate_satellite_fov, process_trajectory, sgp4_prop_TLE ,combine_lw_sw_data, extract_hourly_ceres_data
+from tools.data_processing import process_trajectory ,combine_lw_sw_data, extract_hourly_ceres_data
 from tools.plotting import plot_radiance_animation, plot_radiance_geiger
+from tools.TLE_tools import sgp4_prop_TLE
 
 def main(dataset_path, TLE, jd_start, jd_end, dt, number_of_tsteps, output_folder):
     # Load the CERES dataset
@@ -44,10 +43,10 @@ if __name__ == "__main__":
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset
     jd_end = jd_start + 1 # 1 day later
     dt = 60  # Seconds
-    dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
+    dataset_path = 'external\CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
     # # Execute the main function
-    main(dataset_path, TLE_1, jd_start, jd_end, dt, number_of_tsteps=1000, output_folder='output/FOV_sliced_data/geiger_plots/oneweb_1/')
-    main(dataset_path, TLE_2, jd_start, jd_end, dt, number_of_tsteps=1000, output_folder='output/FOV_sliced_data/geiger_plots/oneweb_2/')
-    main(dataset_path, TLE_3, jd_start, jd_end, dt, number_of_tsteps=1000, output_folder='output/FOV_sliced_data/geiger_plots/starlink_1/')
-    main(dataset_path, TLE_4, jd_start, jd_end, dt, number_of_tsteps=1000, output_folder='output/FOV_sliced_data/geiger_plots/starlink_2/')
+    main(dataset_path, TLE_1, jd_start, jd_end, dt, number_of_tsteps=600, output_folder='output/FOV_sliced_data/geiger_plots/oneweb_1/')
+    main(dataset_path, TLE_2, jd_start, jd_end, dt, number_of_tsteps=600, output_folder='output/FOV_sliced_data/geiger_plots/oneweb_2/')
+    main(dataset_path, TLE_3, jd_start, jd_end, dt, number_of_tsteps=600, output_folder='output/FOV_sliced_data/geiger_plots/starlink_1/')
+    main(dataset_path, TLE_4, jd_start, jd_end, dt, number_of_tsteps=600, output_folder='output/FOV_sliced_data/geiger_plots/starlink_2/')
