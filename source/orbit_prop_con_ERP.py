@@ -40,70 +40,48 @@ setup_orekit_curdir()
 
 import numpy as np
 
-from tools.utilities import jd_to_utc
+from tools.utilities import find_nearest_index, jd_to_utc, convert_ceres_time_to_date, lla_to_ecef, julian_day_to_ceres_time
 from tools.data_processing import extract_hourly_ceres_data
-from tools.TLE_tools import twoLE_parse, tle_convert, TLE_time, sgp4_prop_TLE
+from tools.TLE_tools import twoLE_parse, tle_convert, sgp4_prop_TLE
+from tools.data_processing import extract_hourly_ceres_data ,combine_lw_sw_data, latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 
-# class CustomForceModel(PythonForceModel):
-#     print("CustomForceModel instantiated")
-#     def __init__(self):
-#         super().__init__()
-#         print('CustomForceModel init')
+def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
+    R = 6378.137  # Earth's radius in km
 
-#     def acceleration(self, fieldSpacecraftState, tArray):
-#         """
-#             Compute simple acceleration.
+    #latitude and longitude arrays
+    lat = np.arange(-89.5, 90.5, 1)  # 1-degree step from -89.5 to 89.5
+    lon = np.arange(-179.5, 180.5, 1)  # 1-degree step from -179.5 to 179.5
 
-#         """
-#         acceleration = Vector3D(1, 0, 0)
-#         print("field spacecraft state:", fieldSpacecraftState)
-#         print("tArray:", tArray)
-#         # FieldVector3D = fieldSpacecraftState.getPosition()
-#         # print("FieldVector3D:", FieldVector3D)
-#         return acceleration
+    # Mesh grid creation
+    lon2d, lat2d = np.meshgrid(lon, lat)
 
-#     def addContribution(self, fieldSpacecraftState, fieldTimeDerivativesEquations):
-#         print("addContribution called")
-#         pass
+    #FOV calculations
+    fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
+    radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[ceres_time_index, :, :])
+    cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
+    cosine_factors_2d = np.zeros_like(radiation_data_fov)
+    cosine_factors_2d[fov_mask] = cos_thetas
 
-#     def getParametersDrivers(self):
-#         print("getParametersDrivers called")
-#         return Collections.emptyList()
+    # Adjusting radiation data
+    adjusted_radiation_data = radiation_data_fov * cosine_factors_2d
 
-#     def init(self, fieldSpacecraftState, fieldAbsoluteDate):
-#         print("init called")
-#         pass
+    # Satellite position and distance calculations
+    sat_ecef = np.array(lla_to_ecef(sat_lat, sat_lon, sat_alt))
+    ecef_x, ecef_y, ecef_z = lla_to_ecef(lat2d, lon2d, np.zeros_like(lat2d))
+    ecef_pixels = np.stack((ecef_x, ecef_y, ecef_z), axis=-1)
+    vector_diff = sat_ecef.reshape((1, 1, 3)) - ecef_pixels
+    distances = np.linalg.norm(vector_diff, axis=2) * 1000  # Convert to meters
 
-#     def getEventDetectors(self):
-#         print("getEventDetectors called")
-#         return Stream.empty()
+    # Radiation calculation
+    delta_lat = np.abs(lat[1] - lat[0])
+    delta_lon = np.abs(lon[1] - lon[0])
+    area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d)) * (1000**2)  # Convert to m^2
+    P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2)
 
-# class SimpleConstantForceModel(PythonForceModel):
-#     def __init__(self, acceleration):
-#         super().__init__()
-#         self.constant_acceleration = acceleration
+    print("power flux:", np.sum(P_rad))
 
-#     def acceleration(self, spacecraftState, doubleArray):
-#         # This method returns a constant acceleration
-#         # regardless of the spacecraft state or parameters.
-#         return self.constant_acceleration
-
-#     def addContribution(self, spacecraftState, timeDerivativesEquations):
-#         # Add the constant acceleration to the propagator
-#         timeDerivativesEquations.addNonKeplerianAcceleration(self.acceleration(spacecraftState, None))
-
-#     def getParametersDrivers(self):
-#         # This simple model does not have any adjustable parameters
-#         return Collections.emptyList()
-
-#     def init(self, spacecraftState, absoluteDate):
-#         # No specific initialization required for this simple model
-#         pass
-
-#     def getEventDetectors(self):
-#         # No event detectors are used in this simple model
-#         return Stream.empty()
-
+    # Returning the necessary data for plotting
+    return P_rad
 
 class AltitudeDependentForceModel(PythonForceModel):
     def __init__(self, acceleration, threshold_altitude):
@@ -115,17 +93,39 @@ class AltitudeDependentForceModel(PythonForceModel):
     def acceleration(self, spacecraftState, doubleArray):
         # Compute the current altitude within the acceleration method
         pos = spacecraftState.getPVCoordinates().getPosition()
-        current_altitude = pos.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
-        
-        # Apply the constant acceleration only if below the threshold altitude
-        if current_altitude < self.threshold_altitude:
-            print("current altitude:", current_altitude)
-            print("applying constant acceleration:", self.constant_acceleration)
-            return self.constant_acceleration
-        else:
-            # print("not applying constant acceleration")
-            return Vector3D.ZERO
+        alt_m = pos.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+        alt_km = alt_m / 1000.0
+        horizon_dist = calculate_satellite_fov(alt_km)
+        # Get the AbsoluteDate
+        absolute_date = spacecraftState.getDate()
+        # Convert AbsoluteDate to Python datetime
+        date_time = absolutedate_to_datetime(absolute_date)
+        # convert date_time to julianday
+        jd_time = date_time.toordinal() + 1721425.5 + date_time.hour / 24 + date_time.minute / (24 * 60) + date_time.second / (24 * 60 * 60)
+        # Get the ECI and ECEF frames
+        ecef = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
+        # Transform the position vector to the ECEF frame
+        pv_ecef = spacecraftState.getPVCoordinates(ecef).getPosition()
+        # Define the Earth model
+        earth = OneAxisEllipsoid(
+            Constants.WGS84_EARTH_EQUATORIAL_RADIUS, 
+            Constants.WGS84_EARTH_FLATTENING, 
+            ecef)
+        # Convert ECEF coordinates to geodetic latitude, longitude, and altitude
+        geo_point = earth.transform(pv_ecef, ecef, spacecraftState.getDate())
+        # Extract latitude and longitude in radians
+        latitude = geo_point.getLatitude()
+        longitude = geo_point.getLongitude()
+        # Convert radians to degrees if needed
+        latitude_deg = np.rad2deg(latitude)
+        longitude_deg = np.rad2deg(longitude)
+        ceres_time = julian_day_to_ceres_time(jd_time)
+        ceres_indices = find_nearest_index(ceres_times, ceres_time)
 
+        erp_sw = compute_radiance_at_sc(ceres_indices, sw_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
+
+        print("erp_sw:", erp_sw)
+        
     def addContribution(self, spacecraftState, timeDerivativesEquations):
         # Add the conditional acceleration to the propagator
         timeDerivativesEquations.addNonKeplerianAcceleration(self.acceleration(spacecraftState, None))
@@ -148,6 +148,12 @@ if __name__ == "__main__":
 
     data = nc.Dataset(dataset_path)
 
+    # Extract data from the CERES dataset
+    ceres_times, lat, lon, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+
+    # Combine longwave and shortwave radiation data
+    combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
+
    #oneweb TLE
     TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset that I downloaded
@@ -167,6 +173,7 @@ if __name__ == "__main__":
 
     #convert JD start epoch to UTC and pass to AbsoluteDate
     utc = TimeScalesFactory.getUTC() #instantiate UTC time scale
+    #also add modified Julian date
     TLE_epochDate = AbsoluteDate(YYYY, MM, DD, H, M, S, utc)
     print("orekit AbsoluteDate:", TLE_epochDate)
 
@@ -217,7 +224,8 @@ if __name__ == "__main__":
     propagator_num.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     
     #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
-    # Example usage
+
+
     threshold_altitude = 1204959.0 
     const_acceleration = Vector3D(-10.0, -10.0, -10.0) # 1 m/s^2
     simple_force_model = AltitudeDependentForceModel(const_acceleration, threshold_altitude)

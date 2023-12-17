@@ -54,10 +54,16 @@ def compute_radiance_at_sc(variable_name, time_index, radiation_data, lat, lon, 
     R = 6371  # Earth's radius in km
 
     # Mesh grid creation
+    print("lat:", lat)
+    print("shape of lat:", np.shape(lat))
     lon2d, lat2d = np.meshgrid(lon, lat)
+    print("shape of lon2d:", np.shape(lon2d))
+    print("shape of lat2d:", np.shape(lat2d))
+    print("lon2d:", lon2d)
 
     #FOV calculations
     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
+    print("shape of fov_mask:", np.shape(fov_mask))
     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[time_index, :, :])
     cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
     cosine_factors_2d = np.zeros_like(radiation_data_fov)
@@ -195,7 +201,7 @@ def plot_fov_radiation(sat_lat, sat_lon, fov_radius, radiation_data, lat, lon, o
     plt.savefig(output_path)
     plt.close(fig)
 
-def                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data"):
+def plot_radiance_geiger(alts, lats, lons, ceres_indices, lw_radiation_data, sw_radiation_data, combined_radiation_data, lat, lon, ceres_times, number_of_tsteps, lw=True, sw=True, lwsw=True, output_folder="output/FOV_sliced_data"):
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize cumulative radiation data arrays for local coordinates

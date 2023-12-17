@@ -57,8 +57,8 @@ if __name__ == "__main__":
     jd_start = 2460069.5000000
     jd_end = jd_start + 1
     dt = 60
-    no_steps = 600
-    dataset_path = 'external\CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
+    no_steps = 100
+    dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(process_satellite, dataset_path, sat["TLE"], jd_start, jd_end, dt, no_steps, sat["output_folder"]) for sat in satellites]
