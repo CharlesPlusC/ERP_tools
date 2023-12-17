@@ -109,9 +109,14 @@ def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, s
     ecef_x, ecef_y, ecef_z = lla_to_ecef(lat2d, lon2d, np.zeros_like(lat2d))
     ecef_pixels = np.stack((ecef_x, ecef_y, ecef_z), axis=-1)
     vector_diff = sat_ecef.reshape((1, 1, 3)) - ecef_pixels
+    print("vector_diff:", np.shape(vector_diff))
+    print("histogram of vector_diff:", np.histogram(vector_diff))
     distances = np.linalg.norm(vector_diff, axis=2) * 1000  # Convert to meters
-    distances_km = distances / 1000
     print("distances:", np.shape(distances))
+    print("histogram of distances:", np.histogram(distances))
+    distances_km = distances / 1000
+    print("distances_km:", np.shape(distances_km))
+    print("histogram of distances_km:", np.histogram(distances_km))
 
     # Radiation calculation
     delta_lat = np.abs(lat[1] - lat[0])
@@ -120,7 +125,7 @@ def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, s
     P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
     print("P_rad:", np.shape(P_rad))
     # Calculating unit vectors and multiplying with P_rad
-    unit_vectors = vector_diff / distances_km[..., np.newaxis]
+    unit_vectors = vector_diff / distances[..., np.newaxis]
     print("unit_vectors:", np.shape(unit_vectors))
     print("number of vectors that are not unit vectors:", np.sum(np.linalg.norm(unit_vectors, axis=2) != 1))
     print("magnitude of unit_vectors:", np.linalg.norm(unit_vectors, axis=2))
@@ -135,14 +140,31 @@ def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, s
     total_radiation_magnitude = np.linalg.norm(total_radiation_vector)
     print("total_radiation_magnitude:", total_radiation_magnitude)
 
+    satellite_area = 10.0  # m^2
+
+    radiation_at_sat_surface = total_radiation_magnitude * satellite_area
+
     # force due to radiation pressure on specular surface
-    force  = 2*total_radiation_magnitude / 299792458
+    force  = 2*radiation_at_sat_surface / 299792458
     print("force:", force)
 
     acceleration = force / 500.0
     print("acceleration:", acceleration)
 
-    return Vector3D(total_radiation_vector[0], total_radiation_vector[1], total_radiation_vector[2])
+    acceleration_vector = acceleration * total_radiation_vector / total_radiation_magnitude
+    print("acceleration_vector:", acceleration_vector)
+
+    down_vector = sat_ecef / np.linalg.norm(sat_ecef)  # Normalize the satellite's position vector to get the down vector
+    total_radiation_vector_normalized = total_radiation_vector / np.linalg.norm(total_radiation_vector)  # Normalize the total radiation vector
+
+    cos_theta = np.dot(total_radiation_vector_normalized, down_vector)  # Cosine of the angle
+    angle_radians = np.arccos(cos_theta)  # Angle in radians
+    angle_degrees = np.rad2deg(angle_radians)  # Convert to degrees
+
+    print("cos_theta:", cos_theta)
+    print("angle (degrees):", angle_degrees)
+
+    return Vector3D(-10.0, -10.0, -10.0)
 
 class AltitudeDependentForceModel(PythonForceModel):
     def __init__(self, acceleration, threshold_altitude):
@@ -191,7 +213,7 @@ class AltitudeDependentForceModel(PythonForceModel):
         # then apply one acceleration per pixel in erp_sw
         # check the difference
 
-        return FieldVector3D(Vector3D(0.0, 0.0, 0.0), erp_sw)
+        return Vector3D(0.0, 0.0, 0.0)
 
     def addContribution(self, spacecraftState, timeDerivativesEquations):
         # Add the conditional acceleration to the propagator
@@ -221,8 +243,10 @@ if __name__ == "__main__":
     # Combine longwave and shortwave radiation data
     combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
-   #oneweb TLE
-    TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    #oneweb TLE
+    # TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    #starlink TLE
+    TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset that I downloaded
     jd_end = jd_start + 1 # 1 day later
     dt = 60  # Seconds
