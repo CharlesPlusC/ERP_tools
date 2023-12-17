@@ -84,7 +84,7 @@ from tools.data_processing import extract_hourly_ceres_data ,combine_lw_sw_data,
 #     # Returning the summation of all vectors
 #     return 
 
-def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
+def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
     R = 6378.137  # Earth's radius in km
 
     # Latitude and longitude arrays
@@ -109,50 +109,35 @@ def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, s
     ecef_x, ecef_y, ecef_z = lla_to_ecef(lat2d, lon2d, np.zeros_like(lat2d))
     ecef_pixels = np.stack((ecef_x, ecef_y, ecef_z), axis=-1)
     vector_diff = sat_ecef.reshape((1, 1, 3)) - ecef_pixels
-    print("vector_diff:", np.shape(vector_diff))
-    print("histogram of vector_diff:", np.histogram(vector_diff))
     distances = np.linalg.norm(vector_diff, axis=2) * 1000  # Convert to meters
-    print("distances:", np.shape(distances))
-    print("histogram of distances:", np.histogram(distances))
-    distances_km = distances / 1000
-    print("distances_km:", np.shape(distances_km))
-    print("histogram of distances_km:", np.histogram(distances_km))
 
     # Radiation calculation
     delta_lat = np.abs(lat[1] - lat[0])
     delta_lon = np.abs(lon[1] - lon[0])
     area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d)) * (1000**2)  # Convert to m^2
     P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
-    print("P_rad:", np.shape(P_rad))
     # Calculating unit vectors and multiplying with P_rad
     unit_vectors = vector_diff / distances[..., np.newaxis]
-    print("unit_vectors:", np.shape(unit_vectors))
-    print("number of vectors that are not unit vectors:", np.sum(np.linalg.norm(unit_vectors, axis=2) != 1))
-    print("magnitude of unit_vectors:", np.linalg.norm(unit_vectors, axis=2))
     radiation_vectors = unit_vectors * P_rad[..., np.newaxis]
-    print("radiation_vectors:", np.shape(radiation_vectors))
 
     # Summing all vectors
     total_radiation_vector = np.sum(radiation_vectors[fov_mask], axis=0)
-    print("total_radiation_vector:", (total_radiation_vector))
 
     # Calculating the magnitude of the resultant vector
     total_radiation_magnitude = np.linalg.norm(total_radiation_vector)
-    print("total_radiation_magnitude:", total_radiation_magnitude)
 
     satellite_area = 10.0  # m^2
 
-    radiation_at_sat_surface = total_radiation_magnitude * satellite_area
+    radiation_over_sat_surface = total_radiation_magnitude * satellite_area
 
     # force due to radiation pressure on specular surface
-    force  = 2*radiation_at_sat_surface / 299792458
+    force  = 2*radiation_over_sat_surface / 299792458
     print("force:", force)
 
-    acceleration = force / 500.0
-    print("acceleration:", acceleration)
+    scalar_acc = force / 500.0 # 500 kg is a complete guesstimate
+    print("acceleration:", scalar_acc)
 
-    acceleration_vector = acceleration * total_radiation_vector / total_radiation_magnitude
-    print("acceleration_vector:", acceleration_vector)
+    acceleration_vector = scalar_acc * total_radiation_vector / total_radiation_magnitude
 
     down_vector = sat_ecef / np.linalg.norm(sat_ecef)  # Normalize the satellite's position vector to get the down vector
     total_radiation_vector_normalized = total_radiation_vector / np.linalg.norm(total_radiation_vector)  # Normalize the total radiation vector
@@ -161,16 +146,14 @@ def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, s
     angle_radians = np.arccos(cos_theta)  # Angle in radians
     angle_degrees = np.rad2deg(angle_radians)  # Convert to degrees
 
-    print("cos_theta:", cos_theta)
-    print("angle (degrees):", angle_degrees)
+    print("ERP angle:", angle_degrees)
+    print("returning acceleration vector:", acceleration_vector)
 
-    return Vector3D(-10.0, -10.0, -10.0)
+    return np.array(acceleration_vector)
 
 class AltitudeDependentForceModel(PythonForceModel):
-    def __init__(self, acceleration, threshold_altitude):
+    def __init__(self):
         super().__init__()
-        self.constant_acceleration = acceleration
-        self.threshold_altitude = threshold_altitude
         self.altitude = 0.0
 
     def acceleration(self, spacecraftState, doubleArray):
@@ -205,16 +188,14 @@ class AltitudeDependentForceModel(PythonForceModel):
         ceres_time = julian_day_to_ceres_time(jd_time)
         ceres_indices = find_nearest_index(ceres_times, ceres_time)
 
-        erp_sw = compute_radiance_at_sc(ceres_indices, sw_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
-
-        #### TODO:
-        # get the cross sectional area (for now assume all normal to the earth)
-        # apply point acceleration of the magnitude of erp_sw
-        # then apply one acceleration per pixel in erp_sw
-        # check the difference
-
-        return Vector3D(0.0, 0.0, 0.0)
-
+        erp_vec = compute_erp_at_sc(ceres_indices, sw_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
+        print("erp_vec:", erp_vec)
+        orekit_erp_vec = Vector3D(float(erp_vec[0]), float(erp_vec[1]), float(erp_vec[2]))
+        print("orekit_erp_vec:", orekit_erp_vec)
+        orekit_erp_vec = Vector3D(float(erp_vec[0]), float(erp_vec[1]), float(erp_vec[2]))
+        print("orekit_erp_vec components:", orekit_erp_vec.getX(), orekit_erp_vec.getY(), orekit_erp_vec.getZ())
+        return orekit_erp_vec
+    
     def addContribution(self, spacecraftState, timeDerivativesEquations):
         # Add the conditional acceleration to the propagator
         timeDerivativesEquations.addNonKeplerianAcceleration(self.acceleration(spacecraftState, None))
@@ -248,7 +229,7 @@ if __name__ == "__main__":
     #starlink TLE
     TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset that I downloaded
-    jd_end = jd_start + 1 # 1 day later
+    jd_end = jd_start + 1/24 # 1 hr later
     dt = 60  # Seconds
     sgp4_ephem = sgp4_prop_TLE(TLE=TLE, jd_start=jd_start, jd_end=jd_end, dt=dt)
     # tle_time = TLE_time(TLE) ##The TLE I have is not actually in the daterange of the CERES dataset I downloaded so not using this now
@@ -314,13 +295,10 @@ if __name__ == "__main__":
     gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
     propagator_num.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     
-    #### ADDITION OF ERP CUSTOM FORCE MODEL TO GO HERE ####
+    #### ADDITION OF ERP CUSTOM FORCE MODEL ###
 
-
-    threshold_altitude = 1204959.0 
-    const_acceleration = Vector3D(-10.0, -10.0, -10.0) # 1 m/s^2
-    simple_force_model = AltitudeDependentForceModel(const_acceleration, threshold_altitude)
-    propagator_num.addForceModel(simple_force_model)
+    erp_force_model = AltitudeDependentForceModel()
+    propagator_num.addForceModel(erp_force_model)
 
     end_state = propagator_num.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 24))
     end_state
