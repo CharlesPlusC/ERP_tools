@@ -45,17 +45,56 @@ from tools.data_processing import extract_hourly_ceres_data
 from tools.TLE_tools import twoLE_parse, tle_convert, sgp4_prop_TLE
 from tools.data_processing import extract_hourly_ceres_data ,combine_lw_sw_data, latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 
+# def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
+#     R = 6378.137  # Earth's radius in km
+
+#     # Latitude and longitude arrays
+#     lat = np.arange(-89.5, 90.5, 1)  # 1-degree step from -89.5 to 89.5
+#     lon = np.arange(-179.5, 180.5, 1)  # 1-degree step from -179.5 to 179.5
+#     # Mesh grid creation
+#     lon2d, lat2d = np.meshgrid(lon, lat)
+
+#     # FOV calculations
+#     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
+#     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[ceres_time_index, :, :])
+#     cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
+#     cosine_factors_2d = np.zeros_like(radiation_data_fov)
+#     cosine_factors_2d[fov_mask] = cos_thetas
+
+#     # Adjusting radiation data
+#     adjusted_radiation_data = radiation_data_fov * cosine_factors_2d
+
+#     # Satellite position and distance calculations
+#     sat_ecef = np.array(lla_to_ecef(sat_lat, sat_lon, sat_alt))
+#     ecef_x, ecef_y, ecef_z = lla_to_ecef(lat2d, lon2d, np.zeros_like(lat2d))
+#     ecef_pixels = np.stack((ecef_x, ecef_y, ecef_z), axis=-1)
+#     vector_diff = sat_ecef.reshape((1, 1, 3)) - ecef_pixels
+#     distances = np.linalg.norm(vector_diff, axis=2) * 1000  # Convert to meters
+
+#     # Radiation calculation
+#     delta_lat = np.abs(lat[1] - lat[0])
+#     delta_lon = np.abs(lon[1] - lon[0])
+#     area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d)) * (1000**2)  # Convert to m^2
+#     P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
+
+#     # now multiply P_rad by the corresponding unit vector from the satellite towards each pixel
+#     # then sum all the vectors
+#     # then print the magnitude of the sum
+
+#     # Returning the summation of all vectors
+#     return 
+
 def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
     R = 6378.137  # Earth's radius in km
 
-    #latitude and longitude arrays
+    # Latitude and longitude arrays
     lat = np.arange(-89.5, 90.5, 1)  # 1-degree step from -89.5 to 89.5
     lon = np.arange(-179.5, 180.5, 1)  # 1-degree step from -179.5 to 179.5
 
     # Mesh grid creation
     lon2d, lat2d = np.meshgrid(lon, lat)
 
-    #FOV calculations
+    # FOV calculations
     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[ceres_time_index, :, :])
     cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
@@ -71,17 +110,39 @@ def compute_radiance_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, s
     ecef_pixels = np.stack((ecef_x, ecef_y, ecef_z), axis=-1)
     vector_diff = sat_ecef.reshape((1, 1, 3)) - ecef_pixels
     distances = np.linalg.norm(vector_diff, axis=2) * 1000  # Convert to meters
+    distances_km = distances / 1000
+    print("distances:", np.shape(distances))
 
     # Radiation calculation
     delta_lat = np.abs(lat[1] - lat[0])
     delta_lon = np.abs(lon[1] - lon[0])
     area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d)) * (1000**2)  # Convert to m^2
-    P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2)
+    P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
+    print("P_rad:", np.shape(P_rad))
+    # Calculating unit vectors and multiplying with P_rad
+    unit_vectors = vector_diff / distances_km[..., np.newaxis]
+    print("unit_vectors:", np.shape(unit_vectors))
+    print("number of vectors that are not unit vectors:", np.sum(np.linalg.norm(unit_vectors, axis=2) != 1))
+    print("magnitude of unit_vectors:", np.linalg.norm(unit_vectors, axis=2))
+    radiation_vectors = unit_vectors * P_rad[..., np.newaxis]
+    print("radiation_vectors:", np.shape(radiation_vectors))
 
-    print("power flux:", np.sum(P_rad))
+    # Summing all vectors
+    total_radiation_vector = np.sum(radiation_vectors[fov_mask], axis=0)
+    print("total_radiation_vector:", (total_radiation_vector))
 
-    # Returning the necessary data for plotting
-    return P_rad
+    # Calculating the magnitude of the resultant vector
+    total_radiation_magnitude = np.linalg.norm(total_radiation_vector)
+    print("total_radiation_magnitude:", total_radiation_magnitude)
+
+    # force due to radiation pressure on specular surface
+    force  = 2*total_radiation_magnitude / 299792458
+    print("force:", force)
+
+    acceleration = force / 500.0
+    print("acceleration:", acceleration)
+
+    return Vector3D(total_radiation_vector[0], total_radiation_vector[1], total_radiation_vector[2])
 
 class AltitudeDependentForceModel(PythonForceModel):
     def __init__(self, acceleration, threshold_altitude):
@@ -124,8 +185,14 @@ class AltitudeDependentForceModel(PythonForceModel):
 
         erp_sw = compute_radiance_at_sc(ceres_indices, sw_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
 
-        print("erp_sw:", erp_sw)
-        
+        #### TODO:
+        # get the cross sectional area (for now assume all normal to the earth)
+        # apply point acceleration of the magnitude of erp_sw
+        # then apply one acceleration per pixel in erp_sw
+        # check the difference
+
+        return FieldVector3D(Vector3D(0.0, 0.0, 0.0), erp_sw)
+
     def addContribution(self, spacecraftState, timeDerivativesEquations):
         # Add the conditional acceleration to the propagator
         timeDerivativesEquations.addNonKeplerianAcceleration(self.acceleration(spacecraftState, None))
@@ -217,7 +284,7 @@ if __name__ == "__main__":
     propagator_num.setOrbitType(OrbitType.CARTESIAN)
     propagator_num.setInitialState(initialState)
 
-    print("initial altitude:", initialState.getA())
+    print("initial SMA:", initialState.getA())
 
     # Add 10x10 gravity field
     gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
