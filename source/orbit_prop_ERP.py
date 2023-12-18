@@ -38,7 +38,7 @@ from tools.TLE_tools import twoLE_parse, tle_convert, sgp4_prop_TLE
 from tools.data_processing import extract_hourly_ceres_data ,combine_lw_sw_data, calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 
 def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
-    R = 6378.137  # Earth's radius in km
+    R = 6378137  # Earth's radius in m
 
     # Latitude and longitude arrays
     lat = np.arange(-89.5, 90.5, 1)  # 1-degree step from -89.5 to 89.5
@@ -67,33 +67,35 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     # Radiation calculation
     delta_lat = np.abs(lat[1] - lat[0])
     delta_lon = np.abs(lon[1] - lon[0])
-    area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d)) * (1000**2)  # Convert to m^2
+    area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d))  # Convert to m^2
     P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
+    print("sumj of all P_rad:", np.sum(P_rad))
     # Calculating unit vectors and multiplying with P_rad
-    unit_vectors = vector_diff / distances[..., np.newaxis]
-    radiation_vectors = unit_vectors * P_rad[..., np.newaxis]
+    unit_vectors = vector_diff / distances[..., np.newaxis] 
+    radiation_force_vectors = unit_vectors * P_rad[..., np.newaxis] / (299792458)  # Convert to Newtons
+    print("sum of all radiation_force_vectors:", np.sum(radiation_force_vectors))
+    # Summing all force vectors
+    total_radiation_force_vector = np.sum(radiation_force_vectors[fov_mask], axis=0)
+    print("total_radiation_force_vector:", total_radiation_force_vector)
 
-    # Summing all vectors
-    total_radiation_vector = np.sum(radiation_vectors[fov_mask], axis=0)
+    # Satellite area in square meters
+    satellite_area = 10.0
 
-    # Calculating the magnitude of the resultant vector
-    total_radiation_magnitude = np.linalg.norm(total_radiation_vector)
+    # Total force due to radiation pressure
+    total_force = 2* total_radiation_force_vector * satellite_area
+    print("total_force:", total_force)
 
-    satellite_area = 10.0  # m^2 - total guess
+    # Satellite mass in kilograms
+    satellite_mass = 500.0
 
-    radiation_over_sat_surface = total_radiation_magnitude * satellite_area
+    # Calculate acceleration
+    acceleration_vector = -total_force / satellite_mass
 
-    # force due to radiation pressure on specular surface
-    force  = 2*radiation_over_sat_surface / 299792458
-    print("force:", force)
-
-    scalar_acc = force / 500.0 # 500 kg is a complete guesstimate
-    print("acceleration:", scalar_acc)
-
-    acceleration_vector = - scalar_acc * total_radiation_vector / total_radiation_magnitude # negative sign because the force is in the opposite direction of the vector
+    scalar_acc = np.linalg.norm(acceleration_vector)
+    print("scalar_acc:", scalar_acc)
 
     down_vector = sat_ecef / np.linalg.norm(sat_ecef)  # Normalize the satellite's position vector to get the down vector
-    total_radiation_vector_normalized = total_radiation_vector / np.linalg.norm(total_radiation_vector)  # Normalize the total radiation vector
+    total_radiation_vector_normalized = total_radiation_force_vector / np.linalg.norm(total_radiation_force_vector)  # Normalize the total radiation vector
 
     cos_theta = np.dot(total_radiation_vector_normalized, down_vector)  # Cosine of the angle
     angle_radians = np.arccos(cos_theta)  # Angle in radians
@@ -107,9 +109,9 @@ class CERES_ERP_ForceModel(PythonForceModel):
     def __init__(self):
         super().__init__()
         self.altitude = 0.0
-        self.scalar_acc_data = []  # Store scalar acceleration
-        self.erp_angle_data = []   # Store ERP angle
-        self.time_data = []        # Store time stamps
+        self.scalar_acc_data = []
+        self.erp_angle_data = []
+        self.time_data = []  
 
     def acceleration(self, spacecraftState, doubleArray):
         # Compute the current altitude within the acceleration method
@@ -168,7 +170,6 @@ class CERES_ERP_ForceModel(PythonForceModel):
         # No event detectors are used in this model
         return Stream.empty()
 
-
 if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
@@ -181,9 +182,9 @@ if __name__ == "__main__":
     combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)    
 
     #oneweb TLE
-    TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    # TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
     #starlink TLE
-    # TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
+    TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset that I downloaded
     jd_end = jd_start + 1/24 # 1 hr later
     dt = 60  # Seconds
@@ -229,7 +230,7 @@ if __name__ == "__main__":
     minStep = 0.001
     maxstep = 1000.0
     initStep = 60.0
-    positionTolerance = 1.0 
+    positionTolerance = 1e-5
     tolerances = NumericalPropagator.tolerances(positionTolerance, 
                                                 initialOrbit, 
                                                 initialOrbit.getType())
@@ -238,7 +239,7 @@ if __name__ == "__main__":
         JArray_double.cast_(tolerances[1]))
     integrator.setInitialStepSize(initStep)
     satellite_mass = 500.0  # The models need a spacecraft mass, unit kg. 500kg is a complete guesstimate.
-    prop_time = 3600.0  # Propagate for 600 seconds
+    prop_time = 1200.0  
 
     #Initial state
     initialState = SpacecraftState(initialOrbit, satellite_mass) 
@@ -278,7 +279,7 @@ if __name__ == "__main__":
     sun = CelestialBodyFactory.getSun()
 
     # Create an instance of the IsotropicRadiationSingleCoefficient model
-    spacecraft = IsotropicRadiationSingleCoefficient(1.0, 1.0) #area and Cr are both 1.0
+    spacecraft = IsotropicRadiationSingleCoefficient(10.0, 1.0) #area and Cr are both 1.0
     onedeg_in_rad = np.radians(1.0)
     angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
     knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
@@ -308,55 +309,66 @@ if __name__ == "__main__":
         'No ERP': ephemGen_no_erp
     }
 
-    # Function to extract altitude and time data from ephemeris
-    def extract_altitude_time_data(ephemeris, initial_date, end_date, step, inertialFrame):
+    def extract_altitude_time_eccentricity_data(ephemeris, initial_date, end_date, step, inertialFrame):
         times = []
         altitudes = []
+        eccentricities = []
 
         current_date = initial_date
         while current_date.compareTo(end_date) <= 0:
-            pv_coordinates = ephemeris.getPVCoordinates(current_date, inertialFrame)
-            position = pv_coordinates.getPosition()
+            state = ephemeris.propagate(current_date)
+            keplerianOrbit = KeplerianOrbit(state.getOrbit())
 
-            # Convert position from ECI to geodetic altitude
+            position = state.getPVCoordinates().getPosition()
             altitude = position.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+            eccentricity = keplerianOrbit.getE()
 
             times.append(current_date.durationFrom(initial_date))
             altitudes.append(altitude)
+            eccentricities.append(eccentricity)
 
-            # Increment the current date by the step size
             current_date = current_date.shiftedBy(step)
 
-        return times, altitudes
+        return times, altitudes, eccentricities
 
     # Time step for iterating over ephemeris (in seconds)
     time_step = 60.0  # 1 minute, adjust as needed
 
     # Extract data from each ephemeris
-    altitude_data = {}
+    altitude_eccentricity_data = {}
     for ephem_name, ephem in ephemeris_generators.items():
         ephemeris = ephem.getGeneratedEphemeris()
         end_date = TLE_epochDate.shiftedBy(prop_time)
-        times, altitudes = extract_altitude_time_data(ephemeris, TLE_epochDate, end_date, time_step, inertialFrame)
-        altitude_data[ephem_name] = (times, altitudes)
+        times, altitudes, eccentricities = extract_altitude_time_eccentricity_data(ephemeris, TLE_epochDate, end_date, time_step, inertialFrame)
+        altitude_eccentricity_data[ephem_name] = (times, altitudes, eccentricities)
 
-    # Calculate differences in altitude
     altitude_diff = {}
-    for name in ['CERES ERP', 'Knocke ERP']:
-        times, altitudes = altitude_data[name]
-        _, no_erp_altitudes = altitude_data['No ERP']
-        altitude_diff[name] = [alt - no_erp_alt for alt, no_erp_alt in zip(altitudes, no_erp_altitudes)]
+    eccentricity_data = {}
+    for name in ['CERES ERP', 'Knocke ERP', 'No ERP']:
+        times, altitudes, eccentricities = altitude_eccentricity_data[name]
+        eccentricity_data[name] = eccentricities
+        print(f"Data for {name}: {len(times)} time points")
+        print("eccentricities:", eccentricities)
+        if name != 'No ERP':
+            _, no_erp_altitudes, _ = altitude_eccentricity_data['No ERP']
+            altitude_diff[name] = [alt - no_erp_alt for alt, no_erp_alt in zip(altitudes, no_erp_altitudes)]
 
-    # Plotting differences
-    plt.figure(figsize=(10, 6))
-    for name in ['CERES ERP', 'Knocke ERP']:
-        plt.plot(altitude_data['No ERP'][0], altitude_diff[name], label=f'{name} - No ERP', linewidth=2, linestyle='--')
+    # Plotting eccentricity on secondary y-axis
+    fig, ax1 = plt.subplots(figsize=(10, 6))
 
-    plt.xlabel('Time (seconds from start)')
-    plt.ylabel('Altitude Difference (meters)')
-    plt.title('Altitude Difference from No ERP Over Time')
-    plt.legend()
-    plt.grid(True)
+    # Plot settings for altitude difference
+    color_alt_diff_ceres = 'tab:green'
+    color_alt_diff_knocke = 'tab:orange'
+    ax1.set_xlabel('Time (seconds from start)')
+    ax1.set_ylabel('Altitude Difference (meters)', color=color_alt_diff_ceres)
+    ax1.plot(altitude_eccentricity_data['No ERP'][0], altitude_diff['CERES ERP'], label='CERES ERP - No ERP', linewidth=2, linestyle='--', color=color_alt_diff_ceres)
+    ax1.plot(altitude_eccentricity_data['No ERP'][0], altitude_diff['Knocke ERP'], label='Knocke ERP - No ERP', linewidth=2, linestyle='--', color=color_alt_diff_knocke)
+    ax1.tick_params(axis='y', labelcolor=color_alt_diff_ceres)
+    ax1.legend(loc='upper left')
+    ax1.grid(True)
+
+    fig.tight_layout()  
+    plt.title('Altitude Difference and Eccentricity Over Time')
     plt.show()
 
     # # Extract data from each ephemeris
