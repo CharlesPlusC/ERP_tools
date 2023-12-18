@@ -2,7 +2,7 @@ import netCDF4 as nc
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir
 from org.hipparchus.geometry.euclidean.threed import Vector3D, FieldVector3D
-from org.orekit.forces import PythonForceModel
+from org.orekit.forces import PythonForceModel, BoxAndSolarArraySpacecraft
 from org.orekit.orbits import OrbitType
 from org.orekit.propagation.numerical import NumericalPropagator
 from orekit import JArray_double
@@ -19,9 +19,8 @@ from org.orekit.propagation.analytical import KeplerianPropagator
 from org.orekit.time import AbsoluteDate, TimeScalesFactory
 from org.orekit.utils import Constants
 from org.orekit.frames import FramesFactory
-from org.orekit.forces.radiation import RadiationSensitive, KnockeRediffusedForceModel
+from org.orekit.forces.radiation import RadiationSensitive, KnockeRediffusedForceModel, IsotropicRadiationSingleCoefficient
 from org.orekit.bodies import CelestialBodyFactory
-from org.orekit.forces.radiation import IsotropicRadiationSingleCoefficient
 from org.orekit.utils import ParameterDriver
 
 import orekit
@@ -171,16 +170,17 @@ class CERES_ERP_ForceModel(PythonForceModel):
         # No event detectors are used in this model
         return Stream.empty()
 
+
 if __name__ == "__main__":
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'  # Hourly data
 
-    # data = nc.Dataset(dataset_path)
+    data = nc.Dataset(dataset_path)
 
-    # # Extract data from the CERES dataset
-    # ceres_times, lat, lon, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+    # Extract data from the CERES dataset
+    ceres_times, lat, lon, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
 
-    # # Combine longwave and shortwave radiation data
-    # combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)    
+    # Combine longwave and shortwave radiation data
+    combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)    
 
     #oneweb TLE
     TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
@@ -240,6 +240,7 @@ if __name__ == "__main__":
         JArray_double.cast_(tolerances[1]))
     integrator.setInitialStepSize(initStep)
     satellite_mass = 500.0  # The models need a spacecraft mass, unit kg. 500kg is a complete guesstimate.
+    prop_time = 600.0  # Propagate for 600 seconds
 
     #Initial state
     initialState = SpacecraftState(initialOrbit, satellite_mass) 
@@ -251,18 +252,18 @@ if __name__ == "__main__":
     gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
     propagator_num.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     
-    ###### CERES ERP model ######
+    ##### CERES ERP model ######
     # Initialize propagator with CERES ERP force model
-    # propagator_ceres_erp = NumericalPropagator(integrator)
-    # propagator_ceres_erp.setOrbitType(OrbitType.CARTESIAN)
-    # propagator_ceres_erp.setInitialState(initialState)
-    # propagator_ceres_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
-    # ceres_erp_force_model = CERES_ERP_ForceModel()
-    # propagator_ceres_erp.addForceModel(ceres_erp_force_model)
+    propagator_ceres_erp = NumericalPropagator(integrator)
+    propagator_ceres_erp.setOrbitType(OrbitType.CARTESIAN)
+    propagator_ceres_erp.setInitialState(initialState)
+    propagator_ceres_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    ceres_erp_force_model = CERES_ERP_ForceModel()
+    propagator_ceres_erp.addForceModel(ceres_erp_force_model)
 
-    # # Propagate the orbit with CERES ERP force model
-    # ephemerisGenerator = propagator_ceres_erp.getEphemerisGenerator()
-    # end_state_with_erp = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(3600.0 * 6))
+    # Propagate the orbit with CERES ERP force model
+    ephemerisGenerator = propagator_ceres_erp.getEphemerisGenerator()
+    end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
 
     # How to access the ephemeris
     # ephemeris = ephemerisGenerator.getGeneratedEphemeris()
@@ -273,10 +274,48 @@ if __name__ == "__main__":
     # print("middle PV:", ephemeris.getPVCoordinates(TLE_epochDate.shiftedBy(60.0 * 0.5), inertialFrame))
     # print("end PV:", end_PV)
 
-    # # Assuming erp_force_model.time_data is in a datetime format compatible with matplotlib
-    # time_data = propagator_ceres_erp.time_data
-    # scalar_acc_data = propagator_ceres_erp.scalar_acc_data
-    # erp_angle_data = propagator_ceres_erp.erp_angle_data
+    # Assuming erp_force_model.time_data is in a datetime format compatible with matplotlib
+    time_data = ceres_erp_force_model.time_data
+    scalar_acc_data = ceres_erp_force_model.scalar_acc_data
+    erp_angle_data = ceres_erp_force_model.erp_angle_data
+
+    ###### Knocke ERP model ######
+    propagator_knocke_erp = NumericalPropagator(integrator)
+    propagator_knocke_erp.setOrbitType(OrbitType.CARTESIAN)
+    propagator_knocke_erp.setInitialState(initialState)
+    propagator_knocke_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+
+    # Get the Sun as an ExtendedPVCoordinatesProvider
+    sun = CelestialBodyFactory.getSun()
+
+    # Create an instance of the IsotropicRadiationSingleCoefficient model
+    spacecraft = IsotropicRadiationSingleCoefficient(1.0, 1.0) #area and Cr are both 1.0
+    onedeg_in_rad = np.radians(1.0)
+    angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
+    knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
+    propagator_knocke = NumericalPropagator(integrator)
+    propagator_knocke.setOrbitType(OrbitType.CARTESIAN)
+    propagator_knocke.setInitialState(initialState)
+    propagator_knocke.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    propagator_knocke.addForceModel(knockeModel)
+
+    end_state_with_knocke = propagator_knocke.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
+
+    #### Now propagate with No ERP model ####
+    propagator_no_erp = NumericalPropagator(integrator)
+    propagator_no_erp.setOrbitType(OrbitType.CARTESIAN)
+    propagator_no_erp.setInitialState(initialState)
+    propagator_no_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    end_state_no_erp = propagator_no_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
+
+    print("3D difference between No ERP and CERES end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()))
+    print("3D difference between No ERP and Knocke end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_with_knocke.getPVCoordinates().getPosition()))
+    print("3D difference between Knocke and CERES states:", end_state_with_knocke.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()))
+
+    print("norm of 3D difference between No ERP and CERES end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
+    print("norm of 3D difference between No ERP and Knocke end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_with_knocke.getPVCoordinates().getPosition()).getNorm())
+    print("norm of 3D difference between Knocke and CERES states:", end_state_with_knocke.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
+
 
     # fig, ax1 = plt.subplots()
 
@@ -307,34 +346,3 @@ if __name__ == "__main__":
     # # Show the plot
     # plt.tight_layout()  # Adjusts the plot to ensure everything fits without overlapping
     # plt.show()
-
-    ###### Knocke ERP model ######
-    propagator_knocke_erp = NumericalPropagator(integrator)
-    propagator_knocke_erp.setOrbitType(OrbitType.CARTESIAN)
-    propagator_knocke_erp.setInitialState(initialState)
-    propagator_knocke_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
-
-    # Get the Sun as an ExtendedPVCoordinatesProvider
-    sun = CelestialBodyFactory.getSun()
-
-
-    # Define the absorption and reflection coefficients
-    absorptionCoefficient = 0.0  # Replace with your actual value
-    reflectionCoefficient = 1.0  # Replace with your actual value
-
-    # Create an instance of the IsotropicRadiationSingleCoefficient model
-    spacecraft = IsotropicRadiationSingleCoefficient(reflectionCoefficient, absorptionCoefficient)
-
-    onedeg_in_rad = np.radians(1.0)
-    angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
-
-    knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
-
-    propagator_knocke = NumericalPropagator(integrator)
-    propagator_knocke.setOrbitType(OrbitType.CARTESIAN)
-    propagator_knocke.setInitialState(initialState)
-    propagator_knocke.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
-    propagator_knocke.addForceModel(knockeModel)
-
-    end_state_with_knocke = propagator_knocke.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(600.0 * 1))
-    print("end_state_with_knocke:", end_state_with_knocke)
