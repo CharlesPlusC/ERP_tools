@@ -22,15 +22,13 @@ from org.orekit.frames import FramesFactory
 from org.orekit.forces.radiation import RadiationSensitive, KnockeRediffusedForceModel, IsotropicRadiationSingleCoefficient
 from org.orekit.bodies import CelestialBodyFactory
 from org.orekit.utils import ParameterDriver
-
+import matplotlib.pyplot as plt
+import numpy as np
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir, absolutedate_to_datetime
 orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
-
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 
@@ -92,7 +90,7 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     scalar_acc = force / 500.0 # 500 kg is a complete guesstimate
     print("acceleration:", scalar_acc)
 
-    acceleration_vector = scalar_acc * total_radiation_vector / total_radiation_magnitude
+    acceleration_vector = - scalar_acc * total_radiation_vector / total_radiation_magnitude # negative sign because the force is in the opposite direction of the vector
 
     down_vector = sat_ecef / np.linalg.norm(sat_ecef)  # Normalize the satellite's position vector to get the down vector
     total_radiation_vector_normalized = total_radiation_vector / np.linalg.norm(total_radiation_vector)  # Normalize the total radiation vector
@@ -240,7 +238,7 @@ if __name__ == "__main__":
         JArray_double.cast_(tolerances[1]))
     integrator.setInitialStepSize(initStep)
     satellite_mass = 500.0  # The models need a spacecraft mass, unit kg. 500kg is a complete guesstimate.
-    prop_time = 600.0  # Propagate for 600 seconds
+    prop_time = 3600.0  # Propagate for 600 seconds
 
     #Initial state
     initialState = SpacecraftState(initialOrbit, satellite_mass) 
@@ -262,17 +260,8 @@ if __name__ == "__main__":
     propagator_ceres_erp.addForceModel(ceres_erp_force_model)
 
     # Propagate the orbit with CERES ERP force model
-    ephemerisGenerator = propagator_ceres_erp.getEphemerisGenerator()
+    ephemGen_CERES = propagator_ceres_erp.getEphemerisGenerator() # Get the ephemeris generator
     end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
-
-    # How to access the ephemeris
-    # ephemeris = ephemerisGenerator.getGeneratedEphemeris()
-    # print("methods of ephemeris:", dir(ephemeris))
-    # start_PV = ephemeris.getPVCoordinates(TLE_epochDate, inertialFrame)
-    # end_PV = ephemeris.getPVCoordinates(TLE_epochDate.shiftedBy(60.0 * 1), inertialFrame)
-    # print("start PV:", start_PV)
-    # print("middle PV:", ephemeris.getPVCoordinates(TLE_epochDate.shiftedBy(60.0 * 0.5), inertialFrame))
-    # print("end PV:", end_PV)
 
     # Assuming erp_force_model.time_data is in a datetime format compatible with matplotlib
     time_data = ceres_erp_force_model.time_data
@@ -298,7 +287,7 @@ if __name__ == "__main__":
     propagator_knocke.setInitialState(initialState)
     propagator_knocke.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     propagator_knocke.addForceModel(knockeModel)
-
+    ephemGen_knocke = propagator_knocke.getEphemerisGenerator() # Get the ephemeris generator
     end_state_with_knocke = propagator_knocke.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
 
     #### Now propagate with No ERP model ####
@@ -306,15 +295,103 @@ if __name__ == "__main__":
     propagator_no_erp.setOrbitType(OrbitType.CARTESIAN)
     propagator_no_erp.setInitialState(initialState)
     propagator_no_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    ephemGen_no_erp = propagator_no_erp.getEphemerisGenerator() # Get the ephemeris generator
     end_state_no_erp = propagator_no_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
-
-    print("3D difference between No ERP and CERES end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()))
-    print("3D difference between No ERP and Knocke end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_with_knocke.getPVCoordinates().getPosition()))
-    print("3D difference between Knocke and CERES states:", end_state_with_knocke.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()))
 
     print("norm of 3D difference between No ERP and CERES end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
     print("norm of 3D difference between No ERP and Knocke end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_with_knocke.getPVCoordinates().getPosition()).getNorm())
     print("norm of 3D difference between Knocke and CERES states:", end_state_with_knocke.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
+    
+    ephemeris_generators = {
+        'CERES ERP': ephemGen_CERES,
+        'Knocke ERP': ephemGen_knocke,
+        'No ERP': ephemGen_no_erp
+    }
+
+    # Function to extract altitude and time data from ephemeris
+    def extract_altitude_time_data(ephemeris, initial_date, end_date, step, inertialFrame):
+        times = []
+        altitudes = []
+
+        current_date = initial_date
+        while current_date.compareTo(end_date) <= 0:
+            pv_coordinates = ephemeris.getPVCoordinates(current_date, inertialFrame)
+            position = pv_coordinates.getPosition()
+
+            # Convert position from ECI to geodetic altitude
+            altitude = position.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+
+            times.append(current_date.durationFrom(initial_date))
+            altitudes.append(altitude)
+
+            # Increment the current date by the step size
+            current_date = current_date.shiftedBy(step)
+
+        return times, altitudes
+
+    # Time step for iterating over ephemeris (in seconds)
+    time_step = 60.0  # 1 minute, adjust as needed
+
+    # Extract data from each ephemeris
+    altitude_data = {}
+    for ephem_name, ephem in ephemeris_generators.items():
+        ephemeris = ephem.getGeneratedEphemeris()
+        end_date = TLE_epochDate.shiftedBy(prop_time)
+        times, altitudes = extract_altitude_time_data(ephemeris, TLE_epochDate, end_date, time_step, inertialFrame)
+        altitude_data[ephem_name] = (times, altitudes)
+
+    # Calculate differences in altitude
+    altitude_diff = {}
+    for name in ['CERES ERP', 'Knocke ERP']:
+        times, altitudes = altitude_data[name]
+        _, no_erp_altitudes = altitude_data['No ERP']
+        altitude_diff[name] = [alt - no_erp_alt for alt, no_erp_alt in zip(altitudes, no_erp_altitudes)]
+
+    # Plotting differences
+    plt.figure(figsize=(10, 6))
+    for name in ['CERES ERP', 'Knocke ERP']:
+        plt.plot(altitude_data['No ERP'][0], altitude_diff[name], label=f'{name} - No ERP', linewidth=2, linestyle='--')
+
+    plt.xlabel('Time (seconds from start)')
+    plt.ylabel('Altitude Difference (meters)')
+    plt.title('Altitude Difference from No ERP Over Time')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # # Extract data from each ephemeris
+    # altitude_data = {}
+    # for ephem_name, ephem in ephemeris_generators.items():
+    #     ephemeris = ephem.getGeneratedEphemeris()
+    #     end_date = TLE_epochDate.shiftedBy(prop_time)
+    #     times, altitudes = extract_altitude_time_data(ephemeris, TLE_epochDate, end_date, time_step, inertialFrame)
+    #     altitude_data[ephem_name] = (times, altitudes)
+    #     # After extracting data
+    #     for name, (times, altitudes) in altitude_data.items():
+    #         print(f"Data for {name}: {len(times)} time points")
+    #         print("all altitudes:", altitudes)
+    #         if len(times) == 0:
+    #             print(f"No data for {name}")
+
+    # # Plotting
+    # plt.figure(figsize=(10, 6))
+    # for name, (times, altitudes) in altitude_data.items():
+    #     plt.plot(times, altitudes, label=name, linewidth=2, linestyle='--')
+
+    # plt.xlabel('Time (seconds from start)')
+    # plt.ylabel('Altitude (meters)')
+    # plt.title('Altitude Comparison Over Time')
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
+    # How to access the ephemeris
+    # ephemeris = ephemerisGenerator.getGeneratedEphemeris()
+    # print("methods of ephemeris:", dir(ephemeris))
+    # start_PV = ephemeris.getPVCoordinates(TLE_epochDate, inertialFrame)
+    # end_PV = ephemeris.getPVCoordinates(TLE_epochDate.shiftedBy(60.0 * 1), inertialFrame)
+    # print("start PV:", start_PV)
+    # print("middle PV:", ephemeris.getPVCoordinates(TLE_epochDate.shiftedBy(60.0 * 0.5), inertialFrame))
+    # print("end PV:", end_PV)
 
 
     # fig, ax1 = plt.subplots()
