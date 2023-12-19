@@ -1,6 +1,5 @@
-import netCDF4 as nc
 import orekit
-from orekit.pyhelpers import setup_orekit_curdir
+from orekit.pyhelpers import setup_orekit_curdir, absolutedate_to_datetime
 from org.hipparchus.geometry.euclidean.threed import Vector3D, FieldVector3D
 from org.orekit.forces import PythonForceModel, BoxAndSolarArraySpacecraft
 from org.orekit.orbits import OrbitType
@@ -15,90 +14,28 @@ from org.orekit.utils import IERSConventions
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel
 from org.orekit.orbits import KeplerianOrbit, PositionAngleType
-from org.orekit.propagation.analytical import KeplerianPropagator
 from org.orekit.time import AbsoluteDate, TimeScalesFactory
 from org.orekit.utils import Constants
 from org.orekit.frames import FramesFactory
 from org.orekit.forces.radiation import RadiationSensitive, KnockeRediffusedForceModel, IsotropicRadiationSingleCoefficient
 from org.orekit.bodies import CelestialBodyFactory
-from org.orekit.utils import ParameterDriver
 from org.orekit.utils import PVCoordinates
-import matplotlib.pyplot as plt
-from typing import List, Tuple, Union
-import numpy as np
-import orekit
-from orekit.pyhelpers import setup_orekit_curdir, absolutedate_to_datetime
+
 orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
-import matplotlib.dates as mdates
 
+import matplotlib.pyplot as plt
+import numpy as np
+import netCDF4 as nc
 
-from tools.utilities import find_nearest_index, jd_to_utc, lla_to_ecef, julian_day_to_ceres_time
-from tools.data_processing import extract_hourly_ceres_data
+from tools.utilities import pos_vel_from_orekit_ephem, find_nearest_index, jd_to_utc, lla_to_ecef, julian_day_to_ceres_time, HCL_diff
+from tools.data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data, calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 from tools.TLE_tools import twoLE_parse, tle_convert, sgp4_prop_TLE
-from tools.data_processing import extract_hourly_ceres_data ,combine_lw_sw_data, calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
-
-def HCL_diff(eph1: np.ndarray, eph2: np.ndarray) -> Tuple[List[float], List[float], List[float]]:
-    """
-    Calculate the Height, Cross-Track, and Along-Track differences at each time step between two ephemerides.
-
-    Parameters
-    ----------
-    eph1 : np.ndarray
-        List or array of state vectors for a satellite.
-    eph2 : np.ndarray
-        List or array of state vectors for another satellite.
-
-    Returns
-    -------
-    tuple
-        Three lists, each containing the height, cross-track, and along-track differences at each time step.
-    """
-    #check that the starting conditions are the same
-    # if (eph1[0][0:3]) != (eph2[0][0:3]) or (eph1[0][3:6]) != (eph2[0][3:6]):
-    #     warnings.warn('The two orbits do not have the same starting conditions. Make sure this is intentional.')
-
-    H_diffs = []
-    C_diffs = []
-    L_diffs = []
-
-    for i in range(0, len(eph1), 1):
-        #calculate the HCL difference at each time step
-        
-        r1 = np.array(eph1[i][0:3])
-        r2 = np.array(eph2[i][0:3])
-        
-        v1 = np.array(eph1[i][3:6])
-        v2 = np.array(eph2[i][3:6])
-        
-        unit_radial = r1/np.linalg.norm(r1)
-        unit_cross_track = np.cross(r1, v1)/np.linalg.norm(np.cross(r1, v1))
-        unit_along_track = np.cross(unit_radial, unit_cross_track)
-
-        #put the three unit vectors into a matrix
-        unit_vectors = np.array([unit_radial, unit_cross_track, unit_along_track])
-
-        #subtract the two position vectors
-        r_diff = r1 - r2
-
-        #relative position in HCL frame
-        r_diff_HCL = np.matmul(unit_vectors, r_diff)
-
-        #height, cross track and along track differences
-        h_diff = r_diff_HCL[0]
-        c_diff = r_diff_HCL[1]
-        l_diff = r_diff_HCL[2]
-
-        H_diffs.append(h_diff)
-        C_diffs.append(c_diff)
-        L_diffs.append(l_diff)
-
-    return H_diffs, C_diffs, L_diffs
 
 def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
     # Earth radius in meters
-    R = 6371000.0
+    R = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
     # Latitude and longitude arrays
     lat = np.arange(-89.5, 90.5, 1)  # 1-degree step from -89.5 to 89.5
     lon = np.arange(-179.5, 180.5, 1)  # 1-degree step from -179.5 to 179.5
@@ -128,23 +65,17 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     delta_lon = np.abs(lon[1] - lon[0])
     area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d))  # Convert to m^2
     P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
-    print("sumj of all P_rad:", np.sum(P_rad))
 
     #need to convert the vector_diff to eci frame
     unit_vectors = vector_diff / distances[..., np.newaxis] * 1000 # Convert to unit vectors in meters
     radiation_force_vectors = unit_vectors * P_rad[..., np.newaxis] / (299792458)  # Convert to Newtons
-    print("sum of all radiation_force_vectors:", np.sum(radiation_force_vectors))
     # Summing all force vectors
     total_radiation_force_vector = np.sum(radiation_force_vectors[fov_mask], axis=0)
-
-    print("total_radiation_force_vector:", total_radiation_force_vector)
-
     # Satellite area in square meters
     satellite_area = 10.0
 
-    # Total force due to radiation pressure for perfectly reflecting satellite
+    # Total force due to radiation pressure (not including reflection)
     total_force = total_radiation_force_vector * satellite_area
-    print("total_force:", total_force)
 
     # Satellite mass in kilograms
     satellite_mass = 500.0
@@ -161,8 +92,6 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     cos_theta = np.dot(total_radiation_vector_normalized, down_vector)  # Cosine of the angle
     angle_radians = np.arccos(cos_theta)  # Angle in radians
     angle_degrees = np.rad2deg(angle_radians)  # Convert to degrees
-
-    print("ERP angle:", angle_degrees)
 
     return np.array(acceleration_vector), scalar_acc, angle_degrees
 
@@ -205,7 +134,6 @@ class CERES_ERP_ForceModel(PythonForceModel):
         longitude_deg = np.rad2deg(longitude)
         ceres_time = julian_day_to_ceres_time(jd_time)
         ceres_indices = find_nearest_index(ceres_times, ceres_time)
-
         erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
         # convert the erp_vec to ECI
         eci = FramesFactory.getEME2000()
@@ -222,7 +150,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.time_data.append(jd_time)
         # Create the Orekit vector for the ERP force in ECI frame
         orekit_erp_vec = Vector3D(erp_vec_eci.getX(), erp_vec_eci.getY(), erp_vec_eci.getZ())
-        print("orekit_erp_vec components:", orekit_erp_vec.getX(), orekit_erp_vec.getY(), orekit_erp_vec.getZ())
+        # print("orekit_erp_vec components:", orekit_erp_vec.getX(), orekit_erp_vec.getY(), orekit_erp_vec.getZ())
         return orekit_erp_vec
     
     def addContribution(self, spacecraftState, timeDerivativesEquations):
@@ -254,9 +182,9 @@ if __name__ == "__main__":
     combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)    
 
     #oneweb TLE
-    # TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    TLE = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
     #starlink TLE
-    TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
+    # TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000  # Force time to be within the CERES dataset that I downloaded
     jd_end = jd_start + 1/24 # 1 hr later
     dt = 60  # Seconds
@@ -296,7 +224,6 @@ if __name__ == "__main__":
     initialOrbit = KeplerianOrbit(a, e, i, omega, raan, lv,
                                 PositionAngleType.TRUE,
                                 inertialFrame, TLE_epochDate, Constants.WGS84_EARTH_MU)
-    print("initial orekit orbit:", initialOrbit)
 
     # #Set parameters for numerical propagation
     minStep = 0.001
@@ -311,7 +238,7 @@ if __name__ == "__main__":
         JArray_double.cast_(tolerances[1]))
     integrator.setInitialStepSize(initStep)
     satellite_mass = 500.0
-    prop_time = 3600.0 *2
+    prop_time = 120.0
 
     #Initial state
     initialState = SpacecraftState(initialOrbit, satellite_mass) 
@@ -336,7 +263,6 @@ if __name__ == "__main__":
     ephemGen_CERES = propagator_ceres_erp.getEphemerisGenerator() # Get the ephemeris generator
     end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
 
-    # Assuming erp_force_model.time_data is in a datetime format compatible with matplotlib
     time_data = ceres_erp_force_model.time_data
     scalar_acc_data = ceres_erp_force_model.scalar_acc_data
     erp_angle_data = ceres_erp_force_model.erp_angle_data
@@ -369,6 +295,7 @@ if __name__ == "__main__":
     propagator_no_erp.setInitialState(initialState)
     propagator_no_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     ephemGen_no_erp = propagator_no_erp.getEphemerisGenerator() # Get the ephemeris generator
+    print("ephemGen_no_erp:", ephemGen_no_erp)
     end_state_no_erp = propagator_no_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(prop_time))
 
     print("norm of 3D difference between No ERP and CERES end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
@@ -381,31 +308,14 @@ if __name__ == "__main__":
         'No ERP': ephemGen_no_erp
     }
 
-    def extract_position_velocity_data(ephemeris, initial_date, end_date, step, inertialFrame):
-        times = []
-        state_vectors = []  # Store position and velocity vectors
-
-        current_date = initial_date
-        while current_date.compareTo(end_date) <= 0:
-            state = ephemeris.propagate(current_date)
-            position = state.getPVCoordinates().getPosition().toArray()
-            velocity = state.getPVCoordinates().getVelocity().toArray()
-            state_vector = np.concatenate([position, velocity])  # Combine position and velocity
-
-            times.append(current_date.durationFrom(initial_date))
-            state_vectors.append(state_vector)
-
-            current_date = current_date.shiftedBy(step)
-
-        return times, state_vectors
-
-
-    time_step = 20.0 
+    time_step = 60.0 
     state_vector_data = {}
     for ephem_name, ephem in ephemeris_generators.items():
+        print("ephem:", ephem)
         ephemeris = ephem.getGeneratedEphemeris()
+        print("ephemeris:", ephemeris)
         end_date = TLE_epochDate.shiftedBy(prop_time)
-        times, state_vectors = extract_position_velocity_data(ephemeris, TLE_epochDate, end_date, time_step, inertialFrame)
+        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, TLE_epochDate, end_date, time_step)
         state_vector_data[ephem_name] = (times, state_vectors)
 
     # Compute HCL differences
@@ -445,7 +355,7 @@ if __name__ == "__main__":
         ax.legend()
 
     # Adjust layout to prevent overlap
-    plt.subplots_adjust(hspace=0.4)  # Adjust the vertical spacing
+    plt.subplots_adjust(hspace=0.5)  # Adjust the vertical spacing
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust the layout
 
     # Show plot
@@ -456,7 +366,7 @@ if __name__ == "__main__":
 
     # Plotting the scalar acceleration data
     plt.figure(figsize=(10, 6))
-    plt.plot(ceres_erp_force_model.time_data, ceres_erp_force_model.scalar_acc_data, label='Scalar Acceleration', color='tab:blue', linestyle='-')
+    plt.scatter(ceres_erp_force_model.time_data, ceres_erp_force_model.scalar_acc_data, label='CERES ERP', s=5)
     plt.xlabel('Time (seconds from start)')
     plt.ylabel('Acceleration (m/s²)')
     plt.title('Scalar Acceleration Over Time')

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pyproj import Transformer
 from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
-
+from typing import Tuple, List
 def ecef_to_lla(x, y, z):
     """
     Convert Earth-Centered, Earth-Fixed (ECEF) coordinates to Latitude, Longitude, Altitude (LLA).
@@ -148,3 +148,78 @@ def jd_to_utc(jd: float) -> datetime:
     #convert astropy time object to datetime object
     utc = time.datetime
     return utc
+
+def HCL_diff(eph1: np.ndarray, eph2: np.ndarray) -> Tuple[List[float], List[float], List[float]]:
+    """
+    Calculate the Height, Cross-Track, and Along-Track differences at each time step between two ephemerides.
+
+    Parameters
+    ----------
+    eph1 : np.ndarray
+        List or array of state vectors for a satellite.
+    eph2 : np.ndarray
+        List or array of state vectors for another satellite.
+
+    Returns
+    -------
+    tuple
+        Three lists, each containing the height, cross-track, and along-track differences at each time step.
+    """
+    #check that the starting conditions are the same
+    # if (eph1[0][0:3]) != (eph2[0][0:3]) or (eph1[0][3:6]) != (eph2[0][3:6]):
+    #     warnings.warn('The two orbits do not have the same starting conditions. Make sure this is intentional.')
+
+    H_diffs = []
+    C_diffs = []
+    L_diffs = []
+
+    for i in range(0, len(eph1), 1):
+        #calculate the HCL difference at each time step
+        
+        r1 = np.array(eph1[i][0:3])
+        r2 = np.array(eph2[i][0:3])
+        
+        v1 = np.array(eph1[i][3:6])
+        v2 = np.array(eph2[i][3:6])
+        
+        unit_radial = r1/np.linalg.norm(r1)
+        unit_cross_track = np.cross(r1, v1)/np.linalg.norm(np.cross(r1, v1))
+        unit_along_track = np.cross(unit_radial, unit_cross_track)
+
+        #put the three unit vectors into a matrix
+        unit_vectors = np.array([unit_radial, unit_cross_track, unit_along_track])
+
+        #subtract the two position vectors
+        r_diff = r1 - r2
+
+        #relative position in HCL frame
+        r_diff_HCL = np.matmul(unit_vectors, r_diff)
+
+        #height, cross track and along track differences
+        h_diff = r_diff_HCL[0]
+        c_diff = r_diff_HCL[1]
+        l_diff = r_diff_HCL[2]
+
+        H_diffs.append(h_diff)
+        C_diffs.append(c_diff)
+        L_diffs.append(l_diff)
+
+    return H_diffs, C_diffs, L_diffs
+
+def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
+    times = []
+    state_vectors = []  # Store position and velocity vectors
+
+    current_date = initial_date
+    while current_date.compareTo(end_date) <= 0:
+        state = ephemeris.propagate(current_date)
+        position = state.getPVCoordinates().getPosition().toArray()
+        velocity = state.getPVCoordinates().getVelocity().toArray()
+        state_vector = np.concatenate([position, velocity])  # Combine position and velocity
+
+        times.append(current_date.durationFrom(initial_date))
+        state_vectors.append(state_vector)
+
+        current_date = current_date.shiftedBy(step)
+
+    return times, state_vectors
