@@ -3,4 +3,4 @@
 *.nc
 *.pyc
 *__pycache__/
-*.zip
+*orekit-data.zip
