@@ -144,54 +144,80 @@ def main():
     a, e, i, omega, raan, lv = [float(kep_elems[key]) for key in ['a', 'e', 'i', 'arg_p', 'RAAN', 'true_anomaly']]
     a *= 1000  # Convert to meters
 
-    # Orbit construction
+    # Instantiate the inertial frame where the orbit is defined
     inertialFrame = FramesFactory.getEME2000()
+
+    # Orbit construction as Keplerian
     initialOrbit = KeplerianOrbit(a, e, i, omega, raan, lv, PositionAngleType.TRUE, inertialFrame, TLE_epochDate, Constants.WGS84_EARTH_MU)
 
-    # Numerical propagator setup
+    # Set parameters for numerical propagation
+    tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, initialOrbit, initialOrbit.getType())
+    integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
+    integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
+
+    # Initial state
+    initialState = SpacecraftState(initialOrbit, SATELLITE_MASS)
+
+    # No ERP Propagation
+    propagator_no_erp = NumericalPropagator(integrator)
+    propagator_no_erp.setOrbitType(OrbitType.CARTESIAN)
+    propagator_no_erp.setInitialState(initialState)
     gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
-    gravityModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
+    propagator_no_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    ephemGen_no_erp = propagator_no_erp.getEphemerisGenerator()  # Get the ephemeris generator
+    end_state_no_erp = propagator_no_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
 
-    # Create and configure propagators for different models
-    propagator_num = setup_propagator(initialOrbit, [gravityModel], POSITION_TOLERANCE)
-    end_state_no_erp = propagate_orbit(propagator_num, TLE_epochDate, jd_end - jd_start)
+    # CERES ERP Propagation
+    ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data) # pass the time and radiation data to the force model
+    propagator_ceres_erp = NumericalPropagator(integrator)
+    propagator_ceres_erp.setOrbitType(OrbitType.CARTESIAN)
+    propagator_ceres_erp.setInitialState(initialState)
+    propagator_ceres_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    propagator_ceres_erp.addForceModel(ceres_erp_force_model)
+    ephemGen_CERES = propagator_ceres_erp.getEphemerisGenerator()  # Get the ephemeris generator
+    end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
 
-    ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data)
-    propagator_ceres_erp = setup_propagator(initialOrbit, [gravityModel, ceres_erp_force_model], POSITION_TOLERANCE)
-    end_state_ceres_erp = propagate_orbit(propagator_ceres_erp, TLE_epochDate, jd_end - jd_start)
-
+    # Knocke ERP Propagation
     sun = CelestialBodyFactory.getSun()
-    spacecraft = IsotropicRadiationSingleCoefficient(10.0, 1.0)
+    spacecraft = IsotropicRadiationSingleCoefficient(10.0, 1.0)  # area 10 and Cr 1.0
     onedeg_in_rad = np.radians(1.0)
-    angularResolution = float(onedeg_in_rad)
+    angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
     knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
-    propagator_knocke = setup_propagator(initialOrbit, [gravityModel, knockeModel], POSITION_TOLERANCE)
-    end_state_knocke = propagate_orbit(propagator_knocke, TLE_epochDate, jd_end - jd_start)
+    propagator_knocke_erp = NumericalPropagator(integrator)
+    propagator_knocke_erp.setOrbitType(OrbitType.CARTESIAN)
+    propagator_knocke_erp.setInitialState(initialState)
+    propagator_knocke_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    propagator_knocke_erp.addForceModel(knockeModel)
+    ephemGen_knocke = propagator_knocke_erp.getEphemerisGenerator()  # Get the ephemeris generator
+    end_state_with_knocke = propagator_knocke_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
 
-    # Calculate differences between end states
-    diff_no_erp_ceres = calculate_position_differences(end_state_no_erp, end_state_ceres_erp)
-    diff_no_erp_knocke = calculate_position_differences(end_state_no_erp, end_state_knocke)
-    diff_ceres_knocke = calculate_position_differences(end_state_ceres_erp, end_state_knocke)
+    # Calculate the norm of 3D differences between end states
+    print("norm of 3D difference between No ERP and CERES end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
+    print("norm of 3D difference between No ERP and Knocke end states:", end_state_no_erp.getPVCoordinates().getPosition().subtract(end_state_with_knocke.getPVCoordinates().getPosition()).getNorm())
+    print("norm of 3D difference between Knocke and CERES states:", end_state_with_knocke.getPVCoordinates().getPosition().subtract(end_state_ceres.getPVCoordinates().getPosition()).getNorm())
 
-    print("3D diff: No ERP vs CERES ERP:", diff_no_erp_ceres)
-    print("3D diff: No ERP vs Knocke ERP:", diff_no_erp_knocke)
-    print("3D diff: CERES ERP vs Knocke ERP:", diff_ceres_knocke)
-
-    # Setup for ephemeris generation
-    propagators_dict = {
-        'CERES ERP': propagator_ceres_erp,
-        'Knocke ERP': propagator_knocke,
-        'No ERP': propagator_num
+    # Ephemeris generators setup
+    ephemeris_generators = {
+        'CERES ERP': ephemGen_CERES,
+        'Knocke ERP': ephemGen_knocke,
+        'No ERP': ephemGen_no_erp
     }
 
-    end_date = TLE_epochDate.shiftedBy(jd_end - jd_start)
-    time_step = 60.0  # timestep of the ephemeris to be extracted
-
-    # Generate ephemeris and extract state vector data
-    state_vector_data = generate_ephemeris_and_extract_data(propagators_dict, TLE_epochDate, end_date, time_step)
+    # Extract state vector data from ephemerides
+    state_vector_data = {}
+    for ephem_name, ephem in ephemeris_generators.items():
+        ephemeris = ephem.getGeneratedEphemeris()
+        end_date = TLE_epochDate.shiftedBy(PROPAGATION_TIME)
+        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, TLE_epochDate, end_date, INTEGRATOR_INIT_STEP)
+        state_vector_data[ephem_name] = (times, state_vectors)
 
     # Compute HCL differences
-    HCL_diffs = compute_hcl_differences(state_vector_data)
+    HCL_diffs = {}
+    for name in ['CERES ERP', 'Knocke ERP']:
+        _, state_vectors = state_vector_data[name]
+        _, no_erp_state_vectors = state_vector_data['No ERP']
+        H_diffs, C_diffs, L_diffs = HCL_diff(np.array(state_vectors), np.array(no_erp_state_vectors))
+        HCL_diffs[name] = (H_diffs, C_diffs, L_diffs)
 
     # Plot HCL differences
     titles = ['Height Differences Over Time', 'Cross-Track Differences Over Time', 'Along-Track Differences Over Time']
