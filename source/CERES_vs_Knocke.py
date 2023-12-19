@@ -31,7 +31,7 @@ from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 200.0
+PROPAGATION_TIME = 3600.0 * 12
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -119,8 +119,10 @@ def main():
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
     TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000
-    jd_end = jd_start + 1/24
-    dt = 60  # Seconds
+    # jd_end = jd_start + 1/24
+    # dt = 60  # Seconds
+    # tle_time = TLE_time(TLE) ##The TLE I have is not actually in the daterange of the CERES dataset I downloaded so not using this now
+    utc_start = jd_to_utc(jd_start)
 
     # Load data
     data = nc.Dataset(dataset_path)
@@ -128,7 +130,6 @@ def main():
     combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
     # Convert JD start epoch to UTC and pass to AbsoluteDate
-    utc_start = jd_to_utc(jd_start)
     YYYY, MM, DD, H, M, S = [int(utc_start.strftime("%Y")), int(utc_start.strftime("%m")), 
                              int(utc_start.strftime("%d")), int(utc_start.strftime("%H")), 
                              int(utc_start.strftime("%M")), float(utc_start.strftime("%S"))]
