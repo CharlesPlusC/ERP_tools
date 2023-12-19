@@ -17,3 +17,6 @@ dependencies:
   - orekit
   - netCDF4s
   - astropy
+  - spacetrack
+  - requests
+  - pandas
