@@ -31,7 +31,7 @@ from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 12
+PROPAGATION_TIME = 3600.0 * 16.0
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -61,8 +61,8 @@ def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_
 
     return state_vector_data
 
-
 def plot_hcl_differences(hcl_diffs, time_data, titles, colors):
+    import datetime
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(10, 12))
     
     for i, ax in enumerate(axes):
@@ -76,19 +76,9 @@ def plot_hcl_differences(hcl_diffs, time_data, titles, colors):
         ax.legend()
 
     plt.subplots_adjust(hspace=0.5)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
-
-
-def plot_position_differences(time_data, differences, labels, title, ylabel):
-    plt.figure(figsize=(10, 6))
-    for i, diff in enumerate(differences):
-        plt.plot(time_data, diff, label=labels[i])
-    plt.xlabel('Time (seconds from start)')
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.legend()
-    plt.grid(True)
+    plt.tight_layout()
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plt.savefig(f'output/ERP_prop/{timenow}_HCL_differences.png')
     plt.show()
 
 def setup_propagator(initial_orbit, force_models, positionTolerance):
@@ -114,10 +104,9 @@ def propagate_orbit(propagator, start_date, duration):
     end_state = propagator.propagate(start_date, start_date.shiftedBy(duration))
     return end_state
 
-def main():
-    # Dataset path and TLE data
+def main(TLE, sat_name):
+    # CERES SYN1Deg Dataset path and TLE data
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
-    TLE = "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     jd_start = 2460069.5000000
     # jd_end = jd_start + 1/24
     # dt = 60  # Seconds
@@ -221,9 +210,14 @@ def main():
         HCL_diffs[name] = (H_diffs, C_diffs, L_diffs)
 
     # Plot HCL differences
-    titles = ['Height Differences Over Time', 'Cross-Track Differences Over Time', 'Along-Track Differences Over Time']
+    titles = [f'Height: {sat_name}', f'Cross-Track: {sat_name}', f'Along-Track: {sat_name}']
     colors = {'CERES ERP': 'tab:green', 'Knocke ERP': 'tab:orange'}
     plot_hcl_differences(HCL_diffs, state_vector_data['No ERP'][0], titles, colors)
 
 if __name__ == "__main__":
-    main()
+    #OneWeb TLE
+    TLE_OW = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
+    #Starlink TLE
+    TLE_SL= "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
+    main(TLE_OW, "OneWeb")
+    main(TLE_SL, "Starlink")
