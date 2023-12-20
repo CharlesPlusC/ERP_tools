@@ -20,3 +20,5 @@ dependencies:
   - spacetrack
   - requests
   - pandas
+  - plotly
+  - kaleido

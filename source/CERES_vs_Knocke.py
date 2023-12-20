@@ -79,7 +79,7 @@ def plot_hcl_differences(hcl_diffs, time_data, titles, colors):
     plt.tight_layout()
     timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     plt.savefig(f'output/ERP_prop/{timenow}_HCL_differences.png')
-    plt.show()
+    # plt.show()
 
 def setup_propagator(initial_orbit, force_models, positionTolerance):
     tolerances = NumericalPropagator.tolerances(positionTolerance, 
@@ -219,5 +219,5 @@ if __name__ == "__main__":
     TLE_OW = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
     #Starlink TLE
     TLE_SL= "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
-    main(TLE_OW, "OneWeb")
+    # main(TLE_OW, "OneWeb")
     main(TLE_SL, "Starlink")
