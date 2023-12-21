@@ -256,3 +256,5 @@ if __name__ == "__main__":
     TLE_SL= "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     main(TLE_OW, "OneWeb")
     main(TLE_SL, "Starlink")
+
+    #TODO: # Osculating elements plot
