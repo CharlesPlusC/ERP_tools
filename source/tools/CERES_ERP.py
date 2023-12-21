@@ -13,7 +13,7 @@ from java.util import Collections
 from java.util.stream import Stream
 
 
-from tools.utilities import find_nearest_index, lla_to_ecef, julian_day_to_ceres_time
+from tools.utilities import hcl_acc_from_sc_state, find_nearest_index, lla_to_ecef, julian_day_to_ceres_time
 from tools.data_processing import calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 import numpy as np
 
@@ -87,55 +87,61 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.time_data = []  
         self.ceres_times = ceres_times
         self.combined_radiation_data = combined_radiation_data
+        self.rtn_accs = []
 
     def acceleration(self, spacecraftState, doubleArray):
-        # Compute the current altitude within the acceleration method
         pos = spacecraftState.getPVCoordinates().getPosition()
         alt_m = pos.getNorm() - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
         alt_km = alt_m / 1000.0
         horizon_dist = calculate_satellite_fov(alt_km)
-        # Get the AbsoluteDate
         absolute_date = spacecraftState.getDate()
-        # Convert AbsoluteDate to Python datetime
         date_time = absolutedate_to_datetime(absolute_date)
-        # convert date_time to julianday
         jd_time = date_time.toordinal() + 1721425.5 + date_time.hour / 24 + date_time.minute / (24 * 60) + date_time.second / (24 * 60 * 60)
-        # Get the ECI and ECEF frames
         ecef = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
-        # Transform the position vector to the ECEF frame
         pv_ecef = spacecraftState.getPVCoordinates(ecef).getPosition()
-        # Define the Earth model
-        earth = OneAxisEllipsoid(
-            Constants.WGS84_EARTH_EQUATORIAL_RADIUS, 
-            Constants.WGS84_EARTH_FLATTENING, 
-            ecef)
-        # Convert ECEF coordinates to geodetic latitude, longitude, and altitude
+        earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, ecef)
         geo_point = earth.transform(pv_ecef, ecef, spacecraftState.getDate())
-        # Extract latitude and longitude in radians
         latitude = geo_point.getLatitude()
         longitude = geo_point.getLongitude()
-        # Convert radians to degrees if needed
         latitude_deg = np.rad2deg(latitude)
         longitude_deg = np.rad2deg(longitude)
         ceres_time = julian_day_to_ceres_time(jd_time)
         ceres_indices = find_nearest_index(self.ceres_times, ceres_time)
         erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, self.combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
-        # convert the erp_vec to ECI
+
         eci = FramesFactory.getEME2000()
-        # Transform the position vector to the ECI frame
         transform = ecef.getTransformTo(eci, spacecraftState.getDate())
         erp_vec_ecef_pv = PVCoordinates(Vector3D(float(erp_vec[0]), float(erp_vec[1]), float(erp_vec[2])))
-        # Transform the ERP vector to ECI frame
         erp_vec_eci_pv = transform.transformPVCoordinates(erp_vec_ecef_pv)
-        # Extract the transformed vector components
         erp_vec_eci = erp_vec_eci_pv.getPosition()
-        # Store the scalar acceleration and other data
+        pv_eci = spacecraftState.getPVCoordinates(eci)
+        position_eci = pv_eci.getPosition()
+        velocity_eci = pv_eci.getVelocity()
+
+        position_eci_vector = Vector3D(position_eci.getX(), position_eci.getY(), position_eci.getZ())
+        velocity_eci_vector = Vector3D(velocity_eci.getX(), velocity_eci.getY(), velocity_eci.getZ())
+
+        # Manually calculate the unit vector
+        def unit_vector(vector):
+            norm = vector.getNorm()
+            if norm == 0:
+                raise ValueError("Cannot normalize zero vector")
+            return Vector3D(vector.getX() / norm, vector.getY() / norm, vector.getZ() / norm)
+        radial_unit_vector = unit_vector(position_eci_vector)
+        normal_unit_vector = unit_vector(Vector3D.crossProduct(position_eci_vector, velocity_eci_vector))
+        transverse_unit_vector = unit_vector(Vector3D.crossProduct(normal_unit_vector, radial_unit_vector))
+
+        radial_component = Vector3D.dotProduct(erp_vec_eci, radial_unit_vector)
+        transverse_component = Vector3D.dotProduct(erp_vec_eci, transverse_unit_vector)
+        normal_component = Vector3D.dotProduct(erp_vec_eci, normal_unit_vector)
+        rtns = [radial_component, transverse_component, normal_component]
+        self.rtn_accs.append(rtns)
         self.scalar_acc_data.append(scalar_acc)
         self.erp_angle_data.append(erp_angle)
         self.time_data.append(jd_time)
-        # Create the Orekit vector for the ERP force in ECI frame
+
         orekit_erp_vec = Vector3D(erp_vec_eci.getX(), erp_vec_eci.getY(), erp_vec_eci.getZ())
-        # print("orekit_erp_vec components:", orekit_erp_vec.getX(), orekit_erp_vec.getY(), orekit_erp_vec.getZ())
+        
         return orekit_erp_vec
     
     def addContribution(self, spacecraftState, timeDerivativesEquations):

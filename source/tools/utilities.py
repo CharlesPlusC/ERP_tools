@@ -6,6 +6,12 @@ from pyproj import Transformer
 from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
 from typing import Tuple, List
+
+from org.orekit.frames import FramesFactory
+from org.orekit.utils import PVCoordinates
+from org.hipparchus.geometry.euclidean.threed import Vector3D
+from org.orekit.utils import PVCoordinates, IERSConventions
+
 def ecef_to_lla(x, y, z):
     """
     Convert Earth-Centered, Earth-Fixed (ECEF) coordinates to Latitude, Longitude, Altitude (LLA).
@@ -223,3 +229,45 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
         current_date = current_date.shiftedBy(step)
 
     return times, state_vectors
+
+def hcl_acc_from_sc_state(spacecraftState, acc_vec):
+    """
+    Calculate the HCL (Radial, Transverse, Normal) components of the given acc_vec.
+
+    Parameters:
+    spacecraftState (SpacecraftState): The state of the spacecraft.
+    acc_vec (list or tuple): The acc vector components in ECEF frame.
+
+    Returns:
+    tuple: The Radial, Transverse, and Normal components of the acc vector in HCL frame.
+    """
+    # Get the ECI frame
+    eci = FramesFactory.getEME2000()
+
+    # Transform the ERP vector from ECEF to ECI frame
+    ecef = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
+    transform = ecef.getTransformTo(eci, spacecraftState.getDate())
+    erp_vec_ecef_pv = PVCoordinates(Vector3D(float(acc_vec[0]), float(acc_vec[1]), float(acc_vec[2])))
+    erp_vec_eci_pv = transform.transformPVCoordinates(erp_vec_ecef_pv)
+    erp_vec_eci = erp_vec_eci_pv.getPosition()
+
+    # Calculate the ECI position and velocity vectors
+    pv_eci = spacecraftState.getPVCoordinates(eci)
+    position_eci = pv_eci.getPosition()
+    velocity_eci = pv_eci.getVelocity()
+
+    # Calculate the RTN (HCL) unit vectors
+    radial_unit_vector = position_eci.normalize()
+    normal_unit_vector = Vector3D.crossProduct(position_eci, velocity_eci).normalize()
+    transverse_unit_vector = Vector3D.crossProduct(normal_unit_vector, radial_unit_vector)
+
+    # Project the ERP vector onto the RTN axes
+    radial_component = Vector3D.dotProduct(erp_vec_eci, radial_unit_vector)
+    transverse_component = Vector3D.dotProduct(erp_vec_eci, transverse_unit_vector)
+    normal_component = Vector3D.dotProduct(erp_vec_eci, normal_unit_vector)
+    
+    print("radial_component:", radial_component)
+    print("transverse_component:", transverse_component)
+    print("normal_component:", normal_component)
+
+    return radial_component, transverse_component, normal_component

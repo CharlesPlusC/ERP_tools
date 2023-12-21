@@ -31,7 +31,7 @@ from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 16.0
+PROPAGATION_TIME = 3600.0 * 10.0
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -166,6 +166,9 @@ def main(TLE, sat_name):
     propagator_ceres_erp.addForceModel(ceres_erp_force_model)
     ephemGen_CERES = propagator_ceres_erp.getEphemerisGenerator()  # Get the ephemeris generator
     end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
+    rtn_accs = ceres_erp_force_model.rtn_accs
+    rtn_times = ceres_erp_force_model.time_data
+    scalar_acc_data = ceres_erp_force_model.scalar_acc_data
 
     # Knocke ERP Propagation
     sun = CelestialBodyFactory.getSun()
@@ -214,10 +217,42 @@ def main(TLE, sat_name):
     colors = {'CERES ERP': 'tab:green', 'Knocke ERP': 'tab:orange'}
     plot_hcl_differences(HCL_diffs, state_vector_data['No ERP'][0], titles, colors)
 
+    # Plotting
+    ceres_times, _ = state_vector_data['CERES ERP']
+    r_components = [acc[0] for acc in rtn_accs]
+    t_components = [acc[1] for acc in rtn_accs]
+    n_components = [acc[2] for acc in rtn_accs]    
+
+    plt.figure(figsize=(12, 6))
+    # Plot RTN components
+    plt.subplot(2, 1, 1)
+
+    plt.scatter(rtn_times, r_components, label='Radial (R) ', color='xkcd:sky blue', s=2)
+    plt.scatter(rtn_times, t_components, label='Transverse (T)', color='xkcd:light red', s=2)
+    plt.scatter(rtn_times, n_components, label='Normal (N) ', color='xkcd:light green', s=2)
+    plt.xlabel('Time')
+    plt.ylabel('Acceleration (m/s^2)')
+    plt.xticks(rotation=45)
+    plt.grid(True)
+    plt.legend()
+    # Plot Scalar Acceleration Data
+    plt.subplot(2, 1, 2)
+    plt.scatter(rtn_times, scalar_acc_data, label='Scalar Acceleration', color='orange', s=2)
+    plt.xlabel('Time')
+    plt.ylabel('Acceleration (m/s^2)')
+    plt.xticks(rotation=45)
+    plt.grid(True)
+    plt.legend()
+
+    plt.tight_layout()
+    import datetime
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plt.savefig(f'output/ERP_prop/{timenow}_{sat_name}_ERP_acceleration.png')
+
 if __name__ == "__main__":
     #OneWeb TLE
     TLE_OW = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"
     #Starlink TLE
     TLE_SL= "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
-    # main(TLE_OW, "OneWeb")
+    main(TLE_OW, "OneWeb")
     main(TLE_SL, "Starlink")
