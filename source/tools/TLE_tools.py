@@ -28,8 +28,8 @@ def tle_convert(tle_dict: dict) -> dict:
     # Convert mean motion from revolutions per day to radians per second
     mean_motion = float(tle_dict['mean motion']) * (2 * np.pi / 86400)
     
-    # Compute the period of the orbit in seconds
-    period = 2 * np.pi / mean_motion
+    # # Compute the period of the orbit in seconds
+    # period = 2 * np.pi / mean_motion
     
     # Compute the semi-major axis
     n = mean_motion # mean motion in radians per second

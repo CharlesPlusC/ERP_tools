@@ -271,3 +271,54 @@ def hcl_acc_from_sc_state(spacecraftState, acc_vec):
     print("normal_component:", normal_component)
 
     return radial_component, transverse_component, normal_component
+
+def yyyy_mm_dd_hh_mm_ss_to_jd(year: int, month: int, day: int, hour: int, minute: int, second: int, milisecond: int) -> float:
+    """
+    Convert year, month, day, hour, minute, second to Julian Date.
+
+    Parameters
+    ----------
+    year : int
+        Year.
+    month : int
+        Month.
+    day : int
+        Day.
+    hour : int
+        Hour.
+    minute : int
+        Minute.
+    second : int
+        Second.
+    milisecond : int
+        Millisecond.
+
+    Returns
+    -------
+    float
+        Julian Date.
+    """
+    dt_obj = datetime(year, month, day, hour, minute, second, milisecond*1000)
+    jd = Time(dt_obj).jd
+    return jd
+
+def doy_to_dom_month(year: int, doy: int) -> Tuple[int, int]:
+    """
+    Convert day of year to day of month and month number.
+
+    Parameters
+    ----------
+    year : int
+        Year.
+    doy : int
+        Day of year.
+
+    Returns
+    -------
+    tuple
+        Day of month and month number.
+    """
+    d = datetime(year, 1, 1) + timedelta(doy - 1)
+    day_of_month = d.day
+    month = d.month
+    return day_of_month, month
