@@ -6,7 +6,7 @@ from typing import Tuple, List
 
 from tools.utilities import yyyy_mm_dd_hh_mm_ss_to_jd, doy_to_dom_month
 
-def parse_spacex_datetime_stamps(timestamps: List[str]) -> np.ndarray:
+def parse_spacex_datetime_stamps(timestamps: list) -> np.ndarray:
     """
     Parse SpaceX ephemeris datetime stamps into year, day of year, hour, minute, and second.
 
@@ -20,27 +20,30 @@ def parse_spacex_datetime_stamps(timestamps: List[str]) -> np.ndarray:
     np.ndarray
         Parsed timestamps (year, month, day, hour, minute, second, millisecond).
     """
-    # make an array where we will store the year, day of year, hour, minute, and second for each timestamp
     parsed_tstamps = np.zeros((len(timestamps), 7))
-    
-    for i in range(0, len(timestamps), 1):
-        tstamp_str = str(timestamps[i])
-        # year is first 4 digits
+
+    for i, tstamp in enumerate(timestamps):
+        # Ensure the timestamp string is at least 16 characters long
+        tstamp_str = str(tstamp)
+        if len(tstamp_str) < 16:
+            # Pad zeros at the end if necessary
+            tstamp_str = tstamp_str.ljust(16, '0')
+
+        # Extract year, day of year, hour, minute, second, and millisecond
         year = tstamp_str[0:4]
-        # day of year is next 3 digits
         dayofyear = tstamp_str[4:7]
-        #convert day of year to day of month and month number
+        # Convert day of year to month and day
         day_of_month, month = doy_to_dom_month(int(year), int(dayofyear))
-        # hour is next 2 digits
         hour = tstamp_str[7:9]
-        # minute is next 2 digits
         minute = tstamp_str[9:11]
-        # second is next 2 digits
         second = tstamp_str[11:13]
-        # milisecond is next 3 digits
-        milisecond = tstamp_str[14:16]
-        # add the parsed timestamp to the array
-        parsed_tstamps[i] = ([int(year), int(month), int(day_of_month), int(hour), int(minute), int(second), int(milisecond)])
+        millisecond = tstamp_str[13:16]
+
+        # Convert millisecond to integer
+        millisecond = int(millisecond) if millisecond else 0
+
+        # Add the parsed timestamp to the array
+        parsed_tstamps[i] = [int(year), int(month), int(day_of_month), int(hour), int(minute), int(second), millisecond]
 
     return parsed_tstamps
 
