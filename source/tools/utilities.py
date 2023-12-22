@@ -330,3 +330,23 @@ def doy_to_dom_month(year: int, doy: int) -> Tuple[int, int]:
     day_of_month = d.day
     month = d.month
     return day_of_month, month
+
+def jd_to_utc(jd: float) -> datetime:
+    """
+    Convert Julian Date to UTC time tag (datetime object) using Astropy.
+
+    Parameters
+    ----------
+    jd : float
+        Julian Date.
+
+    Returns
+    -------
+    datetime
+        UTC time tag.
+    """
+    #convert jd to astropy time object
+    time = Time(jd, format='jd', scale='utc')
+    #convert astropy time object to datetime object
+    utc = time.datetime
+    return utc
