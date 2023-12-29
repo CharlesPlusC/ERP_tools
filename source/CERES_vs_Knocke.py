@@ -207,6 +207,7 @@ def main(TLE, sat_name):
         state_vector_data[ephem_name] = (times, state_vectors)
         keplerian_element_data[ephem_name] = (times, keplerian_elements)
 
+    #TODO: put this plotting code into a function
     # Define a list of colors for different ephemeris generators
     colors = ['blue', 'green', 'red', 'purple', 'brown', 'orange', 'pink', 'gray', 'olive', 'cyan']
 
