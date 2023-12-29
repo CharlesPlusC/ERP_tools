@@ -25,13 +25,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tools.CERES_ERP import CERES_ERP_ForceModel
-from tools.utilities import pos_vel_from_orekit_ephem, HCL_diff, jd_to_utc
+from tools.utilities import pos_vel_from_orekit_ephem, HCL_diff, jd_to_utc, keplerian_elements_from_orekit_ephem
 from tools.data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
 from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 48.0
+PROPAGATION_TIME = 3600.0 * 6.0
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -152,7 +152,7 @@ def main(TLE, sat_name):
     propagator_no_erp = NumericalPropagator(integrator)
     propagator_no_erp.setOrbitType(OrbitType.CARTESIAN)
     propagator_no_erp.setInitialState(initialState)
-    gravityProvider = GravityFieldFactory.getNormalizedProvider(10, 10)
+    gravityProvider = GravityFieldFactory.getNormalizedProvider(1, 1)
     propagator_no_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     ephemGen_no_erp = propagator_no_erp.getEphemerisGenerator()  # Get the ephemeris generator
     end_state_no_erp = propagator_no_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
@@ -198,11 +198,58 @@ def main(TLE, sat_name):
 
     # Extract state vector data from ephemerides
     state_vector_data = {}
+    keplerian_element_data = {}
     for ephem_name, ephem in ephemeris_generators.items():
         ephemeris = ephem.getGeneratedEphemeris()
         end_date = TLE_epochDate.shiftedBy(PROPAGATION_TIME)
         times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, TLE_epochDate, end_date, INTEGRATOR_INIT_STEP)
+        times, keplerian_elements = keplerian_elements_from_orekit_ephem(ephemeris, TLE_epochDate, end_date, INTEGRATOR_INIT_STEP, Constants.WGS84_EARTH_MU)
         state_vector_data[ephem_name] = (times, state_vectors)
+        keplerian_element_data[ephem_name] = (times, keplerian_elements)
+
+    # Define a list of colors for different ephemeris generators
+    colors = ['blue', 'green', 'red', 'purple', 'brown', 'orange', 'pink', 'gray', 'olive', 'cyan']
+
+    # Titles for each subplot
+    titles = ['Semi-Major Axis', 'Eccentricity', 'Inclination', 
+            'Argument of Perigee', 'Right Ascension of Ascending Node', 'True Anomaly']
+
+    # Plot Keplerian Elements (subplot 3x2) for each propagator
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(10, 12))
+
+    # Iterate over each subplot
+    for ax_index, ax in enumerate(axes.flatten()):
+        ax.set_title(titles[ax_index])
+        ax.set_xlabel('Time (seconds from start)')
+        ax.set_ylabel('Value')
+        ax.grid(True)
+
+        # Format y-axis to avoid scientific notation
+        ax.ticklabel_format(useOffset=False, style='plain')
+
+        # Plot data for each ephemeris generator
+        for name_index, (name, keplerian_data) in enumerate(keplerian_element_data.items()):
+            times = keplerian_data[0]
+            keplerian_elements = keplerian_data[1]
+
+            # Extract the i-th Keplerian element for each time point
+            element_values = [element[ax_index] for element in keplerian_elements]
+
+            # Use a different color for each name
+            color = colors[name_index % len(colors)]
+
+            # Plot the i-th Keplerian element for the current generator
+            ax.plot(times, element_values, label=name, color=color, linestyle='--')
+
+        ax.legend()
+
+    plt.subplots_adjust(hspace=0.5, wspace=0.4)
+    plt.tight_layout()
+
+    # Save and show the plot
+    import datetime
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plt.savefig(f'output/ERP_prop/{sat_name}_{timenow}_ERP_Kepels.png')
 
     # Compute HCL differences
     HCL_diffs = {}
@@ -226,7 +273,6 @@ def main(TLE, sat_name):
     plt.figure(figsize=(12, 6))
     # Plot RTN components
     plt.subplot(2, 1, 1)
-
     plt.scatter(rtn_times, r_components, label='Radial (R) ', color='xkcd:sky blue', s=2)
     plt.scatter(rtn_times, t_components, label='Transverse (T)', color='xkcd:light red', s=2)
     plt.scatter(rtn_times, n_components, label='Normal (N) ', color='xkcd:light green', s=2)

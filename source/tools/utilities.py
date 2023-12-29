@@ -19,6 +19,7 @@ from org.orekit.frames import FramesFactory
 from org.orekit.utils import PVCoordinates
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates, IERSConventions
+from org.orekit.orbits import KeplerianOrbit
 
 def ecef_to_lla(x, y, z):
     """
@@ -238,6 +239,32 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
 
     return times, state_vectors
 
+def keplerian_elements_from_orekit_ephem(ephemeris, initial_date, end_date, step, mu):
+    times = []
+    keplerian_elements = []
+
+    current_date = initial_date
+    while current_date.compareTo(end_date) <= 0:
+        state = ephemeris.propagate(current_date)
+        pvCoordinates = state.getPVCoordinates()
+        frame = state.getFrame()
+
+        keplerian_orbit = KeplerianOrbit(pvCoordinates, frame, current_date, mu)
+        a = keplerian_orbit.getA()
+        e = keplerian_orbit.getE()
+        i = keplerian_orbit.getI()
+        omega = keplerian_orbit.getPerigeeArgument()
+        raan = keplerian_orbit.getRightAscensionOfAscendingNode()
+        v = keplerian_orbit.getTrueAnomaly()
+
+        keplerian_elements.append((a, e, i, np.rad2deg(omega), np.rad2deg(raan), np.rad2deg(v)))
+
+        times.append(current_date.durationFrom(initial_date))
+        current_date = current_date.shiftedBy(step)
+
+    return times, keplerian_elements
+
+
 def hcl_acc_from_sc_state(spacecraftState, acc_vec):
     """
     Calculate the HCL (Radial, Transverse, Normal) components of the given acc_vec.
@@ -273,10 +300,6 @@ def hcl_acc_from_sc_state(spacecraftState, acc_vec):
     radial_component = Vector3D.dotProduct(erp_vec_eci, radial_unit_vector)
     transverse_component = Vector3D.dotProduct(erp_vec_eci, transverse_unit_vector)
     normal_component = Vector3D.dotProduct(erp_vec_eci, normal_unit_vector)
-    
-    print("radial_component:", radial_component)
-    print("transverse_component:", transverse_component)
-    print("normal_component:", normal_component)
 
     return radial_component, transverse_component, normal_component
 
