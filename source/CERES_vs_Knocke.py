@@ -1,10 +1,5 @@
 
-import orekit
-from orekit.pyhelpers import setup_orekit_curdir
 
-orekit.pyhelpers.download_orekit_data_curdir()
-vm = orekit.initVM()
-setup_orekit_curdir()
 
 from orekit import JArray_double
 from org.orekit.time import AbsoluteDate, TimeScalesFactory
@@ -33,7 +28,7 @@ from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 24.0 
+PROPAGATION_TIME = 3600.0 * 24.0 * 2.0
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
