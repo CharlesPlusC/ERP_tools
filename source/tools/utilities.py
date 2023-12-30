@@ -257,7 +257,7 @@ def keplerian_elements_from_orekit_ephem(ephemeris, initial_date, end_date, step
         raan = keplerian_orbit.getRightAscensionOfAscendingNode()
         v = keplerian_orbit.getTrueAnomaly()
 
-        keplerian_elements.append((a, e, i, np.rad2deg(omega), np.rad2deg(raan), np.rad2deg(v)))
+        keplerian_elements.append((a, e, np.rad2deg(i), np.rad2deg(omega), np.rad2deg(raan), np.rad2deg(v)))
 
         times.append(current_date.durationFrom(initial_date))
         current_date = current_date.shiftedBy(step)

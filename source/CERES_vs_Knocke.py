@@ -23,6 +23,8 @@ from org.orekit.forces.radiation import KnockeRediffusedForceModel, IsotropicRad
 import netCDF4 as nc
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import datetime
 
 from tools.CERES_ERP import CERES_ERP_ForceModel
 from tools.utilities import pos_vel_from_orekit_ephem, HCL_diff, jd_to_utc, keplerian_elements_from_orekit_ephem
@@ -31,7 +33,7 @@ from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 6.0
+PROPAGATION_TIME = 3600.0 * 24.0 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -60,6 +62,61 @@ def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_
         state_vector_data[name] = (times, state_vectors)
 
     return state_vector_data
+
+#TODO: move the plotting functions to the plotting module
+
+def plot_kepels_evolution(keplerian_element_data, sat_name):
+    # Define a list of colors for different ephemeris generators
+    colors = ['xkcd:sky blue', 'xkcd:light red', 'xkcd:light green']
+
+    # Titles for each subplot
+    titles = ['Semi-Major Axis', 'Eccentricity', 'Inclination', 
+              'Argument of Perigee', 'Right Ascension of Ascending Node', 'True Anomaly']
+
+    # Plot Keplerian Elements (subplot 3x2) for each propagator
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(10, 12))
+
+    # Custom legend handles
+    legend_handles = []
+
+    # Iterate over each subplot
+    for ax_index, ax in enumerate(axes.flatten()):
+        ax.set_title(titles[ax_index])
+        ax.set_xlabel('Time (seconds from start)')
+        ax.set_ylabel('Value')
+        ax.grid(True)
+
+        # Format y-axis to avoid scientific notation
+        ax.ticklabel_format(useOffset=False, style='plain')
+
+        # Plot data for each ephemeris generator
+        for name_index, (name, keplerian_data) in enumerate(keplerian_element_data.items()):
+            times = keplerian_data[0]
+            keplerian_elements = keplerian_data[1]
+
+            # Extract the i-th Keplerian element for each time point
+            element_values = [element[ax_index] for element in keplerian_elements]
+
+            # Use a different color for each name
+            color = colors[name_index % len(colors)]
+
+            # Plot the i-th Keplerian element for the current generator
+            line, = ax.plot(times, element_values, color=color, linestyle='--')
+
+            # Add to custom legend handles
+            if ax_index == 0:  # Only add once
+                legend_handles.append(mlines.Line2D([], [], color=color, linestyle='--', label=name))
+
+    # Add figure-level legend
+    fig.legend(handles=legend_handles, loc='upper center', ncol=len(keplerian_element_data))
+
+    plt.subplots_adjust(hspace=0.5, wspace=0.4, top=0.85)
+    plt.tight_layout()
+
+    # Save and show the plot
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plt.savefig(f'output/ERP_prop/{sat_name}_{timenow}_ERP_Kepels.png')
+    # plt.show()
 
 def plot_hcl_differences(hcl_diffs, time_data, titles, colors):
     import datetime
@@ -207,50 +264,7 @@ def main(TLE, sat_name):
         state_vector_data[ephem_name] = (times, state_vectors)
         keplerian_element_data[ephem_name] = (times, keplerian_elements)
 
-    #TODO: put this plotting code into a function
-    # Define a list of colors for different ephemeris generators
-    colors = ['blue', 'green', 'red', 'purple', 'brown', 'orange', 'pink', 'gray', 'olive', 'cyan']
-
-    # Titles for each subplot
-    titles = ['Semi-Major Axis', 'Eccentricity', 'Inclination', 
-            'Argument of Perigee', 'Right Ascension of Ascending Node', 'True Anomaly']
-
-    # Plot Keplerian Elements (subplot 3x2) for each propagator
-    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(10, 12))
-
-    # Iterate over each subplot
-    for ax_index, ax in enumerate(axes.flatten()):
-        ax.set_title(titles[ax_index])
-        ax.set_xlabel('Time (seconds from start)')
-        ax.set_ylabel('Value')
-        ax.grid(True)
-
-        # Format y-axis to avoid scientific notation
-        ax.ticklabel_format(useOffset=False, style='plain')
-
-        # Plot data for each ephemeris generator
-        for name_index, (name, keplerian_data) in enumerate(keplerian_element_data.items()):
-            times = keplerian_data[0]
-            keplerian_elements = keplerian_data[1]
-
-            # Extract the i-th Keplerian element for each time point
-            element_values = [element[ax_index] for element in keplerian_elements]
-
-            # Use a different color for each name
-            color = colors[name_index % len(colors)]
-
-            # Plot the i-th Keplerian element for the current generator
-            ax.plot(times, element_values, label=name, color=color, linestyle='--')
-
-        ax.legend()
-
-    plt.subplots_adjust(hspace=0.5, wspace=0.4)
-    plt.tight_layout()
-
-    # Save and show the plot
-    import datetime
-    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    plt.savefig(f'output/ERP_prop/{sat_name}_{timenow}_ERP_Kepels.png')
+    plot_kepels_evolution(keplerian_element_data, sat_name)
 
     # Compute HCL differences
     HCL_diffs = {}
@@ -303,5 +317,3 @@ if __name__ == "__main__":
     TLE_SL= "1 58214U 23170J   23345.43674150  .00003150  00000+0  17305-3 0  9997\n2 58214  42.9996 329.1219 0001662 255.3130 104.7534 15.15957346  7032"
     main(TLE_OW, "OneWeb")
     main(TLE_SL, "Starlink")
-
-    #TODO: # Osculating elements plot
