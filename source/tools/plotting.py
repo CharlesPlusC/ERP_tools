@@ -1,14 +1,13 @@
 """ Plotting Module
 
-This module contains functions for plotting data, including FoV radiance in different projections.
-
 """
 import numpy as np
 from scipy.interpolate import griddata
 import os
 import imageio
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import matplotlib.lines as mlines
+import datetime
 import cartopy.crs as ccrs
 from itertools import islice
 from .data_processing import latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
@@ -311,3 +310,74 @@ def convert_to_xy(radiation_data, sat_lat, sat_lon, fov_radius, lat, lon):
     grid_radiation = griddata((X, Y), radiation_data_fov[fov_mask].flatten(), (grid_x, grid_y), method='linear', fill_value=0)
     return grid_radiation
 
+def plot_hcl_differences(hcl_diffs, time_data, titles, colors):
+    _, axes = plt.subplots(nrows=3, ncols=1, figsize=(10, 12))
+    
+    for i, ax in enumerate(axes):
+        ax.set_title(titles[i])
+        ax.set_xlabel('Time (seconds from start)')
+        ax.set_ylabel('Difference (meters)')
+        ax.grid(True)
+
+        for name, diffs in hcl_diffs.items():
+            ax.plot(time_data, diffs[i], label=f'{name} - No ERP', color=colors[name], linestyle='--')
+        ax.legend()
+
+    plt.subplots_adjust(hspace=0.5)
+    plt.tight_layout()
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plt.savefig(f'output/ERP_prop/{timenow}_HCL_differences.png')
+    # plt.show()
+
+def plot_kepels_evolution(keplerian_element_data, sat_name):
+    # Define a list of colors for different ephemeris generators
+    colors = ['xkcd:sky blue', 'xkcd:light red', 'xkcd:light green']
+
+    # Titles for each subplot
+    titles = ['Semi-Major Axis', 'Eccentricity', 'Inclination', 
+              'Argument of Perigee', 'Right Ascension of Ascending Node', 'True Anomaly']
+
+    # Plot Keplerian Elements (subplot 3x2) for each propagator
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(10, 12))
+
+    # Custom legend handles
+    legend_handles = []
+
+    # Iterate over each subplot
+    for ax_index, ax in enumerate(axes.flatten()):
+        ax.set_title(titles[ax_index])
+        ax.set_xlabel('Time (seconds from start)')
+        ax.set_ylabel('Value')
+        ax.grid(True)
+
+        # Format y-axis to avoid scientific notation
+        ax.ticklabel_format(useOffset=False, style='plain')
+
+        # Plot data for each ephemeris generator
+        for name_index, (name, keplerian_data) in enumerate(keplerian_element_data.items()):
+            times = keplerian_data[0]
+            keplerian_elements = keplerian_data[1]
+
+            # Extract the i-th Keplerian element for each time point
+            element_values = [element[ax_index] for element in keplerian_elements]
+
+            # Use a different color for each name
+            color = colors[name_index % len(colors)]
+
+            # Plot the i-th Keplerian element for the current generator
+            line, = ax.plot(times, element_values, color=color, linestyle='--')
+
+            # Add to custom legend handles
+            if ax_index == 0:  # Only add once
+                legend_handles.append(mlines.Line2D([], [], color=color, linestyle='--', label=name))
+
+    # Add figure-level legend
+    fig.legend(handles=legend_handles, loc='upper center', ncol=len(keplerian_element_data))
+
+    plt.subplots_adjust(hspace=0.5, wspace=0.4, top=0.85)
+    plt.tight_layout()
+
+    # Save and show the plot
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plt.savefig(f'output/ERP_prop/{sat_name}_{timenow}_ERP_Kepels.png')
+    # plt.show()

@@ -108,6 +108,7 @@ def eci2ecef_astropy(eci_pos, eci_vel, mjd):
 
 def convert_ceres_time_to_date(ceres_time, ceres_ref_date=datetime(2000, 3, 1)):
     #TODO: make sure to remove this default date
+    #TODO: what the hell is the ceres_ref_date??
 
     # Separate days and fractional days
     days = int(ceres_time)
@@ -131,10 +132,19 @@ def calculate_distance_ecef(ecef1, ecef2):
     # Calculate Euclidean distance between two ECEF coordinates
     return np.sqrt((ecef1[0] - ecef2[0])**2 + (ecef1[1] - ecef2[1])**2 + (ecef1[2] - ecef2[2])**2)
 
+from datetime import datetime, timedelta
+
 def julian_day_to_ceres_time(jd, ceres_ref_date=datetime(2000, 3, 1)):
+    #TODO: check the buisness wiht this ceres_ref_date
+    # I think it's just the date that the CERES data starts on and then it's just used to calculate the delta time
+    # between the two dates (and i think 2000, 3, 1 is the start of the CERES dataset)
+    
+    # The Julian Day for the reference date of the datetime.toordinal() function (January 1, year 1)
+    JD_TO_ORDINAL_OFFSET = 1721424.5
+
     # Convert Julian Day to datetime
-    jd_reference = datetime(1858, 11, 17)
-    satellite_datetime = jd_reference + timedelta(days=jd - 2400000.5)
+    # Adjusting by subtracting the offset to convert JD to the ordinal date
+    satellite_datetime = datetime.fromordinal(int(jd - JD_TO_ORDINAL_OFFSET)) + timedelta(days=jd - int(jd))
 
     # Convert to fraction of day since the reference date
     delta = satellite_datetime - ceres_ref_date
@@ -358,6 +368,8 @@ def hcl_acc_from_sc_state(spacecraftState, acc_vec):
     normal_component = Vector3D.dotProduct(erp_vec_eci, normal_unit_vector)
 
     return radial_component, transverse_component, normal_component
+
+
 
 def yyyy_mm_dd_hh_mm_ss_to_jd(year: int, month: int, day: int, hour: int, minute: int, second: int, milisecond: int) -> float:
     """

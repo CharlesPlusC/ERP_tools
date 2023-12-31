@@ -96,7 +96,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
         horizon_dist = calculate_satellite_fov(alt_km)
         absolute_date = spacecraftState.getDate()
         date_time = absolutedate_to_datetime(absolute_date)
-        jd_time = date_time.toordinal() + 1721425.5 + date_time.hour / 24 + date_time.minute / (24 * 60) + date_time.second / (24 * 60 * 60)
+        jd_time = date_time.toordinal() + 1721424.5 + date_time.hour / 24 + date_time.minute / (24 * 60) + date_time.second / (24 * 60 * 60)
         ecef = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
         pv_ecef = spacecraftState.getPVCoordinates(ecef).getPosition()
         earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, ecef)
