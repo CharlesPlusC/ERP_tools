@@ -68,7 +68,7 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     acceleration_vector = total_force / satellite_mass
 
     scalar_acc = np.linalg.norm(acceleration_vector)
-    print(f"scalar_acc:{scalar_acc}m/s^2")
+    print(f"CERES ERP ACC_n:{scalar_acc}m/s^2")
 
     down_vector = - sat_ecef / np.linalg.norm(sat_ecef)  # Normalize the satellite's position vector to get the down vector
     total_radiation_vector_normalized = total_radiation_force_vector / np.linalg.norm(total_radiation_force_vector)  # Normalize the total radiation vector

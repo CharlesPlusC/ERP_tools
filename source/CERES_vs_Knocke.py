@@ -22,13 +22,13 @@ import matplotlib.lines as mlines
 import datetime
 
 from tools.CERES_ERP import CERES_ERP_ForceModel
-from tools.utilities import pos_vel_from_orekit_ephem, HCL_diff, jd_to_utc, keplerian_elements_from_orekit_ephem
+from tools.utilities import pos_vel_from_orekit_ephem, HCL_diff, jd_to_utc, keplerian_elements_from_orekit_ephem, extract_acceleration
 from tools.data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
 from tools.TLE_tools import twoLE_parse, tle_convert
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 24.0 * 2.0
+PROPAGATION_TIME = 3600.0 / 2.0
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -47,16 +47,6 @@ def compute_hcl_differences(state_vector_data):
         H_diffs, C_diffs, L_diffs = HCL_diff(np.array(state_vectors), np.array(no_erp_state_vectors))
         HCL_diffs[name] = (H_diffs, C_diffs, L_diffs)
     return HCL_diffs
-
-def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_step):
-    state_vector_data = {}
-
-    for name, propagator in propagators.items():
-        ephemeris = propagator.getEphemerisGenerator().getGeneratedEphemeris()
-        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, start_date, end_date, time_step)
-        state_vector_data[name] = (times, state_vectors)
-
-    return state_vector_data
 
 #TODO: move the plotting functions to the plotting module
 
@@ -133,6 +123,16 @@ def plot_hcl_differences(hcl_diffs, time_data, titles, colors):
     plt.savefig(f'output/ERP_prop/{timenow}_HCL_differences.png')
     # plt.show()
 
+def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_step):
+    state_vector_data = {}
+
+    for name, propagator in propagators.items():
+        ephemeris = propagator.getEphemerisGenerator().getGeneratedEphemeris()
+        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, start_date, end_date, time_step)
+        state_vector_data[name] = (times, state_vectors)
+
+    return state_vector_data
+
 def setup_propagator(initial_orbit, force_models, positionTolerance):
     tolerances = NumericalPropagator.tolerances(positionTolerance, 
                                             initial_orbit, 
@@ -155,6 +155,7 @@ def setup_propagator(initial_orbit, force_models, positionTolerance):
 def propagate_orbit(propagator, start_date, duration):
     end_state = propagator.propagate(start_date, start_date.shiftedBy(duration))
     return end_state
+
 
 def main(TLE, sat_name):
     # CERES SYN1Deg Dataset path and TLE data
@@ -218,9 +219,9 @@ def main(TLE, sat_name):
     propagator_ceres_erp.addForceModel(ceres_erp_force_model)
     ephemGen_CERES = propagator_ceres_erp.getEphemerisGenerator()  # Get the ephemeris generator
     end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
-    rtn_accs = ceres_erp_force_model.rtn_accs
-    rtn_times = ceres_erp_force_model.time_data
-    scalar_acc_data = ceres_erp_force_model.scalar_acc_data
+    ceres_rtn_accs = ceres_erp_force_model.rtn_accs
+    ceres_rtn_times = ceres_erp_force_model.time_data
+    ceres_scalar_acc_data = ceres_erp_force_model.scalar_acc_data
 
     # Knocke ERP Propagation
     sun = CelestialBodyFactory.getSun()
@@ -259,6 +260,8 @@ def main(TLE, sat_name):
         state_vector_data[ephem_name] = (times, state_vectors)
         keplerian_element_data[ephem_name] = (times, keplerian_elements)
 
+    knocke_accelerations, knocke_rtn_components = extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, knockeModel, rtn=True)
+
     plot_kepels_evolution(keplerian_element_data, sat_name)
 
     # Compute HCL differences
@@ -276,35 +279,71 @@ def main(TLE, sat_name):
 
     # Plotting
     ceres_times, _ = state_vector_data['CERES ERP']
-    r_components = [acc[0] for acc in rtn_accs]
-    t_components = [acc[1] for acc in rtn_accs]
-    n_components = [acc[2] for acc in rtn_accs]    
+    ceres_r_components = [acc[0] for acc in ceres_rtn_accs]
+    ceres_t_components = [acc[1] for acc in ceres_rtn_accs]
+    ceres_n_components = [acc[2] for acc in ceres_rtn_accs]    
 
-    plt.figure(figsize=(12, 6))
-    # Plot RTN components
-    plt.subplot(2, 1, 1)
-    plt.scatter(rtn_times, r_components, label='Radial (R) ', color='xkcd:sky blue', s=2)
-    plt.scatter(rtn_times, t_components, label='Transverse (T)', color='xkcd:light red', s=2)
-    plt.scatter(rtn_times, n_components, label='Normal (N) ', color='xkcd:light green', s=2)
+    # Extracting RTN components from Knocke ERP data
+    knocke_r_components = [acc[0] for acc in knocke_rtn_components]
+    knocke_t_components = [acc[1] for acc in knocke_rtn_components]
+    knocke_n_components = [acc[2] for acc in knocke_rtn_components]
+
+    # Calculate Knocke scalar acceleration data
+    knocke_scalar_acc_data = [np.linalg.norm([acc.getX(), acc.getY(), acc.getZ()]) for acc in knocke_accelerations]
+
+    # Extract states and times for the Knocke ERP ephemeris
+    knocke_states_and_times = state_vector_data['Knocke ERP']
+    knocke_times, _ = knocke_states_and_times
+
+    # Convert these times to a format suitable for plotting
+    # Assuming the times are in seconds since the TLE_epochDate
+    knocke_times = [TLE_epochDate.shiftedBy(duration).durationFrom(TLE_epochDate) for duration in knocke_times]
+
+    plt.figure(figsize=(12, 12))
+
+    # Plot RTN components for CERES ERP
+    plt.subplot(4, 1, 1)
+    plt.scatter(ceres_rtn_times, ceres_r_components, label='CERES Radial (R)', color='xkcd:sky blue', s=2)
+    plt.scatter(ceres_rtn_times, ceres_t_components, label='CERES Transverse (T)', color='xkcd:light red', s=2)
+    plt.scatter(ceres_rtn_times, ceres_n_components, label='CERES Normal (N)', color='xkcd:light green', s=2)
     plt.xlabel('Time')
     plt.ylabel('Acceleration (m/s^2)')
-    plt.xticks(rotation=45)
+    plt.title('CERES RTN Acceleration Components')
     plt.grid(True)
     plt.legend()
-    # Plot Scalar Acceleration Data
-    plt.subplot(2, 1, 2)
-    plt.scatter(rtn_times, scalar_acc_data, label='Scalar Acceleration', color='orange', s=2)
+
+    # Plot Scalar Acceleration Data for CERES ERP
+    plt.subplot(4, 1, 2)
+    plt.scatter(ceres_rtn_times, ceres_scalar_acc_data, label='CERES Scalar Acceleration', color='orange', s=2)
     plt.xlabel('Time')
     plt.ylabel('Acceleration (m/s^2)')
-    plt.xticks(rotation=45)
+    plt.title('CERES Scalar Acceleration')
+    plt.grid(True)
+    plt.legend()
+
+    # Plot RTN components for Knocke ERP
+    plt.subplot(4, 1, 3)
+    plt.scatter(knocke_times, knocke_r_components, label='Knocke Radial (R)', color='xkcd:blue', s=2)
+    plt.scatter(knocke_times, knocke_t_components, label='Knocke Transverse (T)', color='xkcd:red', s=2)
+    plt.scatter(knocke_times, knocke_n_components, label='Knocke Normal (N)', color='xkcd:green', s=2)
+    plt.xlabel('Time')
+    plt.ylabel('Acceleration (m/s^2)')
+    plt.title('Knocke RTN Acceleration Components')
+    plt.grid(True)
+    plt.legend()
+
+    # Plot Scalar Acceleration Data for Knocke ERP
+    plt.subplot(4, 1, 4)
+    plt.scatter(knocke_times, knocke_scalar_acc_data, label='Knocke Scalar Acceleration', color='purple', s=2)
+    plt.xlabel('Time')
+    plt.ylabel('Acceleration (m/s^2)')
+    plt.title('Knocke Scalar Acceleration')
     plt.grid(True)
     plt.legend()
 
     plt.tight_layout()
-    import datetime
     timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     plt.savefig(f'output/ERP_prop/{timenow}_{sat_name}_ERP_acceleration.png')
-
 if __name__ == "__main__":
     #OneWeb TLE
     TLE_OW = "1 56719U 23068K   23330.91667824 -.00038246  00000-0 -10188+0 0  9993\n2 56719  87.8995  84.9665 0001531  99.5722 296.6576 13.15663544 27411"

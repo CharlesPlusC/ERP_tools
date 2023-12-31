@@ -7,7 +7,6 @@ from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
 from typing import Tuple, List
 
-
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir
 
@@ -19,7 +18,10 @@ from org.orekit.frames import FramesFactory
 from org.orekit.utils import PVCoordinates
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates, IERSConventions
-from org.orekit.orbits import KeplerianOrbit
+from org.orekit.orbits import KeplerianOrbit, CartesianOrbit
+from org.orekit.forces import ForceModel
+from org.orekit.propagation import SpacecraftState
+from org.orekit.utils import Constants
 
 def ecef_to_lla(x, y, z):
     """
@@ -238,6 +240,60 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
         current_date = current_date.shiftedBy(step)
 
     return times, state_vectors
+
+def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, forceModel, rtn=False):
+    """
+    Extracts acceleration data using a specified force model and optionally computes RTN components.
+
+    :param state_vector_data: Dictionary containing state vectors and corresponding times.
+    :param TLE_epochDate: The initial epoch date for TLE.
+    :param SATELLITE_MASS: The mass of the satellite.
+    :param forceModel: The instance of the force model to be used.
+    :param rtn: Boolean flag to compute RTN components.
+    :return: List of acceleration vectors and optionally RTN components.
+    """
+    # Function to compute unit vector
+    def unit_vector(vector):
+        norm = vector.getNorm()
+        if norm == 0:
+            raise ValueError("Cannot normalize zero vector")
+        return Vector3D(vector.getX() / norm, vector.getY() / norm, vector.getZ() / norm)
+
+    # Extract states and times for the ephemeris
+    states_and_times = state_vector_data[next(iter(state_vector_data))]
+    times, states = states_and_times
+
+    # Extract accelerations and RTN components
+    accelerations = []
+    rtn_components = [] if rtn else None
+    for i, pv in enumerate(states):
+        duration = times[i]  # Duration in seconds
+        current_date = TLE_epochDate.shiftedBy(duration)
+
+        position = Vector3D(float(pv[0]), float(pv[1]), float(pv[2]))
+        velocity = Vector3D(float(pv[3]), float(pv[4]), float(pv[5]))
+        pvCoordinates = PVCoordinates(position, velocity)
+
+        orbit = CartesianOrbit(pvCoordinates, FramesFactory.getEME2000(), current_date, Constants.WGS84_EARTH_MU)
+        state = SpacecraftState(orbit, SATELLITE_MASS)
+
+        parameters = ForceModel.cast_(forceModel).getParameters()
+        acc = forceModel.acceleration(state, parameters)
+        accelerations.append(acc)
+
+        if rtn:
+            # Compute RTN components
+            radial_unit_vector = unit_vector(position)
+            normal_unit_vector = unit_vector(Vector3D.crossProduct(position, velocity))
+            transverse_unit_vector = unit_vector(Vector3D.crossProduct(normal_unit_vector, radial_unit_vector))
+
+            radial_component = Vector3D.dotProduct(acc, radial_unit_vector)
+            transverse_component = Vector3D.dotProduct(acc, transverse_unit_vector)
+            normal_component = Vector3D.dotProduct(acc, normal_unit_vector)
+            rtns = [radial_component, transverse_component, normal_component]
+            rtn_components.append(rtns)
+
+    return (accelerations, rtn_components) if rtn else accelerations
 
 def keplerian_elements_from_orekit_ephem(ephemeris, initial_date, end_date, step, mu):
     times = []
