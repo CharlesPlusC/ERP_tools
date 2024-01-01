@@ -28,7 +28,7 @@ from tools.plotting import plot_kepels_evolution, plot_hcl_differences
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 12.0
+PROPAGATION_TIME = 3600.0 * 48.0 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 1000.0
 INTEGRATOR_INIT_STEP = 30.0
