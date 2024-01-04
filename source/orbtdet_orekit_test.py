@@ -298,7 +298,7 @@ def main():
     estimated_positions_dict = {}
     estimated_velocities_dict = {}
     for idx, configured_propagatorBuilder in enumerate(propagatorBuilders):
-        for points_to_use in range(60, 130, 60):
+        for points_to_use in range(60, 200, 60):
             # Reset the initial state
             tleOrbit_ECI = CartesianOrbit(tlePV_ECI, eci, wgs84Ellipsoid.getGM())
             propagatorBuilder = NumericalPropagatorBuilder(
@@ -458,34 +458,48 @@ def main():
             #close all figures
             plt.close('all')
 
-    #plot estimated positions
-    #give each position its unique subplot (x,y,z)
+    import matplotlib.patches as mpatches
+    # Create subplots for x, y, and z positions
     fig, axs = plt.subplots(3, 1, figsize=(8, 6))
-    print("estimated_positions: ", estimated_positions)
-    for idx, pos in enumerate(estimated_positions):
-        axs[0].scatter(idx, pos.getX(), s=3, marker='o', color = 'red', label='x')
-        axs[1].scatter(idx, pos.getY(), s=3, marker='o', color = 'green', label='y')
-        axs[2].scatter(idx, pos.getZ(), s=3, marker='o', color = 'blue', label='z')
-    plt.legend(['x', 'y', 'z'])
-    plt.title(f'Estimated Positions - Observations:{points_to_use}')
-    plt.xlabel('Run')
-    plt.ylabel('Position (m)')
-    plt.grid(True)
+
+    # Initialize a list to store legend handles
+    legend_handles = []
+
+    # Iterate over the estimated positions
+    for key, position in estimated_positions_dict.items():
+        points_to_use, force_model_idx = key
+        x, y, z = position.getX(), position.getY(), position.getZ()
+
+        # Plot x, y, z on their respective subplots
+        axs[0].scatter(points_to_use, x, c=f'C{force_model_idx}')
+        axs[1].scatter(points_to_use, y, c=f'C{force_model_idx}')
+        axs[2].scatter(points_to_use, z, c=f'C{force_model_idx}')
+
+        # Create legend handles (only if not already created for this force_model_idx)
+        if force_model_idx not in [h.get_label() for h in legend_handles]:
+            legend_handles.append(mpatches.Patch(color=f'C{force_model_idx}', label=f'FM {force_model_idx}'))
+
+    # Set titles and labels for each subplot
+    axs[0].set_title('Estimated X Positions')
+    axs[0].set_ylabel('X Position (m)')
+
+    axs[1].set_title('Estimated Y Positions')
+    axs[1].set_ylabel('Y Position (m)')
+
+    axs[2].set_title('Estimated Z Positions')
+    axs[2].set_xlabel('Observations (points_to_use)')
+    axs[2].set_ylabel('Z Position (m)')
+
+    # Apply grid to all subplots
+    for ax in axs:
+        ax.grid(True)
+
+    # Add a single legend to the figure
+    fig.legend(handles=legend_handles, loc='upper right')
+
+    # Save the figure
+    # plt.tight_layout()  # Adjusts subplot params so that the subplot(s) fits in to the figure area
     plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions.png")
-
-    #now plot the difference between each estimated position and the first estimated position
-    plt.figure(figsize=(8,6))
-    for idx, pos in enumerate(estimated_positions):
-        plt.scatter(idx, pos.getY()-estimated_positions[0].getY(), s=3, marker='o', color = 'red', label='x')
-        plt.scatter(idx, pos.getX()-estimated_positions[0].getX(), s=3, marker='o', color = 'green', label='y')
-        plt.scatter(idx, pos.getZ()-estimated_positions[0].getZ(), s=3, marker='o', color = 'blue', label='z')
-    plt.legend(['x', 'y', 'z'])
-    plt.title(f'Estimated Positions - Observations:{points_to_use}')
-    plt.xlabel('Run')
-    plt.ylabel('Position (m)')
-    plt.grid(True)
-
-    plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions_diff.png")
 
     # for idx, data in results.items():
     #     plt.plot(data['ranges_used'], data['out_of_plane'], label=f'Config {idx}')
