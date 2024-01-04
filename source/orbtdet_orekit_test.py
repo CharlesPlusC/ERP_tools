@@ -10,23 +10,19 @@ from tools.utilities import yyyy_mm_dd_hh_mm_ss_to_jd, jd_to_utc
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import spacetrack.operators as op
 from spacetrack import SpaceTrackClient
 import getpass
 from datetime import datetime
 from datetime import timedelta
 
-from orekit.pyhelpers import datetime_to_absolutedate
+from orekit.pyhelpers import datetime_to_absolutedate, absolutedate_to_datetime
 from org.orekit.estimation.measurements import PV, ObservableSatellite
 from org.hipparchus.geometry.euclidean.threed import Vector3D
-from org.orekit.time import AbsoluteDate
 from org.orekit.utils import Constants as orekit_constants
 from org.orekit.frames import FramesFactory
 from org.orekit.utils import IERSConventions
 from org.orekit.models.earth import ReferenceEllipsoid
 from org.orekit.bodies import CelestialBodyFactory
-from org.orekit.time import AbsoluteDate, TimeScalesFactory
 from org.orekit.propagation.analytical.tle import TLE
 from org.orekit.attitudes import NadirPointing
 from org.orekit.propagation.analytical.tle import SGP4
@@ -206,6 +202,22 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
 
     return spacex_ephem_df
 
+from org.orekit.estimation.leastsquares import PythonBatchLSObserver
+class BLSObserver(PythonBatchLSObserver):
+    def __init__(self):
+        super().__init__()
+        self.all_estimations = []
+
+    def evaluationPerformed(self, itCounts, 
+           evCounts, orbits, orbParams, propParams, 
+           measParams, provider, lspEval):
+        print(f"iteration counts: {itCounts}")
+        print(f"evaluation counts: {evCounts}")
+        print(f"estimated orbital parameters: {orbParams.getDrivers()}")
+
+    def returnAllEstimations(self):
+        return self.all_estimations
+
 def main():
     ephem_path = '/Users/charlesc/Documents/GitHub/ERP_tools/external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt'
     spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov(ephem_path)
@@ -216,16 +228,16 @@ def main():
         'cospar_id': '2023-122A',  # For laser ranging data queries
         'sic_id': '000',  # For writing in CPF files
         'mass': 800.0, # kg; v2 mini
-        'cross_section': 100.0, # m2; TODO: get proper value
+        'cross_section': 10.0, # m2; TODO: get proper value
         'cd': 1.5, # TODO: compute proper value
-        'cr': 1.0  # TODO: compute proper value
+        'cr': 2.2  # TODO: compute proper value
     }
     }
 
     sc_name = 'STARLINK-30309'  # Change the name to select a different satellite in the dict
 
-    odDate = datetime(2023, 12, 19, 6, 45, 42, 00000)
-    collectionDuration = 1 * 1/24 * 1/60 * 5 # 5 minutes
+    odDate = datetime(2023, 12, 19, 7, 45, 42, 00000)
+    collectionDuration = 1 * 1/24 * 1/60 * 120 # 120 minutes
     startCollectionDate = odDate + timedelta(days=-collectionDuration)
 
     #Get TLE for first guess
@@ -234,21 +246,20 @@ def main():
     password_st = getpass.getpass(prompt='Enter SpaceTrack password for account {}'.format(identity_st))
     st = SpaceTrackClient(identity=identity_st, password=password_st)
     rawTle = st.tle(norad_cat_id=sat_list[sc_name]['norad_id'], epoch='<{}'.format(odDate), orderby='epoch desc', limit=1, format='tle')
+    print("rawTle: ", rawTle)
     tleLine1 = rawTle.split('\n')[0]
     tleLine2 = rawTle.split('\n')[1]
-    print(tleLine1)
-    print(tleLine2)
 
     # Orbit propagator parameters
     prop_min_step = 0.001 # s
-    prop_max_step = 300.0 # s
-    prop_position_error = 5.0 # m
+    prop_max_step = 25.0 # s
+    prop_position_error = 0.01 # m
 
     # Estimator parameters
     estimator_position_scale = 1.0 # m
-    estimator_convergence_thres = 1e-2
-    estimator_max_iterations = 25
-    estimator_max_evaluations = 35
+    estimator_convergence_thres = 0.01 # m
+    estimator_max_iterations = 100
+    estimator_max_evaluations = 100
     gcrf = FramesFactory.getGCRF()
     # Selecting frames to use for OD
     eci = gcrf
@@ -270,11 +281,10 @@ def main():
     propagatorBuilder.setAttitudeProvider(nadirPointing)
     propagatorBuilders = []
     configurations = [
-        {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_relativity': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_relativity': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_relativity': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_relativity': True, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_relativity': True, 'enable_atmospheric_drag': True},
+        {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True},
     ]
 
     for config in configurations:
@@ -285,42 +295,61 @@ def main():
                                                               sat_list[sc_name]['cross_section'], **config)
         propagatorBuilders.append(configured_propagatorBuilder)
 
-    results = {}
-    # Outer loop over each propagatorBuilder (/force model configuration)
-    for idx, propagatorBuilder in enumerate(propagatorBuilders):
-        print(f"Running for configuration {idx}")
-        print(f"propagatorBuilder: {propagatorBuilder}")
-        print("allforcemodels: ", propagatorBuilder.getAllForceModels())
-        matrixDecomposer = QRDecomposer(1e-7)
-        optimizer = GaussNewtonOptimizer(matrixDecomposer, False)
-        estimator = BatchLSEstimator(optimizer, propagatorBuilder)
-        print(f"estimator: {estimator}")
-        estimator.setParametersConvergenceThreshold(estimator_convergence_thres)
-        estimator.setMaxIterations(estimator_max_iterations)
-        estimator.setMaxEvaluations(estimator_max_evaluations)
+    estimated_positions = []
+    estimated_velocities = []
+    for idx, configured_propagatorBuilder in enumerate(propagatorBuilders):
+        for points_to_use in range(60, 130, 60):
+            # Reset the initial state
+            tleOrbit_ECI = CartesianOrbit(tlePV_ECI, eci, wgs84Ellipsoid.getGM())
+            propagatorBuilder = NumericalPropagatorBuilder(
+                tleOrbit_ECI,
+                integratorBuilder, PositionAngleType.MEAN, estimator_position_scale
+            )
+            propagatorBuilder.setMass(sat_list[sc_name]['mass'])
+            propagatorBuilder.setAttitudeProvider(nadirPointing)
+            # Reapply force model configurations
+            configured_propagatorBuilder = configure_force_models(propagatorBuilder, sat_list[sc_name]['cr'], sat_list[sc_name]['cd'],
+                                                                sat_list[sc_name]['cross_section'], **configurations[idx])
 
-        # Try different number fo points to use to use in OD process
-        for points_to_use in range(1, 150, 45):
-            print(f"Running for {points_to_use} points with configuration {idx}")
+            # Reset and configure the estimator
+            matrixDecomposer = QRDecomposer(1e-12)
+            optimizer = GaussNewtonOptimizer(matrixDecomposer, False)
+            estimator = BatchLSEstimator(optimizer, configured_propagatorBuilder)
+            estimator.setParametersConvergenceThreshold(estimator_convergence_thres)
+            estimator.setMaxIterations(estimator_max_iterations)
+            estimator.setMaxEvaluations(estimator_max_evaluations)
+            estimator.setObserver(BLSObserver())
 
-            observableSatellite = ObservableSatellite(0)
-
+            # Add measurements for the current number of points to use
             for _, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
+                # existing code to add measurement
                 date = datetime_to_absolutedate((row['UTC']).to_pydatetime())
                 position = Vector3D(row['x']*1000, row['y']*1000, row['z']*1000)
                 velocity = Vector3D(row['u']*1000, row['v']*1000, row['w']*1000)
                 sigmaPosition = row['sigma_pos']
                 sigmaVelocity = row['sigma_vel']
                 baseWeight = 1.0
+                observableSatellite = ObservableSatellite(0)
                 orekitPV = PV(date, position, velocity, sigmaPosition, sigmaVelocity, baseWeight, observableSatellite)
                 estimator.addMeasurement(orekitPV)
 
+            # Perform estimation
+            print(f"#Observables: {points_to_use}\nForce Model Config:{idx}")
             estimatedPropagatorArray = estimator.estimate()
 
             date_start = datetime_to_absolutedate(startCollectionDate).shiftedBy(-86400.0)
             date_end = datetime_to_absolutedate(odDate).shiftedBy(86400.0)
 
             estimatedPropagator = estimatedPropagatorArray[0]
+            print(f"Estimated propagator: {estimatedPropagator}")
+            print(f"Final estimated parameters for configuration {idx}:")
+            print(estimatedPropagator.getInitialState().getOrbit())
+            estpos = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getPosition()
+            estvel = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getVelocity()
+            estimated_positions.append(estpos)
+            estimated_velocities.append(estvel)
+
+            # estimated_params = estimatedPropagator.getInitialState().getOrbit()
             estimatedInitialState = estimatedPropagator.getInitialState()
             actualOdDate = estimatedInitialState.getDate()
             estimatedPropagator.resetInitialState(estimatedInitialState)
@@ -329,49 +358,146 @@ def main():
             bounded_propagator = estimatedgenerator.getGeneratedEphemeris()
 
             lvlh = LocalOrbitalFrame(eci, LOFType.LVLH, bounded_propagator, 'LVLH')
-            covMat_eci_java = estimator.getPhysicalCovariances(1.0e-10)
+            covMat_eci_java = estimator.getPhysicalCovariances(1.0e-12)
             eci2lvlh_frozen = eci.getTransformTo(lvlh, actualOdDate).freeze()
             jacobianDoubleArray = JArray_double2D(6, 6)
             eci2lvlh_frozen.getJacobian(CartesianDerivativesFilter.USE_PV, jacobianDoubleArray)
             jacobian = Array2DRowRealMatrix(jacobianDoubleArray)
             covMat_lvlh_java = jacobian.multiply(covMat_eci_java.multiply(jacobian.transpose()))
 
-            # covarianceMat_eci = np.matrix([covMat_eci_java.getRow(iRow)
-            #                             for iRow in range(0, covMat_eci_java.getRowDimension())])
+            covarianceMat_eci = np.matrix([covMat_eci_java.getRow(iRow)
+                                        for iRow in range(0, covMat_eci_java.getRowDimension())])
             covarianceMat_lvlh = np.matrix([covMat_lvlh_java.getRow(iRow)
                                             for iRow in range(0, covMat_lvlh_java.getRowDimension())])
-
-            # mean_pos_std = np.mean([pos_std_crossTrack, pos_std_alongTrack, pos_std_outOfPlane])
-
+            
             import seaborn as sns
             import matplotlib.pyplot as plt
+            #ECI covariance matrix
+            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+            from matplotlib.colors import SymLogNorm
+            log_norm = SymLogNorm(linthresh=1e-10, vmin=covarianceMat_eci.min(), vmax=covarianceMat_eci.max())
+            plt.figure(figsize=(8, 7))
+            sns.heatmap(covarianceMat_eci, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
+            #add title containing points_to_use and configuration
+            plt.title(f"No. obs:{points_to_use}, force model:{idx}")
+            plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/covMat_eci/covMat_eci_pts{points_to_use}_config{idx}.png")
+
+            #LVLH covariance matrix
             labels = ['H_pos', 'C_pos', 'L_pos', 'H_vel', 'C_vel', 'L_vel']
             from matplotlib.colors import SymLogNorm
             log_norm = SymLogNorm(linthresh=1e-10, vmin=covarianceMat_lvlh.min(), vmax=covarianceMat_lvlh.max())
-            sns.heatmap(covarianceMat_lvlh, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
+            plt.figure(figsize=(8, 7))
+            sns.heatmap(covarianceMat_lvlh, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
             #add title containing points_to_use and configuration
-            plt.title(f"points_to_use = {points_to_use}, configuration = {idx}")
-            plt.savefig(f"covMat_lvlh_{points_to_use}_{idx}.png")
-            plt.show()
+            plt.title(f"No. obs:{points_to_use}, force model:{idx}")
+            plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/covMat_lvlh/covMatlvlh_pts{points_to_use}_config{idx}.png")
+            # plt.show()
 
             # Create and Plot the Correlation Matrix
+            plt.figure(figsize=(8, 7))
             lower_triangular_data = covarianceMat_lvlh[np.tril_indices_from(covarianceMat_lvlh)]
             corr_matrix = create_symmetric_corr_matrix(lower_triangular_data)
             sns.heatmap(corr_matrix, annot=True, fmt=".2f", xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
             plt.title(f"Correlation Matrix - points_to_use = {points_to_use}, configuration = {idx}")
-            plt.savefig(f"corrMat_lvlh_{points_to_use}_{idx}.png")
-            plt.show()
+            plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/corrMat_lvlh/corrMat_lvlh_{points_to_use}_{idx}.png")
 
-    for idx, data in results.items():
-        plt.plot(data['ranges_used'], data['out_of_plane'], label=f'Config {idx}')
+            propagatorParameters   = estimator.getPropagatorParametersDrivers(True)
+            measurementsParameters = estimator.getMeasurementsParametersDrivers(True)
 
-    plt.title('Mean Position Standard Deviation vs Points Used')
-    plt.xlabel('Points Used')
-    plt.ylabel('Mean Position Std (m)')
+            lastEstimations = estimator.getLastEstimations()
+            valueSet = lastEstimations.values()
+            estimatedMeasurements = valueSet.toArray()
+            keySet = lastEstimations.keySet()
+            realMeasurements = keySet.toArray()
 
-    plt.legend()
+            from org.orekit.estimation.measurements import EstimatedMeasurement
+
+            # Assuming that each measurement has 6 elements (3 for position, 3 for velocity)
+            columns = ['pos_x', 'pos_y', 'pos_z', 'vel_x', 'vel_y', 'vel_z']
+            pv_residuals = pd.DataFrame(columns=columns)
+
+            for estMeas, realMeas in zip(estimatedMeasurements, realMeasurements):
+                estMeas = EstimatedMeasurement.cast_(estMeas)
+                estimatedValue = estMeas.getEstimatedValue()
+                pyDateTime = absolutedate_to_datetime(estMeas.date)
+                
+                if PV.instance_(realMeas):
+                    observedValue = PV.cast_(realMeas).getObservedValue()
+                    # Compute residuals and convert JArray to numpy array
+                    residuals = np.array(observedValue) - np.array(estimatedValue)
+                    # Ensure residuals are a 1D array with the correct length
+                    residuals = residuals.ravel()[:len(columns)]
+                    # Assign the residuals to the DataFrame
+                    pv_residuals.loc[pyDateTime] = residuals
+
+            # Check the first few rows of the DataFrame
+            # Plotting - Adjust this part based on the specific data you want to plot
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(8,6))
+            # plot x,y,z residuals
+            # mean_pos_residuals = pv_residuals[['pos_x', 'pos_y', 'pos_z']].mean(axis=1)
+            # mean_vel_residuals = pv_residuals[['vel_x', 'vel_y', 'vel_z']].mean(axis=1)
+            plt.scatter(pv_residuals.index, pv_residuals['pos_x'], s=3, marker='o', color = 'red')
+            plt.scatter(pv_residuals.index, pv_residuals['pos_y'], s=3, marker='o', color = 'green')
+            plt.scatter(pv_residuals.index, pv_residuals['pos_z'], s=3, marker='o', color = 'blue')
+            plt.legend(['x', 'y', 'z'])
+            plt.title(f'Position Residuals - Observations:{points_to_use}, config: {idx}')
+            plt.xlabel('Date')
+            plt.ylabel('Position Residual(m)')
+            if points_to_use == 60:
+                plt.ylim(-2, 2)
+            elif points_to_use == 120:
+                plt.ylim(-15, 15)
+            plt.grid(True)
+            plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/residuals/pos_res_pts{points_to_use}_config{idx}.png")
+            # plt.show()
+
+            #close all figures
+            plt.close('all')
+
+    #plot estimated positions (of the form [[{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}]])
+    plt.figure(figsize=(8,6))
+    for idx, pos in enumerate(estimated_positions):
+        plt.scatter(idx, pos.getY(), s=3, marker='o', color = 'red', label='x')
+        plt.scatter(idx, pos.getX(), s=3, marker='o', color = 'green', label='y')
+        plt.scatter(idx, pos.getZ(), s=3, marker='o', color = 'blue', label='z')
+    plt.legend(['x', 'y', 'z'])
+    plt.title(f'Estimated Positions - Observations:{points_to_use}')
+    plt.xlabel('Run')
+    plt.ylabel('Position (m)')
     plt.grid(True)
-    plt.show()
+
+    plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions.png")
+
+    #now plot the difference between each estimated position and the first estimated position
+    plt.figure(figsize=(8,6))
+    for idx, pos in enumerate(estimated_positions):
+        plt.scatter(idx, pos.getY()-estimated_positions[0].getY(), s=3, marker='o', color = 'red', label='x')
+        plt.scatter(idx, pos.getX()-estimated_positions[0].getX(), s=3, marker='o', color = 'green', label='y')
+        plt.scatter(idx, pos.getZ()-estimated_positions[0].getZ(), s=3, marker='o', color = 'blue', label='z')
+    plt.legend(['x', 'y', 'z'])
+    plt.title(f'Estimated Positions - Observations:{points_to_use}')
+    plt.xlabel('Run')
+    plt.ylabel('Position (m)')
+    plt.grid(True)
+
+    plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions_diff.png")
+
+
+
+
+
+    # for idx, data in results.items():
+    #     plt.plot(data['ranges_used'], data['out_of_plane'], label=f'Config {idx}')
+
+    # plt.title('Mean Position Standard Deviation vs Points Used')
+    # plt.xlabel('Points Used')
+    # plt.ylabel('Mean Position Std (m)')
+
+    # plt.legend()
+    # plt.grid(True)
+    # plt.savefig('output/cov_heatmaps/starlink_fitting_test/mean_pos_std_vs_points_used.png')
+    # # plt.show()
 
 if __name__ == '__main__':
     main()
