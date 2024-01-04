@@ -295,8 +295,8 @@ def main():
                                                               sat_list[sc_name]['cross_section'], **config)
         propagatorBuilders.append(configured_propagatorBuilder)
 
-    estimated_positions = []
-    estimated_velocities = []
+    estimated_positions_dict = {}
+    estimated_velocities_dict = {}
     for idx, configured_propagatorBuilder in enumerate(propagatorBuilders):
         for points_to_use in range(60, 130, 60):
             # Reset the initial state
@@ -346,8 +346,11 @@ def main():
             print(estimatedPropagator.getInitialState().getOrbit())
             estpos = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getPosition()
             estvel = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getVelocity()
-            estimated_positions.append(estpos)
-            estimated_velocities.append(estvel)
+
+            #key is pts to use and force model config
+            key = (points_to_use, idx)
+            estimated_positions_dict[key] = estpos
+            estimated_velocities_dict[key] = estvel
 
             # estimated_params = estimatedPropagator.getInitialState().getOrbit()
             estimatedInitialState = estimatedPropagator.getInitialState()
@@ -455,18 +458,19 @@ def main():
             #close all figures
             plt.close('all')
 
-    #plot estimated positions (of the form [[{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}], [{-6,882,907.389700828; -866,487.9305192033; 15,796.9627339977}]])
-    plt.figure(figsize=(8,6))
+    #plot estimated positions
+    #give each position its unique subplot (x,y,z)
+    fig, axs = plt.subplots(3, 1, figsize=(8, 6))
+    print("estimated_positions: ", estimated_positions)
     for idx, pos in enumerate(estimated_positions):
-        plt.scatter(idx, pos.getY(), s=3, marker='o', color = 'red', label='x')
-        plt.scatter(idx, pos.getX(), s=3, marker='o', color = 'green', label='y')
-        plt.scatter(idx, pos.getZ(), s=3, marker='o', color = 'blue', label='z')
+        axs[0].scatter(idx, pos.getX(), s=3, marker='o', color = 'red', label='x')
+        axs[1].scatter(idx, pos.getY(), s=3, marker='o', color = 'green', label='y')
+        axs[2].scatter(idx, pos.getZ(), s=3, marker='o', color = 'blue', label='z')
     plt.legend(['x', 'y', 'z'])
     plt.title(f'Estimated Positions - Observations:{points_to_use}')
     plt.xlabel('Run')
     plt.ylabel('Position (m)')
     plt.grid(True)
-
     plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions.png")
 
     #now plot the difference between each estimated position and the first estimated position
@@ -482,10 +486,6 @@ def main():
     plt.grid(True)
 
     plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions_diff.png")
-
-
-
-
 
     # for idx, data in results.items():
     #     plt.plot(data['ranges_used'], data['out_of_plane'], label=f'Config {idx}')
