@@ -60,25 +60,6 @@ def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_
 
     return state_vector_data
 
-def setup_propagator(initial_orbit, force_models, positionTolerance):
-    tolerances = NumericalPropagator.tolerances(positionTolerance, 
-                                            initial_orbit, 
-                                            initial_orbit.getType())
-    integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, 
-                                            JArray_double.cast_(tolerances[0]), 
-                                            JArray_double.cast_(tolerances[1]))
-    integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
-    
-    propagator = NumericalPropagator(integrator)
-    propagator.setOrbitType(OrbitType.CARTESIAN)
-    initialState = SpacecraftState(initial_orbit, SATELLITE_MASS)
-    propagator.setInitialState(initialState)
-
-    for model in force_models:
-        propagator.addForceModel(model)
-
-    return propagator
-
 def propagate_orbit(propagator, start_date, duration):
     end_state = propagator.propagate(start_date, start_date.shiftedBy(duration))
     return end_state

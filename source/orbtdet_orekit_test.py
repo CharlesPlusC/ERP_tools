@@ -20,7 +20,7 @@ from org.orekit.estimation.measurements import PV, ObservableSatellite
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import Constants as orekit_constants
 from org.orekit.frames import FramesFactory
-from org.orekit.utils import IERSConventions
+from org.orekit.utils import IERSConventions, PVCoordinates
 from org.orekit.models.earth import ReferenceEllipsoid
 from org.orekit.bodies import CelestialBodyFactory
 from org.orekit.propagation.analytical.tle import TLE
@@ -270,7 +270,7 @@ def main():
     nadirPointing = NadirPointing(eci, wgs84Ellipsoid)
     sgp4Propagator = SGP4(orekitTle, nadirPointing, sat_list[sc_name]['mass'])
     tleInitialState = sgp4Propagator.getInitialState()
-    # tleEpoch = tleInitialState.getDate()
+    tleEpoch = tleInitialState.getDate()
     tleOrbit_TEME = tleInitialState.getOrbit()
     tlePV_ECI = tleOrbit_TEME.getPVCoordinates(eci)
     tleOrbit_ECI = CartesianOrbit(tlePV_ECI, eci, wgs84Ellipsoid.getGM())
@@ -330,8 +330,15 @@ def main():
                 sigmaVelocity = row['sigma_vel']
                 baseWeight = 1.0
                 observableSatellite = ObservableSatellite(0)
-                orekitPV = PV(date, position, velocity, sigmaPosition, sigmaVelocity, baseWeight, observableSatellite)
-                estimator.addMeasurement(orekitPV)
+                orekitPV = PVCoordinates(position, velocity)
+                #convert orekit PV from MOD to ECI
+                MOD_frame = FramesFactory.getMOD(True)
+                eci2mod = MOD_frame.getTransformTo(eci, date)
+                eciPV = eci2mod.transformPVCoordinates(orekitPV)
+                eci_position = eciPV.getPosition()
+                eci_velocity = eciPV.getVelocity()
+                PV_measurement = PV(date, eci_position, eci_velocity, sigmaPosition, sigmaVelocity, baseWeight, observableSatellite)
+                estimator.addMeasurement(PV_measurement)
 
             # Perform estimation
             print(f"#Observables: {points_to_use}\nForce Model Config:{idx}")
@@ -341,7 +348,6 @@ def main():
             date_end = datetime_to_absolutedate(odDate).shiftedBy(86400.0)
 
             estimatedPropagator = estimatedPropagatorArray[0]
-            print(f"Estimated propagator: {estimatedPropagator}")
             print(f"Final estimated parameters for configuration {idx}:")
             print(estimatedPropagator.getInitialState().getOrbit())
             estpos = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getPosition()
@@ -354,7 +360,9 @@ def main():
 
             # estimated_params = estimatedPropagator.getInitialState().getOrbit()
             estimatedInitialState = estimatedPropagator.getInitialState()
+            print(f"Estimated initial state: {estimatedInitialState}")
             actualOdDate = estimatedInitialState.getDate()
+            print(f"Actual OD date: {actualOdDate}")
             estimatedPropagator.resetInitialState(estimatedInitialState)
             estimatedgenerator = estimatedPropagator.getEphemerisGenerator()
             estimatedPropagator.propagate(date_start, date_end)
@@ -447,10 +455,10 @@ def main():
             plt.title(f'Position Residuals - Observations:{points_to_use}, config: {idx}')
             plt.xlabel('Date')
             plt.ylabel('Position Residual(m)')
-            if points_to_use == 60:
-                plt.ylim(-2, 2)
-            elif points_to_use == 120:
-                plt.ylim(-15, 15)
+            # if points_to_use == 60:
+            #     plt.ylim(-2, 2)
+            # elif points_to_use == 120:
+            #     plt.ylim(-15, 15)
             plt.grid(True)
             plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/residuals/pos_res_pts{points_to_use}_config{idx}.png")
             # plt.show()
