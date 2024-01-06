@@ -24,20 +24,16 @@ from org.orekit.frames import FramesFactory
 from org.orekit.utils import IERSConventions, PVCoordinates
 from org.orekit.models.earth import ReferenceEllipsoid
 from org.orekit.bodies import CelestialBodyFactory
-from org.orekit.propagation.analytical.tle import TLE
-from org.orekit.attitudes import NadirPointing
-from org.orekit.propagation.analytical.tle import SGP4
 from org.orekit.orbits import CartesianOrbit
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
-from org.orekit.orbits import PositionAngleType, OrbitType
+from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.models.earth.atmosphere import DTM2000
 from org.orekit.forces.drag import DragForce, IsotropicDrag
-from org.orekit.orbits import PositionAngleType
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
@@ -76,31 +72,8 @@ def generate_ephemeris_and_extract_data(propagator, start_date, end_date, time_s
     return (times, state_vectors)
 
 def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame):
-    """
-    Propagate the orbit from a start date to an end date using the given propagator.
-
-    Parameters:
-    propagator: NumericalPropagator
-        The propagator configured with the desired force models.
-    start_date: datetime
-        The date from which the orbit should be propagated.
-    end_date: datetime
-        The date to which the orbit should be propagated.
-    initial_state_vector: array-like
-        The initial state vector (position and velocity) at the start date.
-
-    Returns:
-    array-like
-        The propagated state vector at the end date.
-    """
-
-    # Set the initial state of the propagator
-    #reset propagator
 
     x, y, z, vx, vy, vz = initial_state_vector
-    # print('initial state vector: ', initial_state_vector)
-    # print('start date: ', start_date)
-    # print('end date: ', end_date)
     initial_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(x), float(y), float(z)),
                                                 Vector3D(float(vx), float(vy), float(vz))),
                                     frame,
@@ -108,28 +81,9 @@ def propagate_state_using_propagator(propagator, start_date, end_date, initial_s
                                     Constants.WGS84_EARTH_MU)
     
 
-    # # print("frame: ", frame)
     initial_state = SpacecraftState(initial_orbit)
-    # print("initial state: ", initial_state)
     propagator.setInitialState(initial_state)
-    # print("propagator: ", propagator)
-    # # Propagate to the end date
-    # ephemeris_generator = propagator.getEphemerisGenerator()
     final_state = propagator.propagate(end_date)
-    # #frame of final state 
-    # print("frame of final state: ", final_state.getFrame())
-    # ephemeris = ephemeris_generator.getGeneratedEphemeris()
-    # print("final state: ", final_state)
-    # # Extract the final state vector (position and velocity)
-    # times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, start_date, end_date, 60.0)    
-    # print("first position: ", state_vectors[0])
-    # postions = np.array(state_vectors)[:, :3]
-    # position_norms = np.linalg.norm(postions, axis=1)
-    # altitudes = position_norms - Constants.WGS84_EARTH_EQUATORIAL_RADIUS
-    # alt_km = altitudes / 1000.0
-    # import matplotlib.pyplot as plt
-    # plt.plot(times, alt_km)
-    # plt.show()
 
     pv_coordinates = final_state.getPVCoordinates()
     position = [pv_coordinates.getPosition().getX(), pv_coordinates.getPosition().getY(), pv_coordinates.getPosition().getZ()]
@@ -141,10 +95,8 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
                         enable_solar_radiation=True, enable_relativity=True, enable_atmospheric_drag=True, enable_ceres=True):
     # Earth gravity field with degree 64 and order 64
     if enable_gravity:
-        itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
-        ecef = itrf
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
-        gravityAttractionModel = HolmesFeatherstoneAttractionModel(ecef, gravityProvider)
+        gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
     # Moon and Sun perturbations
@@ -158,9 +110,7 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
 
     # Solar radiation pressure
     if enable_solar_radiation:
-        itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
-        ecef = itrf
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(ecef)
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(cross_section)
         cr = float(cr)
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
@@ -174,9 +124,7 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
 
     # Atmospheric drag
     if enable_atmospheric_drag:
-        itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
-        ecef = itrf
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(ecef)
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
@@ -292,7 +240,7 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
         **covariance_data
     })
 
-    spacex_ephem_df['hours'] = (spacex_ephem_df['JD'] - spacex_ephem_df['JD'][0]) * 24 # hours since first timestamp
+    spacex_ephem_df['hours'] = (spacex_ephem_df['JD'] - spacex_ephem_df['JD'][0]) * 24.0 # hours since first timestamp
     # calculate UTC time by applying jd_to_utc() to each JD value
     spacex_ephem_df['UTC'] = spacex_ephem_df['JD'].apply(jd_to_utc)
     # TODO: I am gaining 3 milisecond per minute in the UTC time. Why?
@@ -301,10 +249,11 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
 
 def main():
     spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
-    SATELLITE_MASS = 500.0
+    #convert the MEME coordinates to GCRF coordinates
+    SATELLITE_MASS = 800.0
     INTEGRATOR_MIN_STEP = 0.001
-    INTEGRATOR_MAX_STEP = 1000.0
-    INTEGRATOR_INIT_STEP = 30.0
+    INTEGRATOR_MAX_STEP = 15.0
+    INTEGRATOR_INIT_STEP = 15.0
     POSITION_TOLERANCE = 1e-5
 
     sat_list = {    
@@ -321,38 +270,26 @@ def main():
 
     sc_name = 'STARLINK-30309'  # Change the name to select a different satellite in the dict
 
+    j2000 = FramesFactory.getEME2000()
+    eci = j2000
+
+    # Set the initial conditions (manually taken from SpaceX ephemeris)
     odDate = datetime(2023, 12, 19, 6, 45, 42, 00000)
-    collectionDuration = 1 * 1/24 * 1/60 * 120 # 120 minutes
-    startCollectionDate = odDate + timedelta(days=-collectionDuration)
+    Orbit0_epoch = datetime_to_absolutedate(odDate)
 
-    #Get TLE for first guess
-    # Space-Track
-    # identity_st = input('Enter SpaceTrack username')
-    # password_st = getpass.getpass(prompt='Enter SpaceTrack password for account {}'.format(identity_st))
-    st = SpaceTrackClient(identity="zcesccc@ucl.ac.uk", password="sj1GXDhz1PpcK4iEAZSaWr")
-    rawTle = st.tle(norad_cat_id=sat_list[sc_name]['norad_id'], epoch='<{}'.format(odDate), orderby='epoch desc', limit=1, format='tle')
-    print("rawTle: ", rawTle)
-    tleLine1 = rawTle.split('\n')[0]
-    tleLine2 = rawTle.split('\n')[1]
-
-
-    gcrf = FramesFactory.getGCRF()
-    # Selecting frames to use for OD
-    eci = gcrf
-    # mod_frame = FramesFactory.getMOD(IERSConventions.IERS_2010)
-    # eci = mod_frame
-    orekitTle = TLE(tleLine1, tleLine2)
-    itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
-    ecef = itrf
-
-    # tleEpoch = tleInitialState.getDate()
-    # tlePV_ECI = tleOrbit_TEME.getPVCoordinates(eci)
-    #manually define tlePV_ECI
-    tleEpoch = datetime_to_absolutedate(odDate)
-    tleOrbit_ECI = CartesianOrbit(PVCoordinates(Vector3D(float(3163.3779023663*1000), float(4612.8581212151*1000), float(-4107.4768053982*1000)),
-                                            Vector3D(float(-6.7363410087*1000), float(2.3366847298*1000), float(-2.5650390934*1000))),
+    # Initialize state vector from the first point in the SpaceX ephemeris
+    initial_X = spacex_ephem_dfwcov['x'][0]*1000
+    initial_Y = spacex_ephem_dfwcov['y'][0]*1000
+    initial_Z = spacex_ephem_dfwcov['z'][0]*1000
+    initial_VX = spacex_ephem_dfwcov['u'][0]*1000
+    initial_VY = spacex_ephem_dfwcov['v'][0]*1000
+    initial_VZ = spacex_ephem_dfwcov['w'][0]*1000
+    state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ])
+    
+    Orbit0_ECI = CartesianOrbit(PVCoordinates(Vector3D(float(state_vector[0]), float(state_vector[1]), float(state_vector[2])),
+                                            Vector3D(float(state_vector[3]), float(state_vector[4]), float(state_vector[5]))),
                                 eci,
-                                tleEpoch,
+                                Orbit0_epoch,
                                 Constants.WGS84_EARTH_MU)
 
     configurations = [
@@ -364,7 +301,7 @@ def main():
 
     propagators = []
     for config in configurations:
-        initialOrbit = tleOrbit_ECI
+        initialOrbit = Orbit0_ECI
         tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, initialOrbit, initialOrbit.getType())
         integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
         integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
@@ -377,26 +314,19 @@ def main():
         propagators.append(configured_propagator)
 
     Delta_xs_dict = {}
-    for idx, configured_propagator in enumerate(propagators):
-        points_to_use = 60 # number of observations to use
-        propagator = configured_propagator
+    Residuals_dict = {}
 
-        # Initialize state vector
-        initial_X = spacex_ephem_dfwcov['x'][0]*1000
-        initial_Y = spacex_ephem_dfwcov['y'][0]*1000
-        initial_Z = spacex_ephem_dfwcov['z'][0]*1000
-        initial_VX = spacex_ephem_dfwcov['u'][0]*1000
-        initial_VY = spacex_ephem_dfwcov['v'][0]*1000
-        initial_VZ = spacex_ephem_dfwcov['w'][0]*1000
-        state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ])
-        epoch = tleEpoch
-        
-        max_iterations = 25
-        convergence_threshold = 0.01
-        print("state vector before iteration loop: ", state_vector)
-        print("epoch before iteration loop: ", epoch)
-        # Initialize matrices for batch processing outside the iteration loop
-        Delta_xs = []
+    # Estimator parameters
+    max_iterations = 10
+    points_to_use = 60 # number of observations to use
+    convergence_threshold = 0.01
+
+    for idx, configured_propagator in enumerate(propagators):
+        propagator = configured_propagator 
+
+        Delta_xs = [] # store the magnitude of the difference between the state vector and the previous state vector at each iteration
+        Residualss = [] # store the residuals at each iteration
+
         for iteration in range(max_iterations):
             residuals_itx = []
             print(f"Iteration {iteration}")
@@ -406,13 +336,11 @@ def main():
 
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
                 measurement_epoch = datetime_to_absolutedate((row['UTC']).to_pydatetime())
-                # print("state vector: ", state_vector)
-                propagated_state = propagate_state_using_propagator(propagator, epoch, measurement_epoch, state_vector, frame=eci)
+                propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, state_vector, frame=eci)
                 observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
 
                 # Calculate and accumulate residuals and matrices
                 residual = observed_state - propagated_state
-                # print(f"obs{i}, residual: ", residual)
                 residuals_vector = residual.reshape(-1, 1)  # Reshape as column vector
                 design_matrix = np.identity(6)  # Assuming identity design matrix
                 sigma = [row['sigma_xs']*1000, row['sigma_ys']*1000, row['sigma_zs']*1000, row['sigma_us']*1000, row['sigma_vs']*1000, row['sigma_ws']*1000]
@@ -425,26 +353,16 @@ def main():
             # Solving the normal equations for Delta_x
             normal_matrix = total_design_matrix.T @ total_weight_matrix @ total_design_matrix
             ATWb = total_design_matrix.T @ total_weight_matrix @ total_residuals_vector
-            Delta_x = np.linalg.solve(normal_matrix, ATWb).flatten()
 
-            # Apply correction to the state vector
-            # print("delta x: ", Delta_x)
-            # print("position correction: ", np.linalg.norm(Delta_x[:3]))
-            # print("velocity correction: ", np.linalg.norm(Delta_x[3:]))
-            # print("STATE VECTOR BEFORE CORRECTION: ", state_vector)
-            state_vector += Delta_x
-            # print("STATE VECTOR AFTER CORRECTION: ", state_vector)
-            print("norm Delta_x: ", np.linalg.norm(Delta_x))
-            Delta_xs.append(np.linalg.norm(Delta_x))
-            if np.linalg.norm(Delta_x) < convergence_threshold:
-                print(f"Converged after {iteration} iterations.")
-                break
-            elif iteration == max_iterations - 1:
-                print(f"max_iterations reached. No convergence.")
-                print("magnitude of difference remaining: ", np.linalg.norm(Delta_x))
+            # Calculate the post-fit residuals covariance matrix
+            cov_matrix_estimation = np.linalg.inv(normal_matrix)
+
+            # Compute the inverse of the normal matrix
+            inverse_normal_matrix = np.linalg.inv(normal_matrix)
+
+            # Compute the weighted least squares solution to get the new estimate of the state vector
+            state_vector = inverse_normal_matrix @ ATWb
             
-            epoch = tleEpoch
-
             epochs_of_residuals = spacex_ephem_dfwcov.head(points_to_use)['UTC']
             x_residuals = []
             y_residuals = []
@@ -458,17 +376,29 @@ def main():
                 z_residuals.append(z_residual)
             pos_norm_residuals = np.linalg.norm(np.array([x_residuals, y_residuals, z_residuals]), axis=0)
         Delta_xs_dict[idx] = Delta_xs
+        Residuals_dict[idx] = Residualss
 
-    #plot each configuration's Delta_xs
-    import matplotlib.pyplot as plt
-    plt.figure(figsize=(8,6))
-    for idx, Delta_xs in Delta_xs_dict.items():
-        plt.plot(Delta_xs, label=f'config{idx}')
-    plt.title(f'Convergence of Delta_x')
-    plt.xlabel('Iteration')
-    plt.ylabel('Delta_x')
-    plt.legend()
-    plt.show()
+    # #plot a histogram of the residuals
+    # import matplotlib.pyplot as plt
+    # plt.figure(figsize=(8,6))
+    # for idx, total_residuals_vector in Residuals_dict.items():
+    #     plt.hist(total_residuals_vector, bins=100)
+    # plt.title(f'Residuals - Observations:{points_to_use}, force Model: {idx}')
+    # #add number of residuals as text
+    # plt.xlabel('Residual(m)')
+    # plt.ylabel('Frequency')
+    # plt.show()
+
+    # #plot each configuration's Delta_xs
+    # import matplotlib.pyplot as plt
+    # plt.figure(figsize=(8,6))
+    # for idx, Delta_xs in Delta_xs_dict.items():
+    #     plt.plot(Delta_xs, label=f'config{idx}')
+    # plt.title(f'Convergence of Delta_x')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Delta_x')
+    # plt.legend()
+    # plt.show()
 
             # # plot the x,y,z residuals
             # import matplotlib.pyplot as plt
