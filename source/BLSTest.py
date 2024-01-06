@@ -344,12 +344,8 @@ def main():
     orekitTle = TLE(tleLine1, tleLine2)
     itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
     ecef = itrf
-    wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(ecef)
-    nadirPointing = NadirPointing(eci, wgs84Ellipsoid)
-    sgp4Propagator = SGP4(orekitTle, nadirPointing, sat_list[sc_name]['mass'])
-    tleInitialState = sgp4Propagator.getInitialState()
+
     # tleEpoch = tleInitialState.getDate()
-    tleOrbit_TEME = tleInitialState.getOrbit()
     # tlePV_ECI = tleOrbit_TEME.getPVCoordinates(eci)
     #manually define tlePV_ECI
     tleEpoch = datetime_to_absolutedate(odDate)
@@ -376,38 +372,31 @@ def main():
         propagator = NumericalPropagator(integrator)
         propagator.setOrbitType(OrbitType.CARTESIAN)
         propagator.setInitialState(initialState)
-        propagator.setAttitudeProvider(nadirPointing)
         configured_propagator = configure_force_models(propagator,sat_list[sc_name]['cr'], sat_list[sc_name]['cd'],
                                                               sat_list[sc_name]['cross_section'], **config)
         propagators.append(configured_propagator)
 
-    for idx, configured_propagator in enumerate(propagators[-1:]):
-        points_to_use = 10 # number of observations to use
+    Delta_xs_dict = {}
+    for idx, configured_propagator in enumerate(propagators):
+        points_to_use = 60 # number of observations to use
         propagator = configured_propagator
-        print("propagator: ", propagator)
 
-        # initial_X = tlePV_ECI.getPosition().getX()
-        # initial_Y = tlePV_ECI.getPosition().getY()
-        # initial_Z = tlePV_ECI.getPosition().getZ()
-        # initial_VX = tlePV_ECI.getVelocity().getX()
-        # initial_VY = tlePV_ECI.getVelocity().getY()
-        # initial_VZ = tlePV_ECI.getVelocity().getZ()
-        # Initialize state vector (example: [x, y, z, vx, vy, vz])
-        initial_X = (3163.3779023663*1000)+10
-        initial_Y = (4612.8581212151*1000)+10
-        initial_Z = (-4107.4768053982*1000)+10
-        initial_VX = -6.7363410087*1000
-        initial_VY = 2.3366847298*1000
-        initial_VZ = -2.5650390934*1000
+        # Initialize state vector
+        initial_X = spacex_ephem_dfwcov['x'][0]*1000
+        initial_Y = spacex_ephem_dfwcov['y'][0]*1000
+        initial_Z = spacex_ephem_dfwcov['z'][0]*1000
+        initial_VX = spacex_ephem_dfwcov['u'][0]*1000
+        initial_VY = spacex_ephem_dfwcov['v'][0]*1000
+        initial_VZ = spacex_ephem_dfwcov['w'][0]*1000
         state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ])
         epoch = tleEpoch
         
-        max_iterations = 10
+        max_iterations = 25
         convergence_threshold = 0.01
         print("state vector before iteration loop: ", state_vector)
         print("epoch before iteration loop: ", epoch)
         # Initialize matrices for batch processing outside the iteration loop
-
+        Delta_xs = []
         for iteration in range(max_iterations):
             residuals_itx = []
             print(f"Iteration {iteration}")
@@ -439,12 +428,14 @@ def main():
             Delta_x = np.linalg.solve(normal_matrix, ATWb).flatten()
 
             # Apply correction to the state vector
-            print("delta x: ", Delta_x)
-            print("position correction: ", np.linalg.norm(Delta_x[:3]))
-            print("velocity correction: ", np.linalg.norm(Delta_x[3:]))
-            print("STATE VECTOR BEFORE CORRECTION: ", state_vector)
+            # print("delta x: ", Delta_x)
+            # print("position correction: ", np.linalg.norm(Delta_x[:3]))
+            # print("velocity correction: ", np.linalg.norm(Delta_x[3:]))
+            # print("STATE VECTOR BEFORE CORRECTION: ", state_vector)
             state_vector += Delta_x
-            print("STATE VECTOR AFTER CORRECTION: ", state_vector)
+            # print("STATE VECTOR AFTER CORRECTION: ", state_vector)
+            print("norm Delta_x: ", np.linalg.norm(Delta_x))
+            Delta_xs.append(np.linalg.norm(Delta_x))
             if np.linalg.norm(Delta_x) < convergence_threshold:
                 print(f"Converged after {iteration} iterations.")
                 break
@@ -465,18 +456,31 @@ def main():
                 y_residuals.append(y_residual)
                 z_residual = measurement_residual[2]
                 z_residuals.append(z_residual)
+            pos_norm_residuals = np.linalg.norm(np.array([x_residuals, y_residuals, z_residuals]), axis=0)
+        Delta_xs_dict[idx] = Delta_xs
 
-            # plot the x,y,z residuals
-            import matplotlib.pyplot as plt
-            plt.figure(figsize=(8,6))
-            plt.scatter(epochs_of_residuals, x_residuals, s=3, marker='o', color = 'red')
-            plt.scatter(epochs_of_residuals, y_residuals, s=3, marker='o', color = 'green')
-            plt.scatter(epochs_of_residuals, z_residuals, s=3, marker='o', color = 'blue')
-            plt.legend(['x', 'y', 'z'])
-            plt.title(f'Position Residuals - Observations:{points_to_use}, config: {idx}')
-            plt.xlabel('Date')
-            plt.ylabel('Position Residual(m)')
-            plt.show()
+    #plot each configuration's Delta_xs
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(8,6))
+    for idx, Delta_xs in Delta_xs_dict.items():
+        plt.plot(Delta_xs, label=f'config{idx}')
+    plt.title(f'Convergence of Delta_x')
+    plt.xlabel('Iteration')
+    plt.ylabel('Delta_x')
+    plt.legend()
+    plt.show()
+
+            # # plot the x,y,z residuals
+            # import matplotlib.pyplot as plt
+            # plt.figure(figsize=(8,6))
+            # plt.scatter(epochs_of_residuals, pos_norm_residuals, s=3, marker='o', color = 'red')
+            # plt.title(f'Position Residuals - Observations:{points_to_use}, config: {idx}')
+            # plt.xlabel('Date')
+            # plt.ylabel('Position Residual(m)')
+            # plt.show()
+
+#TODO: get covariance matrix at each iteration and for each force model
+#TODO: now we are assuming perfect initial conditions and perfect measurements.
         # # Store the estimated state
         # estimated_positions_dict[(points_to_use, idx)] = state_vector[:3]  # Position
         # estimated_velocities_dict[(points_to_use, idx)] = state_vector[3:]  # Velocity
