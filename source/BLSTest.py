@@ -356,6 +356,7 @@ def main():
                 design_matrix = np.identity(6)
                 total_design_matrix = np.vstack([total_design_matrix, design_matrix])
 
+            print(f'Magnitude of residuals before update: {np.linalg.norm(total_residuals_vector)}')
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
 
@@ -368,21 +369,18 @@ def main():
             print("state before update: ", apriori_state_vector)
             apriori_state_vector += delta_X.flatten()
             print("state after update: ", apriori_state_vector)
-            print("position difference remaining: ", np.linalg.norm(apriori_state_vector[:3] - observed_state[:3]))
 
             # Store the change in state vector for each iteration
-            Delta_xs_dict[iteration] = delta_X
+            
             print(f'Delta_X: {delta_X.flatten()}')
             # Check for convergence
             if np.linalg.norm(delta_X) < convergence_threshold:
                 print("Convergence achieved.")
                 break
-            else:
-                print("Convergence not achieved.")
-                # print("residuals: ", total_residuals_vector)
 
         # Store the residuals for this configuration
         Residuals_dict[idx] = total_residuals_vector
+        Delta_xs_dict[iteration] = delta_X.flatten()
 
     import matplotlib.pyplot as plt
     # Plotting the histogram of residuals
@@ -394,15 +392,15 @@ def main():
     plt.ylabel('Frequency')
     plt.legend()
     plt.show()
-    #plot a histogram of the residuals
+    #plot a delta x 
     import matplotlib.pyplot as plt
     plt.figure(figsize=(8,6))
-    for idx, total_residuals_vector in Residuals_dict.items():
-        plt.hist(total_residuals_vector, bins=100)
-    plt.title(f'Residuals - Observations:{points_to_use}, force Model: {idx}')
-    #add number of residuals as text
-    plt.xlabel('Residual(m)')
-    plt.ylabel('Frequency')
+    for idx, deltaxs in Delta_xs_dict.items():
+        plt.plot(deltaxs, label=f'config{idx}')
+    plt.title(f'Convergence of Delta_x')
+    plt.xlabel('Iteration')
+    plt.ylabel('Delta_x')
+    plt.legend()
     plt.show()
 
     # #plot each configuration's Delta_xs
