@@ -312,88 +312,88 @@ def main():
 
     Delta_xs_dict = {}
     Residuals_dict = {}
-
-    # Estimator parameters
+    import scipy
     max_iterations = 10
-    points_to_use = 60 # number of observations to use
+    points_to_use = 60  # Number of observations to use
     convergence_threshold = 0.1
 
+    # Initialize dictionaries for storing results
+    Delta_xs_dict = {}
     Residuals_dict = {}
 
-    for idx, configured_propagator in enumerate(propagators):
+    for idx, configured_propagator in enumerate(propagators[0:1]):
         propagator = configured_propagator
+        apriori_state_vector = state_vector.copy()
 
-        apriori_state_vector = state_vector
-        print("orbit0 epoch: ", Orbit0_ECI)
-        first_row = spacex_ephem_dfwcov.iloc[0]
-        apriori_sigmas = np.array([first_row['sigma_xs']*1000, first_row['sigma_ys']*1000, first_row['sigma_zs']*1000, first_row['sigma_us']*1000, first_row['sigma_vs']*1000, first_row['sigma_ws']*1000])
-        Wk = np.diag(1 / apriori_sigmas**2)
-        #normalize the weight matrix
-        Wk = Wk / np.linalg.norm(Wk)
-
+        # Initial covariance matrix (assumed to be diagonal with large values)
+        Pk = np.eye(6) * 1e8
 
         for iteration in range(max_iterations):
-            print(f'Iteration: {iteration}')
-            total_design_matrix = np.zeros((0, 6))  # 6 parameters to estimate
-            total_residuals_vector = np.zeros((0, 1))
-            total_weight_matrix = np.zeros((0, 0)) 
+            print(f'Iteration {iteration + 1}')
 
-            print("propagating state vector:", apriori_state_vector)
+            # Initializing matrices for the iteration
+            total_residuals_vector = np.zeros((0, 1))
+            total_design_matrix = np.zeros((0, 6))  # 6 parameters to estimate
+            total_observation_cov_matrix = np.zeros((0, 0))
+
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
                 propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci)
                 observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
 
+                # Compute residual (Observed - Computed)
                 residual = observed_state - propagated_state
-                print("magnitude of pos residual:", np.linalg.norm(residual[:3]))
                 residuals_vector = residual.reshape(-1, 1)
-                design_matrix = np.identity(6)  # assuming identity matrix for now
-                total_design_matrix = np.vstack([total_design_matrix, design_matrix])
-                total_weight_matrix = block_diag(total_weight_matrix, Wk)
                 total_residuals_vector = np.vstack([total_residuals_vector, residuals_vector])
-            
-            total_weight_matrix = np.eye(total_design_matrix.shape[0]) # assuming identity matrix for now
 
-            assert total_design_matrix.shape[0] == points_to_use * 6
-            assert total_design_matrix.shape[1] == 6
+                # Construct observation covariance matrix for this point
+                sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws']]) * 1000
+                observation_cov_matrix = np.diag(sigma_vec ** 2)
+                
+                total_observation_cov_matrix = scipy.linalg.block_diag(total_observation_cov_matrix, observation_cov_matrix)
 
-            assert total_residuals_vector.shape[0] == points_to_use * 6
-            assert total_residuals_vector.shape[1] == 1
+                # Sensitivity matrix (partial derivatives), here assumed as identity
+                design_matrix = np.identity(6)
+                total_design_matrix = np.vstack([total_design_matrix, design_matrix])
 
-            assert total_weight_matrix.shape[0] == points_to_use * 6
-            assert total_weight_matrix.shape[1] == points_to_use * 6
+            # Weight matrix (inverse of observation covariance matrix)
+            Wk = np.linalg.inv(total_observation_cov_matrix)
 
-            HtWH = total_design_matrix.T @ total_weight_matrix @ total_design_matrix
-            HtWY = total_design_matrix.T @ total_weight_matrix @ total_residuals_vector
+            # Least squares calculations
+            HtWH = total_design_matrix.T @ Wk @ total_design_matrix
+            HtWY = total_design_matrix.T @ Wk @ total_residuals_vector
 
             # Update state vector
-            print("weight matrix:", Wk)
-            update_to_state_vector = np.linalg.inv(HtWH + Wk) @ (HtWY + Wk @ apriori_state_vector.reshape(-1, 1))
-            print("update to state vector:", update_to_state_vector)
-            #flip this vector
-            # now apply it to the apriori state vector
-            updated_state_vector = apriori_state_vector + update_to_state_vector
-            print("updated state vector:", updated_state_vector)
-            updated_state_vector = updated_state_vector[0].flatten()  # Flatten the array
-            print(f'norm of pos diff between iterations: {np.linalg.norm(updated_state_vector[:3] - apriori_state_vector[:3])}')
+            delta_X = np.linalg.inv(HtWH) @ HtWY
+            print("state before update: ", apriori_state_vector)
+            apriori_state_vector += delta_X.flatten()
+            print("state after update: ", apriori_state_vector)
+            print("position difference remaining: ", np.linalg.norm(apriori_state_vector[:3] - observed_state[:3]))
 
-            # Update the a priori state vector for the next iteration
-            apriori_state_vector = updated_state_vector
-
-            # Recalculate post-fit residuals
-            post_fit_residuals = total_residuals_vector - total_design_matrix @ updated_state_vector.reshape(-1, 1)
-            
-            # Update the covariance matrix and weight matrix
-            cov_matrix = np.linalg.inv(HtWH)  # Update the covariance matrix
-            Wk = np.linalg.inv(cov_matrix)  # Update the weight matrix
-
-            # Store the results for each configuration
-            Residuals_dict[idx] = post_fit_residuals
-
-            # Storing residuals and convergence check
-            if np.linalg.norm(updated_state_vector[:3]) < convergence_threshold:
+            # Store the change in state vector for each iteration
+            Delta_xs_dict[iteration] = delta_X
+            print(f'Delta_X: {delta_X.flatten()}')
+            # Check for convergence
+            if np.linalg.norm(delta_X) < convergence_threshold:
+                print("Convergence achieved.")
                 break
+            else:
+                print("Convergence not achieved.")
+                # print("residuals: ", total_residuals_vector)
 
+        # Store the residuals for this configuration
+        Residuals_dict[idx] = total_residuals_vector
+
+    import matplotlib.pyplot as plt
+    # Plotting the histogram of residuals
+    plt.figure(figsize=(8, 6))
+    for idx, residuals in Residuals_dict.items():
+        plt.hist(residuals, bins=100, label=f'Model {idx}')
+    plt.title(f'Residuals - Observations: {points_to_use}')
+    plt.xlabel('Residual (m)')
+    plt.ylabel('Frequency')
+    plt.legend()
+    plt.show()
     #plot a histogram of the residuals
     import matplotlib.pyplot as plt
     plt.figure(figsize=(8,6))
