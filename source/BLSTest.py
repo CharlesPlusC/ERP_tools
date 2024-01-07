@@ -14,6 +14,7 @@ import numpy as np
 import scipy
 from datetime import datetime
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
@@ -400,8 +401,31 @@ def main():
         # Store the residuals for this configuration
         Residuals_dict[idx] = total_residuals_vector
     
-    print("covariance matrix for each configuration")
-    print(cov_matx_dict)
+    def covariance_to_correlation(cov_matrix):
+        """Convert a covariance matrix to a correlation matrix."""
+        d = np.sqrt(np.diag(cov_matrix))
+        d_inv = np.reciprocal(d, where=d!=0)  # Avoid division by zero
+        corr_matrix = cov_matrix * np.outer(d_inv, d_inv)
+        return corr_matrix
+
+    num_matrices = len(cov_matx_dict)
+    labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+
+    # Convert covariance matrices to correlation matrices
+    for idx, cov_matrix in cov_matx_dict.items():
+        corr_matrix = covariance_to_correlation(cov_matrix)
+        cov_matx_dict[idx] = corr_matrix
+
+    # Plotting
+    plt.figure(figsize=(8 * num_matrices, 7))
+    for idx, corr_matrix in cov_matx_dict.items():
+        plt.subplot(1, num_matrices, idx + 1)
+        plt.rcParams.update({'font.size': 8})  # Set font size
+        sns.heatmap(corr_matrix, annot=True, fmt=".2f", xticklabels=labels, yticklabels=labels, cmap="viridis")
+        plt.title(f'Correlation Matrix: {idx}')
+
+    plt.tight_layout()
+    plt.show()
 
     # Convert lists to numpy arrays for easier handling
     all_itx_observed_positions = np.array(all_itx_observed_positions)
