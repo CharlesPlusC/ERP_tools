@@ -298,7 +298,8 @@ def main():
     estimated_positions_dict = {}
     estimated_velocities_dict = {}
     for idx, configured_propagatorBuilder in enumerate(propagatorBuilders):
-        for points_to_use in range(60, 200, 60):
+        for points_to_use in range(15, 16, 15):
+            print(f"points_to_use: {points_to_use}")
             # Reset the initial state
             tleOrbit_ECI = CartesianOrbit(tlePV_ECI, eci, wgs84Ellipsoid.getGM())
             propagatorBuilder = NumericalPropagatorBuilder(
@@ -330,15 +331,8 @@ def main():
                 sigmaVelocity = row['sigma_vel']
                 baseWeight = 1.0
                 observableSatellite = ObservableSatellite(0)
-                orekitPV = PVCoordinates(position, velocity)
-                #convert orekit PV from MOD to ECI
-                MOD_frame = FramesFactory.getMOD(True)
-                eci2mod = MOD_frame.getTransformTo(eci, date)
-                eciPV = eci2mod.transformPVCoordinates(orekitPV)
-                eci_position = eciPV.getPosition()
-                eci_velocity = eciPV.getVelocity()
-                PV_measurement = PV(date, eci_position, eci_velocity, sigmaPosition, sigmaVelocity, baseWeight, observableSatellite)
-                estimator.addMeasurement(PV_measurement)
+                orekitPV_measurement = PV(date, position, velocity, sigmaPosition, sigmaVelocity, baseWeight, observableSatellite)
+                estimator.addMeasurement(orekitPV_measurement)
 
             # Perform estimation
             print(f"#Observables: {points_to_use}\nForce Model Config:{idx}")
@@ -467,6 +461,7 @@ def main():
             plt.close('all')
 
     import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
     # Create subplots for x, y, and z positions
     fig, axs = plt.subplots(3, 1, figsize=(8, 6))
 

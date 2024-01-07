@@ -262,8 +262,8 @@ def main():
         'sic_id': '000',  # For writing in CPF files
         'mass': 800.0, # kg; v2 mini
         'cross_section': 10.0, # m2; TODO: get proper value
-        'cd': 1.5, # TODO: compute proper value
-        'cr': 2.2  # TODO: compute proper value
+        'cd': 1, # TODO: compute proper value
+        'cr': 1  # TODO: compute proper value
                     }
     }
 
@@ -312,10 +312,9 @@ def main():
                                                               sat_list[sc_name]['cross_section'], **config)
         propagators.append(configured_propagator)
 
-
     max_iterations = 25
     points_to_use = 15  # Number of observations to use
-    convergence_threshold = 1e-5 # Convergence threshold for delta_X
+    convergence_threshold = 1e-3 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
@@ -389,11 +388,11 @@ def main():
             # Check for convergence
             print("norm of delta_X: ", np.linalg.norm(delta_X))
             if np.linalg.norm(delta_X) < convergence_threshold:
-                print("Convergence achieved.")
+                print("Convergence thresh. reached")
                 break
             #check max iterations
             if iteration == max_iterations - 1:
-                print("Max iterations reached.")
+                print("Max it. reached")
                 break
 
         estimation_errors_matrix = np.array(estimation_errors)
@@ -413,12 +412,25 @@ def main():
     num_matrices = len(cov_matx_dict)
     labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
 
+
+    # Plotting covariance matrices
+    plt.figure(figsize=(8 * num_matrices, 7))
+    for idx, cov_matrix in cov_matx_dict.items():
+        plt.subplot(1, num_matrices, idx + 1)
+        plt.rcParams.update({'font.size': 8})  # Set font size
+        #make sure format is scientific notation
+        sns.heatmap(cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
+        plt.title(f'Covariance Matrix: {idx}')
+
+    plt.tight_layout()
+    plt.show()
+
     # Convert covariance matrices to correlation matrices
     for idx, cov_matrix in cov_matx_dict.items():
         corr_matrix = covariance_to_correlation(cov_matrix)
         cov_matx_dict[idx] = corr_matrix
 
-    # Plotting
+    # Plotting correlation matrices
     plt.figure(figsize=(8 * num_matrices, 7))
     for idx, corr_matrix in cov_matx_dict.items():
         plt.subplot(1, num_matrices, idx + 1)
@@ -465,9 +477,10 @@ def main():
             propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, :]
             difference = observed_positions - propagated_positions
             norm_difference = np.linalg.norm(difference, axis=1)
-            ax.plot(norm_difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
+            ax.plot(range(num_timesteps), norm_difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
 
         ax.set_ylim(min_norm_diff, max_norm_diff)
+        #log the y axis
         ax.set_title(f'Propagator #{propagator_idx + 1} - Position Norm Difference')
         ax.set_xlabel('Observation')
         ax.set_ylabel('Norm Difference (m)')
@@ -482,53 +495,47 @@ def main():
 
 ########## Convergence Plots ##########
 
-    # num_propagators = all_itx_observed_positions.shape[0]
-    # num_iterations = all_itx_observed_positions.shape[1]
+    # Assuming all_itx_observed_positions and all_itx_propagated_positions are defined
+    num_propagators = all_itx_observed_positions.shape[0]
+    num_iterations = all_itx_observed_positions.shape[1]
+    num_timesteps = all_itx_observed_positions.shape[2]
 
-    # # Using the 'Dark2' colormap
-    # colormap = plt.get_cmap('Dark2')(np.linspace(0, 1, num_iterations))
+    # Using the 'nipy_spectral' colormap
+    colormap = plt.get_cmap('nipy_spectral')(np.linspace(0, 1, num_iterations))
 
-    # # Total number of subplots
-    # total_subplots = num_propagators * 3
+    fig, axes = plt.subplots(num_propagators, 3, figsize=(15, 5 * num_propagators), sharex=True)
 
-    # fig, axes = plt.subplots(num_propagators, 3, figsize=(15, 5 * num_propagators), sharex=True)
+    # Adjust axes array for single propagator case
+    if num_propagators == 1:
+        axes = [axes]
 
-    # # Initialize lists to hold the max and min y-values for each column
-    # max_y_values = [float('-inf')] * 3
-    # min_y_values = [float('inf')] * 3
+    for propagator_idx in range(num_propagators):
+        for i, component in enumerate(['X', 'Y', 'Z']):
+            ax = axes[propagator_idx][i]
+            for iteration in range(num_iterations):
+                observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, i]
+                propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, i]
+                difference = observed_positions - propagated_positions
+                ax.plot(np.arange(num_timesteps), difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
+            ax.grid(True)
+            ax.set_ylabel(f'{component} Difference (m)')
+            if propagator_idx == num_propagators - 1:
+                ax.set_xlabel('Time Step')
 
-    # # First pass to determine the max and min y-values for each column
-    # for propagator_idx in range(num_propagators):
-    #     for i, component in enumerate(['X', 'Y', 'Z']):
-    #         ax = axes[propagator_idx, i]
-    #         for iteration in range(num_iterations):
-    #             observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, i]
-    #             propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, i]
-    #             difference = observed_positions - propagated_positions
-    #             ax.plot(difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
-            
-    #         current_min, current_max = ax.get_ylim()
-    #         max_y_values[i] = max(max_y_values[i], current_max)
-    #         min_y_values[i] = min(min_y_values[i], current_min)
+    # Set titles for the top row
+    if num_propagators > 1:
+        for i, component in enumerate(['X', 'Y', 'Z']):
+            axes[0][i].set_title(f'{component} Component')
+    else:
+        for i, component in enumerate(['X', 'Y', 'Z']):
+            axes[i].set_title(f'{component} Component')
 
-    # # Second pass to set uniform y-axis limits for each column
-    # for i in range(3):
-    #     for ax in axes[:, i]:
-    #         ax.set_ylim(min_y_values[i], max_y_values[i])
-    #         ax.grid(True)
+    # Create a single legend for the entire figure
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(1, 1), title='Iterations')
 
-    # # Setting titles, labels, and legend
-    # for i, component in enumerate(['X', 'Y', 'Z']):
-    #     axes[0, i].set_title(f'{component} Component')
-    # for propagator_idx in range(num_propagators):
-    #     axes[propagator_idx, 1].set_xlabel('Observation')
-    #     axes[propagator_idx, 0].set_ylabel(f'meters (m)')
-
-    # # Create a single legend for the entire figure
-    # handles, labels = axes[0, 0].get_legend_handles_labels()
-    # fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(1.05, 1), title='Iterations')
-
-    # plt.show()
+    plt.tight_layout()
+    plt.show()
 
     #same plot as above except make a new suboplot for each force model
     plt.figure(figsize=(8, 6))
@@ -541,16 +548,6 @@ def main():
         plt.ylabel('Frequency')
         plt.legend()
     plt.show()
-
-    # # Plotting the magnitude of delta_X for each iteration in its own line but all on the same plot
-    # plt.figure(figsize=(8, 6))
-    # for iteration in range(max_iterations):
-    #     delta_X = Delta_xs_dict[iteration]
-    #     plt.plot(np.linalg.norm(delta_X), label=f'Iter {iteration + 1}')
-    # plt.title('Magnitude of Delta_X')
-    # plt.xlabel('Iteration #')
-    # plt.ylabel('Magnitude of Delta_X (m)')
-    # plt.legend()
 
 if __name__ == '__main__':
     main()
