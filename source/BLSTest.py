@@ -11,8 +11,9 @@ from tools.CERES_ERP import CERES_ERP_ForceModel
 
 import pandas as pd
 import numpy as np
-from scipy.linalg import block_diag
+import scipy
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
@@ -136,7 +137,6 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
 
     return propagator
 
-# Function to create a symmetric correlation matrix from lower triangular covariance elements
 def create_symmetric_corr_matrix(lower_triangular_data):
     # Create the symmetric covariance matrix
     cov_matrix = np.zeros((6, 6))
@@ -245,6 +245,7 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     return spacex_ephem_df
 
 def main():
+
     spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
     #convert the MEME coordinates to GCRF coordinates
     SATELLITE_MASS = 800.0
@@ -310,7 +311,7 @@ def main():
                                                               sat_list[sc_name]['cross_section'], **config)
         propagators.append(configured_propagator)
 
-    import scipy
+
     max_iterations = 15
     points_to_use = 15  # Number of observations to use
     convergence_threshold = 0.05
@@ -319,12 +320,21 @@ def main():
     Delta_xs_dict = {}
     Residuals_dict = {}
 
-    all_itx_observed_positions = []
-    all_itx_propagated_positions = []
+    num_propagators = len(propagators)
+    num_iterations = max_iterations
+    num_timesteps = points_to_use
+    num_components = 3  # X, Y, Z
 
-    for idx, configured_propagator in enumerate(propagators[0:1]):
+    # Initialize 4D lists to store observed and propagated positions
+    all_itx_observed_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
+    all_itx_propagated_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
+    
+    cov_matx_dict = {}
+    true_state = np.array([spacex_ephem_dfwcov['x'][0]*1000, spacex_ephem_dfwcov['y'][0]*1000, spacex_ephem_dfwcov['z'][0]*1000, spacex_ephem_dfwcov['u'][0]*1000, spacex_ephem_dfwcov['v'][0]*1000, spacex_ephem_dfwcov['w'][0]*1000])
+    for idx, configured_propagator in enumerate(propagators):
         propagator = configured_propagator
         apriori_state_vector = state_vector.copy()
+        estimation_errors = []
 
         # Initial covariance matrix (assumed to be diagonal with large values)
         Pk = np.eye(6) * 1e8
@@ -337,16 +347,14 @@ def main():
             total_design_matrix = np.zeros((0, 6))  # 6 parameters to estimate
             total_observation_cov_matrix = np.zeros((0, 0))
 
-            itx_observed_positions = []
-            itx_propagated_positions = []
-
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
                 propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci)
                 observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
                 
-                itx_observed_positions.append(observed_state[:3])
-                itx_propagated_positions.append(propagated_state[:3])
+                # Storing the observed and propagated positions for each timestep
+                all_itx_observed_positions[idx, iteration, i, :] = observed_state[:3]
+                all_itx_propagated_positions[idx, iteration, i, :] = propagated_state[:3]
 
                 # Compute residual (Observed - Computed)
                 residual = observed_state - propagated_state
@@ -363,9 +371,6 @@ def main():
                 design_matrix = np.identity(6)
                 total_design_matrix = np.vstack([total_design_matrix, design_matrix])
 
-            all_itx_observed_positions.append(itx_observed_positions)
-            all_itx_propagated_positions.append(itx_propagated_positions)
-
             print(f'Magnitude of pos residuals before update: {np.linalg.norm(total_residuals_vector[:3])}')
             print(f'Magnitude of vel residuals before update: {np.linalg.norm(total_residuals_vector[3:])}')
             # Weight matrix (inverse of observation covariance matrix)
@@ -377,46 +382,81 @@ def main():
 
             # Update state vector
             delta_X = np.linalg.inv(HtWH) @ HtWY
-            print("state before update: ", apriori_state_vector)
             apriori_state_vector += delta_X.flatten()
-            print("state after update: ", apriori_state_vector)
             Delta_xs_dict[iteration] = delta_X.flatten()            
-            print(f'Delta_X: {delta_X.flatten()}')
+            # Calculate and store the covariance matrix for the current iteration
+            estimation_error = apriori_state_vector - true_state
+            estimation_errors.append(estimation_error)
+
             # Check for convergence
             if np.linalg.norm(delta_X) < convergence_threshold:
                 print("Convergence achieved.")
                 break
 
+        estimation_errors_matrix = np.array(estimation_errors)
+        covariance_matrix = np.cov(estimation_errors_matrix.T)
+        cov_matx_dict[idx] = covariance_matrix
+
         # Store the residuals for this configuration
         Residuals_dict[idx] = total_residuals_vector
+    
+    print("covariance matrix for each configuration")
+    print(cov_matx_dict)
 
+    # Convert lists to numpy arrays for easier handling
     all_itx_observed_positions = np.array(all_itx_observed_positions)
     all_itx_propagated_positions = np.array(all_itx_propagated_positions)
 
-    num_iterations = all_itx_observed_positions.shape[0]
-    # Define a colormap to color code each iteration differently
-    import matplotlib.pyplot as plt
-    colormap = plt.cm.get_cmap("Dark2", num_iterations)
-    plt.figure(figsize=(15, 5))
+    # Assuming all_itx_observed_positions and all_itx_propagated_positions are already filled with the correct data
+    num_propagators = all_itx_observed_positions.shape[0]
+    num_iterations = all_itx_observed_positions.shape[1]
+
+    # Using the 'Dark2' colormap
+    colormap = plt.get_cmap('Dark2')(np.linspace(0, 1, num_iterations))
+
+    # Total number of subplots
+    total_subplots = num_propagators * 3
+
+    fig, axes = plt.subplots(num_propagators, 3, figsize=(15, 5 * num_propagators), sharex=True)
+
+    # Initialize lists to hold the max and min y-values for each column
+    max_y_values = [float('-inf')] * 3
+    min_y_values = [float('inf')] * 3
+
+    # First pass to determine the max and min y-values for each column
+    for propagator_idx in range(num_propagators):
+        for i, component in enumerate(['X', 'Y', 'Z']):
+            ax = axes[propagator_idx, i]
+            for iteration in range(num_iterations):
+                observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, i]
+                propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, i]
+                difference = observed_positions - propagated_positions
+                ax.plot(difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
+            
+            current_min, current_max = ax.get_ylim()
+            max_y_values[i] = max(max_y_values[i], current_max)
+            min_y_values[i] = min(min_y_values[i], current_min)
+
+    # Second pass to set uniform y-axis limits for each column
+    for i in range(3):
+        for ax in axes[:, i]:
+            ax.set_ylim(min_y_values[i], max_y_values[i])
+            ax.grid(True)
+
+    # Setting titles, labels, and legend
     for i, component in enumerate(['X', 'Y', 'Z']):
-        plt.subplot(1, 3, i + 1)
+        axes[0, i].set_title(f'{component} Component')
+    for propagator_idx in range(num_propagators):
+        axes[propagator_idx, 1].set_xlabel('Observation')
+        axes[propagator_idx, 0].set_ylabel(f'meters (m)')
 
-        for iteration in range(num_iterations):
-            observed_positions = all_itx_observed_positions[iteration, :, i]
-            propagated_positions = all_itx_propagated_positions[iteration, :, i]
-            difference = observed_positions - propagated_positions
+    # Create a single legend for the entire figure
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(1.05, 1), title='Iterations')
 
-            plt.plot(difference, label=f'Iteration {iteration + 1}', color=colormap(iteration))
-            plt.title(f'{component} Component - Observed vs Computed')
-            plt.xlabel('Timestep')
-            plt.ylabel(f'{component} Difference')
-            plt.legend()
-            plt.grid(True)
-
-    plt.tight_layout()
     plt.show()
 
-    # Plotting the histogram of residuals
+    # Plotting the histogram of residuals for each force model
     plt.figure(figsize=(8, 6))
     for idx, residuals in Residuals_dict.items():
         plt.hist(residuals, bins=50, label=f'Model {idx}')
@@ -425,233 +465,16 @@ def main():
     plt.ylabel('Frequency')
     plt.legend()
     plt.show()
-    #plot a delta x 
-    # After the loop, you can plot the delta_X values
-    import matplotlib.pyplot as plt
 
-    # Plotting the magnitude of delta_X for each iteration
-    delta_x_magnitudes = [np.linalg.norm(Delta_xs_dict[iter]) for iter in Delta_xs_dict]
-    plt.plot(list(Delta_xs_dict.keys()), delta_x_magnitudes, marker='o')
-    plt.xlabel('Iteration')
-    plt.ylabel('Delta_X Magnitude')
-    plt.title('Magnitude of Delta_X over Iterations')
-    plt.grid(True)
-    plt.show()
-
-    # #plot each configuration's Delta_xs
-    # import matplotlib.pyplot as plt
-    # plt.figure(figsize=(8,6))
-    # for idx, Delta_xs in Delta_xs_dict.items():
-    #     plt.plot(Delta_xs, label=f'config{idx}')
-    # plt.title(f'Convergence of Delta_x')
-    # plt.xlabel('Iteration')
-    # plt.ylabel('Delta_x')
+    # # Plotting the magnitude of delta_X for each iteration in its own line but all on the same plot
+    # plt.figure(figsize=(8, 6))
+    # for iteration in range(max_iterations):
+    #     delta_X = Delta_xs_dict[iteration]
+    #     plt.plot(np.linalg.norm(delta_X), label=f'Iter {iteration + 1}')
+    # plt.title('Magnitude of Delta_X')
+    # plt.xlabel('Iteration #')
+    # plt.ylabel('Magnitude of Delta_X (m)')
     # plt.legend()
-    # plt.show()
-
-            # # plot the x,y,z residuals
-            # import matplotlib.pyplot as plt
-            # plt.figure(figsize=(8,6))
-            # plt.scatter(epochs_of_residuals, pos_norm_residuals, s=3, marker='o', color = 'red')
-            # plt.title(f'Position Residuals - Observations:{points_to_use}, config: {idx}')
-            # plt.xlabel('Date')
-            # plt.ylabel('Position Residual(m)')
-            # plt.show()
-
-#TODO: get covariance matrix at each iteration and for each force model
-#TODO: now we are assuming perfect initial conditions and perfect measurements.
-        # # Store the estimated state
-        # estimated_positions_dict[(points_to_use, idx)] = state_vector[:3]  # Position
-        # estimated_velocities_dict[(points_to_use, idx)] = state_vector[3:]  # Velocity
-
-
-            #residuals = np.array(observedValue) - np.array(estimatedValue)
-            #normal matrix = design matrix transpose * weight matrix * design matrix
-            #rhs vector = design matrix transpose * weight matrix * residuals
-            #state correction = normal matrix inverse * rhs vector
-            #initial state = initial state + state correction
-            #if np.linalg.norm(state correction) < convergence threshold:
-            #   break
-
-
-
-#             date_start = datetime_to_absolutedate(startCollectionDate).shiftedBy(-86400.0)
-#             date_end = datetime_to_absolutedate(odDate).shiftedBy(86400.0)
-
-#             estimatedPropagator = estimatedPropagatorArray[0]
-#             print(f"Estimated propagator: {estimatedPropagator}")
-#             print(f"Final estimated parameters for configuration {idx}:")
-#             print(estimatedPropagator.getInitialState().getOrbit())
-#             estpos = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getPosition()
-#             estvel = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getVelocity()
-
-#             #key is pts to use and force model config
-#             key = (points_to_use, idx)
-#             estimated_positions_dict[key] = estpos
-#             estimated_velocities_dict[key] = estvel
-
-#             # estimated_params = estimatedPropagator.getInitialState().getOrbit()
-#             estimatedInitialState = estimatedPropagator.getInitialState()
-#             actualOdDate = estimatedInitialState.getDate()
-#             estimatedPropagator.resetInitialState(estimatedInitialState)
-#             estimatedgenerator = estimatedPropagator.getEphemerisGenerator()
-#             estimatedPropagator.propagate(date_start, date_end)
-#             bounded_propagator = estimatedgenerator.getGeneratedEphemeris()
-
-#             lvlh = LocalOrbitalFrame(eci, LOFType.LVLH, bounded_propagator, 'LVLH')
-#             covMat_eci_java = estimator.getPhysicalCovariances(1.0e-12)
-#             eci2lvlh_frozen = eci.getTransformTo(lvlh, actualOdDate).freeze()
-#             jacobianDoubleArray = JArray_double2D(6, 6)
-#             eci2lvlh_frozen.getJacobian(CartesianDerivativesFilter.USE_PV, jacobianDoubleArray)
-#             jacobian = Array2DRowRealMatrix(jacobianDoubleArray)
-#             covMat_lvlh_java = jacobian.multiply(covMat_eci_java.multiply(jacobian.transpose()))
-
-#             covarianceMat_eci = np.matrix([covMat_eci_java.getRow(iRow)
-#                                         for iRow in range(0, covMat_eci_java.getRowDimension())])
-#             covarianceMat_lvlh = np.matrix([covMat_lvlh_java.getRow(iRow)
-#                                             for iRow in range(0, covMat_lvlh_java.getRowDimension())])
-            
-#             import seaborn as sns
-#             import matplotlib.pyplot as plt
-#             #ECI covariance matrix
-#             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
-#             from matplotlib.colors import SymLogNorm
-#             log_norm = SymLogNorm(linthresh=1e-10, vmin=covarianceMat_eci.min(), vmax=covarianceMat_eci.max())
-#             plt.figure(figsize=(8, 7))
-#             sns.heatmap(covarianceMat_eci, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
-#             #add title containing points_to_use and configuration
-#             plt.title(f"No. obs:{points_to_use}, force model:{idx}")
-#             plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/covMat_eci/covMat_eci_pts{points_to_use}_config{idx}.png")
-
-#             #LVLH covariance matrix
-#             labels = ['H_pos', 'C_pos', 'L_pos', 'H_vel', 'C_vel', 'L_vel']
-#             from matplotlib.colors import SymLogNorm
-#             log_norm = SymLogNorm(linthresh=1e-10, vmin=covarianceMat_lvlh.min(), vmax=covarianceMat_lvlh.max())
-#             plt.figure(figsize=(8, 7))
-#             sns.heatmap(covarianceMat_lvlh, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
-#             #add title containing points_to_use and configuration
-#             plt.title(f"No. obs:{points_to_use}, force model:{idx}")
-#             plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/covMat_lvlh/covMatlvlh_pts{points_to_use}_config{idx}.png")
-#             # plt.show()
-
-#             # Create and Plot the Correlation Matrix
-#             plt.figure(figsize=(8, 7))
-#             lower_triangular_data = covarianceMat_lvlh[np.tril_indices_from(covarianceMat_lvlh)]
-#             corr_matrix = create_symmetric_corr_matrix(lower_triangular_data)
-#             sns.heatmap(corr_matrix, annot=True, fmt=".2f", xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
-#             plt.title(f"Correlation Matrix - points_to_use = {points_to_use}, configuration = {idx}")
-#             plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/corrMat_lvlh/corrMat_lvlh_{points_to_use}_{idx}.png")
-
-#             propagatorParameters   = estimator.getPropagatorParametersDrivers(True)
-#             measurementsParameters = estimator.getMeasurementsParametersDrivers(True)
-
-#             lastEstimations = estimator.getLastEstimations()
-#             valueSet = lastEstimations.values()
-#             estimatedMeasurements = valueSet.toArray()
-#             keySet = lastEstimations.keySet()
-#             realMeasurements = keySet.toArray()
-
-#             from org.orekit.estimation.measurements import EstimatedMeasurement
-
-#             # Assuming that each measurement has 6 elements (3 for position, 3 for velocity)
-#             columns = ['pos_x', 'pos_y', 'pos_z', 'vel_x', 'vel_y', 'vel_z']
-#             pv_residuals = pd.DataFrame(columns=columns)
-
-#             for estMeas, realMeas in zip(estimatedMeasurements, realMeasurements):
-#                 estMeas = EstimatedMeasurement.cast_(estMeas)
-#                 estimatedValue = estMeas.getEstimatedValue()
-#                 pyDateTime = absolutedate_to_datetime(estMeas.date)
-                
-#                 if PV.instance_(realMeas):
-#                     observedValue = PV.cast_(realMeas).getObservedValue()
-#                     # Compute residuals and convert JArray to numpy array
-#                     residuals = np.array(observedValue) - np.array(estimatedValue)
-#                     # Ensure residuals are a 1D array with the correct length
-#                     residuals = residuals.ravel()[:len(columns)]
-#                     # Assign the residuals to the DataFrame
-#                     pv_residuals.loc[pyDateTime] = residuals
-
-#             # Check the first few rows of the DataFrame
-#             # Plotting - Adjust this part based on the specific data you want to plot
-#             import matplotlib.pyplot as plt
-#             plt.figure(figsize=(8,6))
-#             # plot x,y,z residuals
-#             # mean_pos_residuals = pv_residuals[['pos_x', 'pos_y', 'pos_z']].mean(axis=1)
-#             # mean_vel_residuals = pv_residuals[['vel_x', 'vel_y', 'vel_z']].mean(axis=1)
-#             plt.scatter(pv_residuals.index, pv_residuals['pos_x'], s=3, marker='o', color = 'red')
-#             plt.scatter(pv_residuals.index, pv_residuals['pos_y'], s=3, marker='o', color = 'green')
-#             plt.scatter(pv_residuals.index, pv_residuals['pos_z'], s=3, marker='o', color = 'blue')
-#             plt.legend(['x', 'y', 'z'])
-#             plt.title(f'Position Residuals - Observations:{points_to_use}, config: {idx}')
-#             plt.xlabel('Date')
-#             plt.ylabel('Position Residual(m)')
-#             if points_to_use == 60:
-#                 plt.ylim(-2, 2)
-#             elif points_to_use == 120:
-#                 plt.ylim(-15, 15)
-#             elif points_to_use == 180:
-#                 plt.ylim(-20, 20)
-#             plt.grid(True)
-#             plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/residuals/pos_res_pts{points_to_use}_config{idx}.png")
-#             # plt.show()
-
-#             #close all figures
-#             plt.close('all')
-
-#     import matplotlib.patches as mpatches
-#     # Create subplots for x, y, and z positions
-#     fig, axs = plt.subplots(3, 1, figsize=(8, 6))
-
-#     # Initialize a list to store legend handles
-#     legend_handles = []
-
-#     # Iterate over the estimated positions
-#     for key, position in estimated_positions_dict.items():
-#         points_to_use, force_model_idx = key
-#         x, y, z = position.getX(), position.getY(), position.getZ()
-
-#         # Plot x, y, z on their respective subplots
-#         axs[0].scatter(points_to_use, x, c=f'C{force_model_idx}')
-#         axs[1].scatter(points_to_use, y, c=f'C{force_model_idx}')
-#         axs[2].scatter(points_to_use, z, c=f'C{force_model_idx}')
-
-#         # Create legend handles (only if not already created for this force_model_idx)
-#         if force_model_idx not in [h.get_label() for h in legend_handles]:
-#             legend_handles.append(mpatches.Patch(color=f'C{force_model_idx}', label=f'FM {force_model_idx}'))
-
-#     # Set titles and labels for each subplot
-#     axs[0].set_title('Estimated X Positions')
-#     axs[0].set_ylabel('X Position (m)')
-
-#     axs[1].set_title('Estimated Y Positions')
-#     axs[1].set_ylabel('Y Position (m)')
-
-#     axs[2].set_title('Estimated Z Positions')
-#     axs[2].set_xlabel('Observations (points_to_use)')
-#     axs[2].set_ylabel('Z Position (m)')
-
-#     # Apply grid to all subplots
-#     for ax in axs:
-#         ax.grid(True)
-
-#     # Add a single legend to the figure
-#     fig.legend(handles=legend_handles, loc='upper right')
-
-#     # Save the figure
-#     # plt.tight_layout()  # Adjusts subplot params so that the subplot(s) fits in to the figure area
-#     plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/estimated_positions.png")
-
-#     # for idx, data in results.items():
-#     #     plt.plot(data['ranges_used'], data['out_of_plane'], label=f'Config {idx}')
-
-#     # plt.title('Mean Position Standard Deviation vs Points Used')
-#     # plt.xlabel('Points Used')
-#     # plt.ylabel('Mean Position Std (m)')
-
-#     # plt.legend()
-#     # plt.grid(True)
-#     # plt.savefig('output/cov_heatmaps/starlink_fitting_test/mean_pos_std_vs_points_used.png')
-#     # # plt.show()
 
 if __name__ == '__main__':
     main()
