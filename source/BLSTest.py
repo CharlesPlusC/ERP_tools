@@ -310,16 +310,17 @@ def main():
                                                               sat_list[sc_name]['cross_section'], **config)
         propagators.append(configured_propagator)
 
-    Delta_xs_dict = {}
-    Residuals_dict = {}
     import scipy
-    max_iterations = 10
-    points_to_use = 60  # Number of observations to use
-    convergence_threshold = 0.1
+    max_iterations = 15
+    points_to_use = 15  # Number of observations to use
+    convergence_threshold = 0.05
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
     Residuals_dict = {}
+
+    all_itx_observed_positions = []
+    all_itx_propagated_positions = []
 
     for idx, configured_propagator in enumerate(propagators[0:1]):
         propagator = configured_propagator
@@ -336,10 +337,16 @@ def main():
             total_design_matrix = np.zeros((0, 6))  # 6 parameters to estimate
             total_observation_cov_matrix = np.zeros((0, 0))
 
+            itx_observed_positions = []
+            itx_propagated_positions = []
+
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
                 propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci)
                 observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
+                
+                itx_observed_positions.append(observed_state[:3])
+                itx_propagated_positions.append(propagated_state[:3])
 
                 # Compute residual (Observed - Computed)
                 residual = observed_state - propagated_state
@@ -356,7 +363,11 @@ def main():
                 design_matrix = np.identity(6)
                 total_design_matrix = np.vstack([total_design_matrix, design_matrix])
 
-            print(f'Magnitude of residuals before update: {np.linalg.norm(total_residuals_vector)}')
+            all_itx_observed_positions.append(itx_observed_positions)
+            all_itx_propagated_positions.append(itx_propagated_positions)
+
+            print(f'Magnitude of pos residuals before update: {np.linalg.norm(total_residuals_vector[:3])}')
+            print(f'Magnitude of vel residuals before update: {np.linalg.norm(total_residuals_vector[3:])}')
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
 
@@ -369,9 +380,7 @@ def main():
             print("state before update: ", apriori_state_vector)
             apriori_state_vector += delta_X.flatten()
             print("state after update: ", apriori_state_vector)
-
-            # Store the change in state vector for each iteration
-            
+            Delta_xs_dict[iteration] = delta_X.flatten()            
             print(f'Delta_X: {delta_X.flatten()}')
             # Check for convergence
             if np.linalg.norm(delta_X) < convergence_threshold:
@@ -380,27 +389,53 @@ def main():
 
         # Store the residuals for this configuration
         Residuals_dict[idx] = total_residuals_vector
-        Delta_xs_dict[iteration] = delta_X.flatten()
 
+    all_itx_observed_positions = np.array(all_itx_observed_positions)
+    all_itx_propagated_positions = np.array(all_itx_propagated_positions)
+
+    num_iterations = all_itx_observed_positions.shape[0]
+    # Define a colormap to color code each iteration differently
     import matplotlib.pyplot as plt
+    colormap = plt.cm.get_cmap("Dark2", num_iterations)
+    plt.figure(figsize=(15, 5))
+    for i, component in enumerate(['X', 'Y', 'Z']):
+        plt.subplot(1, 3, i + 1)
+
+        for iteration in range(num_iterations):
+            observed_positions = all_itx_observed_positions[iteration, :, i]
+            propagated_positions = all_itx_propagated_positions[iteration, :, i]
+            difference = observed_positions - propagated_positions
+
+            plt.plot(difference, label=f'Iteration {iteration + 1}', color=colormap(iteration))
+            plt.title(f'{component} Component - Observed vs Computed')
+            plt.xlabel('Timestep')
+            plt.ylabel(f'{component} Difference')
+            plt.legend()
+            plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
     # Plotting the histogram of residuals
     plt.figure(figsize=(8, 6))
     for idx, residuals in Residuals_dict.items():
-        plt.hist(residuals, bins=100, label=f'Model {idx}')
+        plt.hist(residuals, bins=50, label=f'Model {idx}')
     plt.title(f'Residuals - Observations: {points_to_use}')
     plt.xlabel('Residual (m)')
     plt.ylabel('Frequency')
     plt.legend()
     plt.show()
     #plot a delta x 
+    # After the loop, you can plot the delta_X values
     import matplotlib.pyplot as plt
-    plt.figure(figsize=(8,6))
-    for idx, deltaxs in Delta_xs_dict.items():
-        plt.plot(deltaxs, label=f'config{idx}')
-    plt.title(f'Convergence of Delta_x')
+
+    # Plotting the magnitude of delta_X for each iteration
+    delta_x_magnitudes = [np.linalg.norm(Delta_xs_dict[iter]) for iter in Delta_xs_dict]
+    plt.plot(list(Delta_xs_dict.keys()), delta_x_magnitudes, marker='o')
     plt.xlabel('Iteration')
-    plt.ylabel('Delta_x')
-    plt.legend()
+    plt.ylabel('Delta_X Magnitude')
+    plt.title('Magnitude of Delta_X over Iterations')
+    plt.grid(True)
     plt.show()
 
     # #plot each configuration's Delta_xs
