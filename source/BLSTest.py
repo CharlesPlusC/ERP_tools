@@ -313,9 +313,9 @@ def main():
         propagators.append(configured_propagator)
 
 
-    max_iterations = 15
+    max_iterations = 25
     points_to_use = 15  # Number of observations to use
-    convergence_threshold = 0.05
+    convergence_threshold = 1e-5 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
@@ -336,9 +336,6 @@ def main():
         propagator = configured_propagator
         apriori_state_vector = state_vector.copy()
         estimation_errors = []
-
-        # Initial covariance matrix (assumed to be diagonal with large values)
-        Pk = np.eye(6) * 1e8
 
         for iteration in range(max_iterations):
             print(f'Iteration {iteration + 1}')
@@ -372,8 +369,8 @@ def main():
                 design_matrix = np.identity(6)
                 total_design_matrix = np.vstack([total_design_matrix, design_matrix])
 
-            print(f'Magnitude of pos residuals before update: {np.linalg.norm(total_residuals_vector[:3])}')
-            print(f'Magnitude of vel residuals before update: {np.linalg.norm(total_residuals_vector[3:])}')
+            print(f'Magnitude of pos residuals: {np.linalg.norm(total_residuals_vector[:3])}')
+            print(f'Magnitude of vel residuals: {np.linalg.norm(total_residuals_vector[3:])}')
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
 
@@ -390,8 +387,13 @@ def main():
             estimation_errors.append(estimation_error)
 
             # Check for convergence
+            print("norm of delta_X: ", np.linalg.norm(delta_X))
             if np.linalg.norm(delta_X) < convergence_threshold:
                 print("Convergence achieved.")
+                break
+            #check max iterations
+            if iteration == max_iterations - 1:
+                print("Max iterations reached.")
                 break
 
         estimation_errors_matrix = np.array(estimation_errors)
@@ -427,6 +429,7 @@ def main():
     plt.tight_layout()
     plt.show()
 
+########## Convergence Plots ##########
     # Convert lists to numpy arrays for easier handling
     all_itx_observed_positions = np.array(all_itx_observed_positions)
     all_itx_propagated_positions = np.array(all_itx_propagated_positions)
@@ -436,58 +439,107 @@ def main():
     num_iterations = all_itx_observed_positions.shape[1]
 
     # Using the 'Dark2' colormap
-    colormap = plt.get_cmap('Dark2')(np.linspace(0, 1, num_iterations))
+    colormap = plt.get_cmap('nipy_spectral')(np.linspace(0, 1, num_iterations))
 
-    # Total number of subplots
-    total_subplots = num_propagators * 3
+    fig, axes = plt.subplots(num_propagators, 1, figsize=(15, 5 * num_propagators), sharex=True)
 
-    fig, axes = plt.subplots(num_propagators, 3, figsize=(15, 5 * num_propagators), sharex=True)
+    # Initialize max and min values for y-axis limits
+    max_norm_diff = float('-inf')
+    min_norm_diff = float('inf')
 
-    # Initialize lists to hold the max and min y-values for each column
-    max_y_values = [float('-inf')] * 3
-    min_y_values = [float('inf')] * 3
-
-    # First pass to determine the max and min y-values for each column
+    # Loop through each propagator to find the overall max and min norm differences
     for propagator_idx in range(num_propagators):
-        for i, component in enumerate(['X', 'Y', 'Z']):
-            ax = axes[propagator_idx, i]
-            for iteration in range(num_iterations):
-                observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, i]
-                propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, i]
-                difference = observed_positions - propagated_positions
-                ax.plot(difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
-            
-            current_min, current_max = ax.get_ylim()
-            max_y_values[i] = max(max_y_values[i], current_max)
-            min_y_values[i] = min(min_y_values[i], current_min)
+        for iteration in range(num_iterations):
+            observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, :]
+            propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, :]
+            difference = observed_positions - propagated_positions
+            norm_difference = np.linalg.norm(difference, axis=1)
+            max_norm_diff = max(max_norm_diff, np.max(norm_difference))
+            min_norm_diff = min(min_norm_diff, np.min(norm_difference))
 
-    # Second pass to set uniform y-axis limits for each column
-    for i in range(3):
-        for ax in axes[:, i]:
-            ax.set_ylim(min_y_values[i], max_y_values[i])
-            ax.grid(True)
-
-    # Setting titles, labels, and legend
-    for i, component in enumerate(['X', 'Y', 'Z']):
-        axes[0, i].set_title(f'{component} Component')
+    # Loop through each propagator again and plot the norm of the positional differences
     for propagator_idx in range(num_propagators):
-        axes[propagator_idx, 1].set_xlabel('Observation')
-        axes[propagator_idx, 0].set_ylabel(f'meters (m)')
+        ax = axes[propagator_idx] if num_propagators > 1 else axes
+        for iteration in range(num_iterations):
+            observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, :]
+            propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, :]
+            difference = observed_positions - propagated_positions
+            norm_difference = np.linalg.norm(difference, axis=1)
+            ax.plot(norm_difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
+
+        ax.set_ylim(min_norm_diff, max_norm_diff)
+        ax.set_title(f'Propagator #{propagator_idx + 1} - Position Norm Difference')
+        ax.set_xlabel('Observation')
+        ax.set_ylabel('Norm Difference (m)')
+        ax.grid(True)
 
     # Create a single legend for the entire figure
-    handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(1.05, 1), title='Iterations')
+    handles, labels = axes[0].get_legend_handles_labels() if num_propagators > 1 else axes.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(0.95, 0.7), title='Iterations')
 
+    plt.tight_layout()
     plt.show()
 
-    # Plotting the histogram of residuals for each force model
+########## Convergence Plots ##########
+
+    # num_propagators = all_itx_observed_positions.shape[0]
+    # num_iterations = all_itx_observed_positions.shape[1]
+
+    # # Using the 'Dark2' colormap
+    # colormap = plt.get_cmap('Dark2')(np.linspace(0, 1, num_iterations))
+
+    # # Total number of subplots
+    # total_subplots = num_propagators * 3
+
+    # fig, axes = plt.subplots(num_propagators, 3, figsize=(15, 5 * num_propagators), sharex=True)
+
+    # # Initialize lists to hold the max and min y-values for each column
+    # max_y_values = [float('-inf')] * 3
+    # min_y_values = [float('inf')] * 3
+
+    # # First pass to determine the max and min y-values for each column
+    # for propagator_idx in range(num_propagators):
+    #     for i, component in enumerate(['X', 'Y', 'Z']):
+    #         ax = axes[propagator_idx, i]
+    #         for iteration in range(num_iterations):
+    #             observed_positions = all_itx_observed_positions[propagator_idx, iteration, :, i]
+    #             propagated_positions = all_itx_propagated_positions[propagator_idx, iteration, :, i]
+    #             difference = observed_positions - propagated_positions
+    #             ax.plot(difference, label=f'Iter {iteration + 1}', color=colormap[iteration])
+            
+    #         current_min, current_max = ax.get_ylim()
+    #         max_y_values[i] = max(max_y_values[i], current_max)
+    #         min_y_values[i] = min(min_y_values[i], current_min)
+
+    # # Second pass to set uniform y-axis limits for each column
+    # for i in range(3):
+    #     for ax in axes[:, i]:
+    #         ax.set_ylim(min_y_values[i], max_y_values[i])
+    #         ax.grid(True)
+
+    # # Setting titles, labels, and legend
+    # for i, component in enumerate(['X', 'Y', 'Z']):
+    #     axes[0, i].set_title(f'{component} Component')
+    # for propagator_idx in range(num_propagators):
+    #     axes[propagator_idx, 1].set_xlabel('Observation')
+    #     axes[propagator_idx, 0].set_ylabel(f'meters (m)')
+
+    # # Create a single legend for the entire figure
+    # handles, labels = axes[0, 0].get_legend_handles_labels()
+    # fig.legend(handles, labels, loc='upper right', bbox_to_anchor=(1.05, 1), title='Iterations')
+
+    # plt.show()
+
+    #same plot as above except make a new suboplot for each force model
     plt.figure(figsize=(8, 6))
     for idx, residuals in Residuals_dict.items():
+        plt.subplot(2,2,idx+1)
         plt.hist(residuals, bins=50, label=f'Model {idx}')
-    plt.title(f'Residuals - Observations: {points_to_use}')
-    plt.xlabel('Residual (m)')
-    plt.ylabel('Frequency')
-    plt.legend()
+        plt.grid(True)
+        plt.title(f'Residuals - Observations: {points_to_use}')
+        plt.xlabel('Residual (m)')
+        plt.ylabel('Frequency')
+        plt.legend()
     plt.show()
 
     # # Plotting the magnitude of delta_X for each iteration in its own line but all on the same plot
