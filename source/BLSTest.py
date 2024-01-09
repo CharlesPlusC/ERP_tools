@@ -70,15 +70,19 @@ def generate_ephemeris_and_extract_data(propagator, start_date, end_date, time_s
 
     return (times, state_vectors)
 
-def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame, cr, cross_section, **config_flags):
-    # Extract cd from the state vector
-    cd = initial_state_vector[-1]  # Assuming cd is the last element in the state vector
+def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame, cr=None, cross_section=None, **config_flags):
 
-    # Configure the force models with the current cd value
-    configured_propagator = configure_force_models(propagator, cr, cross_section, cd, **config_flags)
+    if len(initial_state_vector) == 7:
+        x, y, z, vx, vy, vz, cd = initial_state_vector 
+        # Extract cd from the state vector 
+        cd = initial_state_vector[-1]  # Assuming cd is the last element in the state vector
+        # Re-configure the propagator to include Cd from the state vector
+        propagator = configure_force_models(propagator, cr, cross_section, cd, **config_flags)
+
+    elif len(initial_state_vector) == 6:
+        x, y, z, vx, vy, vz = initial_state_vector
 
     # Propagation using the configured propagator
-    x, y, z, vx, vy, vz = initial_state_vector[:-1]  # Exclude cd from the state vector for orbit initialization
     initial_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(x), float(y), float(z)),
                                                 Vector3D(float(vx), float(vy), float(vz))),
                                     frame,
@@ -86,16 +90,18 @@ def propagate_state_using_propagator(propagator, start_date, end_date, initial_s
                                     Constants.WGS84_EARTH_MU)
 
     initial_state = SpacecraftState(initial_orbit)
-    configured_propagator.setInitialState(initial_state)
-    final_state = configured_propagator.propagate(end_date)
+    propagator.setInitialState(initial_state)
+    final_state = propagator.propagate(end_date)
 
     pv_coordinates = final_state.getPVCoordinates()
     position = [pv_coordinates.getPosition().getX(), pv_coordinates.getPosition().getY(), pv_coordinates.getPosition().getZ()]
     velocity = [pv_coordinates.getVelocity().getX(), pv_coordinates.getVelocity().getY(), pv_coordinates.getVelocity().getZ()]
+    if len(initial_state_vector) == 6:
+        return position + velocity
+    elif len(initial_state_vector) == 7:
+        return position + velocity + [cd]  # Include cd in the returned state
 
-    return position + velocity + [cd]  # Include cd in the returned state
-
-def configure_force_models(propagator,cr, cross_section,cd_var, **config_flags):
+def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     # Earth gravity field with degree 64 and order 64
     if config_flags.get('enable_gravity', True):
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
@@ -132,7 +138,7 @@ def configure_force_models(propagator,cr, cross_section,cd_var, **config_flags):
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-        isotropicDrag = IsotropicDrag(float(cross_section), float(cd_var))
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
@@ -251,15 +257,14 @@ def main():
         'sic_id': '000',  # For writing in CPF files
         'mass': 800.0, # kg; v2 mini
         'cross_section': 10.0, # m2; TODO: get proper value
-        'cd': 2.2, # TODO: compute proper value
+        'cd': 1, # TODO: compute proper value
         'cr': 1.5  # TODO: compute proper value
                     }
     }
 
     sc_name = 'STARLINK-30309'  # Change the name to select a different satellite in the dict
 
-    j2000 = FramesFactory.getEME2000()
-    eci = j2000
+    eci = FramesFactory.getEME2000() # j2000 frame
 
     # Set the initial conditions (manually taken from SpaceX ephemeris)
     odDate = datetime(2023, 12, 19, 6, 45, 42, 00000)
@@ -272,8 +277,7 @@ def main():
     initial_VX = spacex_ephem_dfwcov['u'][0]*1000
     initial_VY = spacex_ephem_dfwcov['v'][0]*1000
     initial_VZ = spacex_ephem_dfwcov['w'][0]*1000
-    initial_cd = 2.2  # TODO: get this from BSTAR?
-    state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, initial_cd])
+    state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, sat_list[sc_name]['cd']])
     
     Orbit0_ECI = CartesianOrbit(PVCoordinates(Vector3D(float(state_vector[0]), float(state_vector[1]), float(state_vector[2])),
                                             Vector3D(float(state_vector[3]), float(state_vector[4]), float(state_vector[5]))),
@@ -298,12 +302,12 @@ def main():
         propagator = NumericalPropagator(integrator)
         propagator.setOrbitType(OrbitType.CARTESIAN)
         propagator.setInitialState(initialState)
-        configured_propagator = configure_force_models(propagator,sat_list[sc_name]['cr'],sat_list[sc_name]['cross_section'], float(state_vector[-1]),**config)
+        configured_propagator = configure_force_models(propagator,sat_list[sc_name]['cr'],sat_list[sc_name]['cross_section'], float(sat_list[sc_name]['cd']),**config)
         propagators.append(configured_propagator)
 
     max_iterations = 10
-    points_to_use = 15  # Number of observations to use
-    convergence_threshold = 1e-6 # Convergence threshold for delta_X
+    points_to_use = 5  # Number of observations to use
+    convergence_threshold = 1e-3 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
@@ -317,8 +321,16 @@ def main():
     # Initialize 4D lists to store observed and propagated positions
     all_itx_observed_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
     all_itx_propagated_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
-    3
     for idx, configured_propagator in enumerate(propagators):
+        print(f'Running BLS for force model #{idx + 1}')
+
+        if configurations[idx]['enable_atmospheric_drag']:
+            print('Atmospheric drag enabled')
+            state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, sat_list[sc_name]['cd']])
+        else:
+            print('Atmospheric drag disabled')
+            state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ])
+
         propagator = configured_propagator
         apriori_state_vector = state_vector.copy()
 
@@ -333,7 +345,13 @@ def main():
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
                 print(f'Observation {i + 1}')
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
-                observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000, sat_list[sc_name]['cd']])
+                if configurations[idx]['enable_atmospheric_drag']:
+                    observed_cd = sat_list[sc_name]['cd']
+                    print('observed_cd: ', observed_cd)
+                    observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000, observed_cd])
+                else:
+                    observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
+
                 propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci, cr=sat_list[sc_name]['cr'], cross_section=sat_list[sc_name]['cross_section'], **config)
                 
                 # Storing the observed and propagated positions for each timestep
@@ -342,30 +360,33 @@ def main():
 
                 # (Observed - Computed)
                 residual = observed_state - propagated_state
+
+                # constrain Cd to be of magnitude 5
+                if configurations[idx]['enable_atmospheric_drag']:
+                    residual[-1] = 5 - np.linalg.norm(residual[:3])
+                    print('capping Cd to: ', residual[-1])
                 residuals_vector = residual.reshape(-1, 1)
                 total_residuals_vector = np.vstack([total_residuals_vector, residuals_vector])
 
-                # Construct observation covariance matrix for this point
-                sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws'], 1e8]) * 1000 #NOTE: added 1e8 for Cd
+                # Inside the loop where total_observation_cov_matrix is constructed
+                if configurations[idx]['enable_atmospheric_drag']:
+                    sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws'], 1e5]) * 1000
+                else:
+                    sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws']]) * 1000
+
                 observation_cov_matrix = np.diag(sigma_vec ** 2)
                 total_observation_cov_matrix = scipy.linalg.block_diag(total_observation_cov_matrix, observation_cov_matrix)
 
                 design_matrix_observation = np.zeros((len(apriori_state_vector), len(apriori_state_vector)))
                 perturbation = 1e-2  # 1 cm perturbation #NOTE: this being applied to pos, vel and Cd
+
                 # Numerically determine design matrix for this observation
-                for j in range(len(apriori_state_vector)): 
-                    print(f'Performing perturbation {j + 1}')
+                for j in range(len(apriori_state_vector)):
                     perturbed_state_vector = apriori_state_vector.copy()
                     perturbed_state_vector[j] += perturbation
 
-                    # Re-configure the propagator if we are adjusting the drag coefficient
-                    if j == len(apriori_state_vector) - 1:
-                        propagator = configure_force_models(propagator, sat_list[sc_name]['cr'], sat_list[sc_name]['cross_section'], perturbed_state_vector[j], **config)
-
-                    # Propagate using the perturbed state vector
                     perturbed_propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, perturbed_state_vector, eci, sat_list[sc_name]['cr'], sat_list[sc_name]['cross_section'], **config)
 
-                    # Calculate partial derivatives for each observation component
                     for k in range(len(perturbed_propagated_state)):
                         design_matrix_observation[k, j] = (perturbed_propagated_state[k] - propagated_state[k]) / perturbation
 
@@ -373,8 +394,10 @@ def main():
 
             Residuals_dict[idx] = total_residuals_vector # store residuals
             print(f'Magnitude of pos residuals: {np.linalg.norm(total_residuals_vector[:3])}')
-            print(f'Magnitude of vel residuals: {np.linalg.norm(total_residuals_vector[3:])}')
-            print(f'Cd residual: {np.linalg.norm(total_residuals_vector[-1])}')
+            print(f'Magnitude of vel residuals: {np.linalg.norm(total_residuals_vector[3:6])}')
+
+            if configurations[idx]['enable_atmospheric_drag']:
+                print('Cd residual: ', total_residuals_vector[-1])
             
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
@@ -383,6 +406,7 @@ def main():
 
             # Update state vector
             delta_X = np.linalg.inv(HtWH) @ HtWY
+            print(f'delta_X: {delta_X.flatten()}')
             apriori_state_vector += delta_X.flatten()
             Delta_xs_dict[iteration] = delta_X.flatten()
 
