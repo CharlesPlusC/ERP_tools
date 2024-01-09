@@ -37,6 +37,12 @@ from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 
+SATELLITE_MASS = 800.0
+INTEGRATOR_MIN_STEP = 0.001
+INTEGRATOR_MAX_STEP = 15.0
+INTEGRATOR_INIT_STEP = 15.0
+POSITION_TOLERANCE = 1e-3 # 1 mm
+
 def std_dev_from_lower_triangular(lower_triangular_data):
     cov_matrix = np.zeros((6, 6))
     row, col = np.tril_indices(6)
@@ -63,21 +69,28 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
 
     return times, state_vectors
 
-def generate_ephemeris_and_extract_data(propagator, start_date, end_date, time_step):
-
-    ephemeris = propagator.getEphemerisGenerator().getGeneratedEphemeris()
-    times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, start_date, end_date, time_step)
-
-    return (times, state_vectors)
-
 def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame, cr=None, cross_section=None, **config_flags):
-
+    
     if len(initial_state_vector) == 7:
+        #TODO: need something more elegant than this again, but for n
         x, y, z, vx, vy, vz, cd = initial_state_vector 
         # Extract cd from the state vector 
         cd = initial_state_vector[-1]  # Assuming cd is the last element in the state vector
         # Re-configure the propagator to include Cd from the state vector
-        propagator = configure_force_models(propagator, cr, cross_section, cd, **config_flags)
+        Orbit0_ECI = CartesianOrbit(PVCoordinates(Vector3D(float(x), float(y), float(z)),
+                                                Vector3D(float(vx), float(vy), float(vz))),
+                                    frame,
+                                    start_date,
+                                    Constants.WGS84_EARTH_MU)
+        initialOrbit = Orbit0_ECI
+        tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, initialOrbit, initialOrbit.getType())
+        integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
+        integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
+        initialState = SpacecraftState(initialOrbit, SATELLITE_MASS)
+        newpropagator = NumericalPropagator(integrator)
+        newpropagator.setOrbitType(OrbitType.CARTESIAN)
+        newpropagator.setInitialState(initialState)
+        newpropagator = configure_force_models(newpropagator,cr,cross_section, cd,**config_flags)
 
     elif len(initial_state_vector) == 6:
         x, y, z, vx, vy, vz = initial_state_vector
@@ -242,13 +255,13 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     return spacex_ephem_df
 
 def main():
-
-    spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
     SATELLITE_MASS = 800.0
     INTEGRATOR_MIN_STEP = 0.001
     INTEGRATOR_MAX_STEP = 15.0
     INTEGRATOR_INIT_STEP = 15.0
     POSITION_TOLERANCE = 1e-3
+
+    spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
     sat_list = {    
     'STARLINK-30309': {
@@ -257,7 +270,7 @@ def main():
         'sic_id': '000',  # For writing in CPF files
         'mass': 800.0, # kg; v2 mini
         'cross_section': 10.0, # m2; TODO: get proper value
-        'cd': 1, # TODO: compute proper value
+        'cd': 2.2, # TODO: compute proper value
         'cr': 1.5  # TODO: compute proper value
                     }
     }
@@ -306,8 +319,8 @@ def main():
         propagators.append(configured_propagator)
 
     max_iterations = 10
-    points_to_use = 5  # Number of observations to use
-    convergence_threshold = 1e-3 # Convergence threshold for delta_X
+    points_to_use = 35  # Number of observations to use
+    convergence_threshold = 1e-6 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
@@ -347,7 +360,6 @@ def main():
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
                 if configurations[idx]['enable_atmospheric_drag']:
                     observed_cd = sat_list[sc_name]['cd']
-                    print('observed_cd: ', observed_cd)
                     observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000, observed_cd])
                 else:
                     observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
@@ -363,8 +375,12 @@ def main():
 
                 # constrain Cd to be of magnitude 5
                 if configurations[idx]['enable_atmospheric_drag']:
-                    residual[-1] = 5 - np.linalg.norm(residual[:3])
-                    print('capping Cd to: ', residual[-1])
+                    if residual[-1] > 5:
+                        residual[-1] = 5 - np.linalg.norm(residual[:3])
+                    elif residual[-1] < -5:
+                        residual[-1] = -5 + np.linalg.norm(residual[:3])
+                        raise Warning('Cd is negative')
+                    
                 residuals_vector = residual.reshape(-1, 1)
                 total_residuals_vector = np.vstack([total_residuals_vector, residuals_vector])
 
@@ -395,9 +411,8 @@ def main():
             Residuals_dict[idx] = total_residuals_vector # store residuals
             print(f'Magnitude of pos residuals: {np.linalg.norm(total_residuals_vector[:3])}')
             print(f'Magnitude of vel residuals: {np.linalg.norm(total_residuals_vector[3:6])}')
-
             if configurations[idx]['enable_atmospheric_drag']:
-                print('Cd residual: ', total_residuals_vector[-1])
+                print(f'Magnitude of Cd residual: {np.linalg.norm(total_residuals_vector[-1])}')
             
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
@@ -432,13 +447,13 @@ def main():
         a_posteriori_cov_matrix = a_priori_cov_matrix * sigma_zero_squared
 
         # Plotting the a posteriori covariance matrix
-        plt.figure(figsize=(8, 7))
-        plt.rcParams.update({'font.size': 8})  # Set font size
-        labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'cd']
-        sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
-        plt.title('A Posteriori Covariance Matrix')
-        plt.tight_layout()
-        plt.show()
+        # plt.figure(figsize=(8, 7))
+        # plt.rcParams.update({'font.size': 8})  # Set font size
+        # labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'cd']
+        # sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
+        # plt.title('A Posteriori Covariance Matrix')
+        # plt.tight_layout()
+        # plt.show()
 
 ########## Convergence Plots ##########
     # Convert lists to numpy arrays for easier handling
