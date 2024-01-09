@@ -70,36 +70,40 @@ def generate_ephemeris_and_extract_data(propagator, start_date, end_date, time_s
 
     return (times, state_vectors)
 
-def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame):
+def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame, cr, cross_section, **config_flags):
+    # Extract cd from the state vector
+    cd = initial_state_vector[-1]  # Assuming cd is the last element in the state vector
 
-    x, y, z, vx, vy, vz = initial_state_vector
+    # Configure the force models with the current cd value
+    configured_propagator = configure_force_models(propagator, cr, cross_section, cd, **config_flags)
+
+    # Propagation using the configured propagator
+    x, y, z, vx, vy, vz = initial_state_vector[:-1]  # Exclude cd from the state vector for orbit initialization
     initial_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(x), float(y), float(z)),
                                                 Vector3D(float(vx), float(vy), float(vz))),
                                     frame,
                                     start_date,
                                     Constants.WGS84_EARTH_MU)
-    
 
     initial_state = SpacecraftState(initial_orbit)
-    propagator.setInitialState(initial_state)
-    final_state = propagator.propagate(end_date)
+    configured_propagator.setInitialState(initial_state)
+    final_state = configured_propagator.propagate(end_date)
 
     pv_coordinates = final_state.getPVCoordinates()
     position = [pv_coordinates.getPosition().getX(), pv_coordinates.getPosition().getY(), pv_coordinates.getPosition().getZ()]
     velocity = [pv_coordinates.getVelocity().getX(), pv_coordinates.getVelocity().getY(), pv_coordinates.getVelocity().getZ()]
 
-    return position + velocity
+    return position + velocity + [cd]  # Include cd in the returned state
 
-def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True, enable_third_body=True,
-                        enable_solar_radiation=True, enable_relativity=True, enable_atmospheric_drag=True, enable_ceres=True):
+def configure_force_models(propagator,cr, cross_section,cd_var, **config_flags):
     # Earth gravity field with degree 64 and order 64
-    if enable_gravity:
+    if config_flags.get('enable_gravity', True):
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
     # Moon and Sun perturbations
-    if enable_third_body:
+    if config_flags.get('enable_third_body', True):
         moon = CelestialBodyFactory.getMoon()
         sun = CelestialBodyFactory.getSun()
         moon_3dbodyattraction = ThirdBodyAttraction(moon)
@@ -108,7 +112,7 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
         propagator.addForceModel(sun_3dbodyattraction)
 
     # Solar radiation pressure
-    if enable_solar_radiation:
+    if config_flags.get('enable_solar_radiation', True):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(cross_section)
         cr = float(cr)
@@ -117,18 +121,18 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
         propagator.addForceModel(solarRadiationPressure)
 
     # Relativity
-    if enable_relativity:
+    if config_flags.get('enable_relativity', True):
         relativity = Relativity(orekit_constants.EIGEN5C_EARTH_MU)
         propagator.addForceModel(relativity)
 
     # Atmospheric drag
-    if enable_atmospheric_drag:
+    if config_flags.get('enable_atmospheric_drag', True):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd_var))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
@@ -137,20 +141,6 @@ def configure_force_models(propagator,cr, cd, cross_section, enable_gravity=True
     #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data) # pass the time and radiation data to the force model
 
     return propagator
-
-def create_symmetric_corr_matrix(lower_triangular_data):
-    # Create the symmetric covariance matrix
-    cov_matrix = np.zeros((6, 6))
-    row, col = np.tril_indices(6)
-    cov_matrix[row, col] = lower_triangular_data
-    cov_matrix = cov_matrix + cov_matrix.T - np.diag(cov_matrix.diagonal())
-
-    # Convert to correlation matrix
-    std_dev = np.sqrt(np.diag(cov_matrix))
-    corr_matrix = np.divide(cov_matrix, std_dev[:, None])
-    corr_matrix = np.divide(corr_matrix, std_dev[None, :])
-    np.fill_diagonal(corr_matrix, 1)  # Fill diagonal with 1s for self-correlation
-    return corr_matrix
 
 def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     """
@@ -248,12 +238,11 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
 def main():
 
     spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
-    #convert the MEME coordinates to GCRF coordinates
     SATELLITE_MASS = 800.0
     INTEGRATOR_MIN_STEP = 0.001
     INTEGRATOR_MAX_STEP = 15.0
     INTEGRATOR_INIT_STEP = 15.0
-    POSITION_TOLERANCE = 1e-5
+    POSITION_TOLERANCE = 1e-3
 
     sat_list = {    
     'STARLINK-30309': {
@@ -262,8 +251,8 @@ def main():
         'sic_id': '000',  # For writing in CPF files
         'mass': 800.0, # kg; v2 mini
         'cross_section': 10.0, # m2; TODO: get proper value
-        'cd': 1, # TODO: compute proper value
-        'cr': 2.2  # TODO: compute proper value
+        'cd': 2.2, # TODO: compute proper value
+        'cr': 1.5  # TODO: compute proper value
                     }
     }
 
@@ -283,7 +272,8 @@ def main():
     initial_VX = spacex_ephem_dfwcov['u'][0]*1000
     initial_VY = spacex_ephem_dfwcov['v'][0]*1000
     initial_VZ = spacex_ephem_dfwcov['w'][0]*1000
-    state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ])
+    initial_cd = 2.2  # TODO: get this from BSTAR?
+    state_vector = np.array([initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, initial_cd])
     
     Orbit0_ECI = CartesianOrbit(PVCoordinates(Vector3D(float(state_vector[0]), float(state_vector[1]), float(state_vector[2])),
                                             Vector3D(float(state_vector[3]), float(state_vector[4]), float(state_vector[5]))),
@@ -308,18 +298,16 @@ def main():
         propagator = NumericalPropagator(integrator)
         propagator.setOrbitType(OrbitType.CARTESIAN)
         propagator.setInitialState(initialState)
-        configured_propagator = configure_force_models(propagator,sat_list[sc_name]['cr'], sat_list[sc_name]['cd'],
-                                                              sat_list[sc_name]['cross_section'], **config)
+        configured_propagator = configure_force_models(propagator,sat_list[sc_name]['cr'],sat_list[sc_name]['cross_section'], float(state_vector[-1]),**config)
         propagators.append(configured_propagator)
 
     max_iterations = 10
-    points_to_use = 20  # Number of observations to use
+    points_to_use = 15  # Number of observations to use
     convergence_threshold = 1e-6 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
     Residuals_dict = {}
-    estimation_errors_list = []
 
     num_propagators = len(propagators)
     num_iterations = max_iterations
@@ -329,25 +317,24 @@ def main():
     # Initialize 4D lists to store observed and propagated positions
     all_itx_observed_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
     all_itx_propagated_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
-    
-    true_state = np.array([spacex_ephem_dfwcov['x'][0]*1000, spacex_ephem_dfwcov['y'][0]*1000, spacex_ephem_dfwcov['z'][0]*1000, spacex_ephem_dfwcov['u'][0]*1000, spacex_ephem_dfwcov['v'][0]*1000, spacex_ephem_dfwcov['w'][0]*1000])
+    3
     for idx, configured_propagator in enumerate(propagators):
         propagator = configured_propagator
         apriori_state_vector = state_vector.copy()
-        errors_for_this_propagator = [] 
 
         for iteration in range(max_iterations):
             print(f'BLS Iteration {iteration + 1}')
 
             # Initializing matrices for the iteration
             total_residuals_vector = np.zeros((0, 1))
-            total_design_matrix = np.zeros((0, 6))  # 6 parameters to estimate
+            total_design_matrix = np.zeros((0, len(state_vector)))  # no parameters to estimate
             total_observation_cov_matrix = np.zeros((0, 0))
 
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
+                print(f'Observation {i + 1}')
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
-                observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
-                propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci)
+                observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000, sat_list[sc_name]['cd']])
+                propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci, cr=sat_list[sc_name]['cr'], cross_section=sat_list[sc_name]['cross_section'], **config)
                 
                 # Storing the observed and propagated positions for each timestep
                 all_itx_observed_positions[idx, iteration, i, :] = observed_state[:3]
@@ -359,34 +346,38 @@ def main():
                 total_residuals_vector = np.vstack([total_residuals_vector, residuals_vector])
 
                 # Construct observation covariance matrix for this point
-                sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws']]) * 1000
+                sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws'], 1e8]) * 1000 #NOTE: added 1e8 for Cd
                 observation_cov_matrix = np.diag(sigma_vec ** 2)
                 total_observation_cov_matrix = scipy.linalg.block_diag(total_observation_cov_matrix, observation_cov_matrix)
 
-                # Initialize a 6x6 matrix for this observation
                 design_matrix_observation = np.zeros((len(apriori_state_vector), len(apriori_state_vector)))
-                perturbation = 0.01  # 1 cm perturbation
+                perturbation = 1e-2  # 1 cm perturbation #NOTE: this being applied to pos, vel and Cd
                 # Numerically determine design matrix for this observation
-                for j in range(len(apriori_state_vector)):  # Assuming state_vector has 6 elements
+                for j in range(len(apriori_state_vector)): 
+                    print(f'Performing perturbation {j + 1}')
                     perturbed_state_vector = apriori_state_vector.copy()
                     perturbed_state_vector[j] += perturbation
-                    perturbed_propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, perturbed_state_vector, frame=eci)
-                    
+
+                    # Re-configure the propagator if we are adjusting the drag coefficient
+                    if j == len(apriori_state_vector) - 1:
+                        propagator = configure_force_models(propagator, sat_list[sc_name]['cr'], sat_list[sc_name]['cross_section'], perturbed_state_vector[j], **config)
+
+                    # Propagate using the perturbed state vector
+                    perturbed_propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, perturbed_state_vector, eci, sat_list[sc_name]['cr'], sat_list[sc_name]['cross_section'], **config)
+
                     # Calculate partial derivatives for each observation component
-                    for k in range(6):
+                    for k in range(len(perturbed_propagated_state)):
                         design_matrix_observation[k, j] = (perturbed_propagated_state[k] - propagated_state[k]) / perturbation
 
-                # Add this observation's design matrix to the total design matrix
                 total_design_matrix = np.vstack([total_design_matrix, design_matrix_observation])
 
-            Residuals_dict[idx] = total_residuals_vector
+            Residuals_dict[idx] = total_residuals_vector # store residuals
             print(f'Magnitude of pos residuals: {np.linalg.norm(total_residuals_vector[:3])}')
             print(f'Magnitude of vel residuals: {np.linalg.norm(total_residuals_vector[3:])}')
-                    # Store the residuals for this configuration
+            print(f'Cd residual: {np.linalg.norm(total_residuals_vector[-1])}')
             
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
-
             HtWH = total_design_matrix.T @ Wk @ total_design_matrix
             HtWY = total_design_matrix.T @ Wk @ total_residuals_vector
 
@@ -394,9 +385,6 @@ def main():
             delta_X = np.linalg.inv(HtWH) @ HtWY
             apriori_state_vector += delta_X.flatten()
             Delta_xs_dict[iteration] = delta_X.flatten()
-            # Calculate and store the covariance matrix for the current iteration
-            estimation_error = apriori_state_vector - true_state
-            errors_for_this_propagator.append(estimation_error)
 
             # Check for convergence
             print("norm of delta_X: ", np.linalg.norm(delta_X))
@@ -408,23 +396,21 @@ def main():
             if iteration == max_iterations - 1:
                 break
 
-        estimation_errors_list.append(np.array(errors_for_this_propagator))
-
         # Calculate a priori covariance matrix
         a_priori_cov_matrix = np.linalg.inv(total_design_matrix.T @ Wk @ total_design_matrix)
 
         # Calculate sigma_zero_squared
         num_observations = len(total_residuals_vector)
-        num_parameters = len(a_priori_cov_matrix)  # Assuming square matrix with size = number of parameters
+        num_parameters = len(a_priori_cov_matrix)
         sigma_zero_squared = (total_residuals_vector.T @ Wk @ total_residuals_vector) / (num_observations - num_parameters)
 
-        # Calculate a posteriori covariance matrix
+        # Calculate a posteriori covariance matrix (Marek's method)
         a_posteriori_cov_matrix = a_priori_cov_matrix * sigma_zero_squared
 
         # Plotting the a posteriori covariance matrix
         plt.figure(figsize=(8, 7))
         plt.rcParams.update({'font.size': 8})  # Set font size
-        labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+        labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'cd']
         sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
         plt.title('A Posteriori Covariance Matrix')
         plt.tight_layout()
@@ -471,7 +457,7 @@ def main():
         #log the y axis
         ax.set_title(f'Force Model #{propagator_idx + 1}')
         # add the final position error to the plot as text
-        ax.text(0.05, 0.9, f'Final Position Error: {norm_difference[-1]:.2e} m', transform=ax.transAxes)
+        ax.text(0.05, 0.9, f'Final Position Error: {norm_difference[-1]:.5e} m', transform=ax.transAxes)
         ax.set_xlabel('Observation')
         ax.set_ylabel('Norm Difference (m)')
         ax.grid(True)
