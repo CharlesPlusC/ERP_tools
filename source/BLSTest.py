@@ -263,7 +263,7 @@ def main():
         'mass': 800.0, # kg; v2 mini
         'cross_section': 10.0, # m2; TODO: get proper value
         'cd': 1, # TODO: compute proper value
-        'cr': 1  # TODO: compute proper value
+        'cr': 2.2  # TODO: compute proper value
                     }
     }
 
@@ -312,13 +312,14 @@ def main():
                                                               sat_list[sc_name]['cross_section'], **config)
         propagators.append(configured_propagator)
 
-    max_iterations = 25
-    points_to_use = 15  # Number of observations to use
-    convergence_threshold = 1e-3 # Convergence threshold for delta_X
+    max_iterations = 10
+    points_to_use = 20  # Number of observations to use
+    convergence_threshold = 1e-6 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
     Residuals_dict = {}
+    estimation_errors_list = []
 
     num_propagators = len(propagators)
     num_iterations = max_iterations
@@ -329,15 +330,14 @@ def main():
     all_itx_observed_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
     all_itx_propagated_positions = np.zeros((num_propagators, num_iterations, num_timesteps, num_components))
     
-    cov_matx_dict = {}
     true_state = np.array([spacex_ephem_dfwcov['x'][0]*1000, spacex_ephem_dfwcov['y'][0]*1000, spacex_ephem_dfwcov['z'][0]*1000, spacex_ephem_dfwcov['u'][0]*1000, spacex_ephem_dfwcov['v'][0]*1000, spacex_ephem_dfwcov['w'][0]*1000])
     for idx, configured_propagator in enumerate(propagators):
         propagator = configured_propagator
         apriori_state_vector = state_vector.copy()
-        estimation_errors = []
+        errors_for_this_propagator = [] 
 
         for iteration in range(max_iterations):
-            print(f'Iteration {iteration + 1}')
+            print(f'BLS Iteration {iteration + 1}')
 
             # Initializing matrices for the iteration
             total_residuals_vector = np.zeros((0, 1))
@@ -346,14 +346,14 @@ def main():
 
             for i, row in spacex_ephem_dfwcov.head(points_to_use).iterrows():
                 measurement_epoch = datetime_to_absolutedate(row['UTC'].to_pydatetime())
-                propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci)
                 observed_state = np.array([row['x']*1000, row['y']*1000, row['z']*1000, row['u']*1000, row['v']*1000, row['w']*1000])
+                propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, apriori_state_vector, frame=eci)
                 
                 # Storing the observed and propagated positions for each timestep
                 all_itx_observed_positions[idx, iteration, i, :] = observed_state[:3]
                 all_itx_propagated_positions[idx, iteration, i, :] = propagated_state[:3]
 
-                # Compute residual (Observed - Computed)
+                # (Observed - Computed)
                 residual = observed_state - propagated_state
                 residuals_vector = residual.reshape(-1, 1)
                 total_residuals_vector = np.vstack([total_residuals_vector, residuals_vector])
@@ -361,85 +361,74 @@ def main():
                 # Construct observation covariance matrix for this point
                 sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws']]) * 1000
                 observation_cov_matrix = np.diag(sigma_vec ** 2)
-                
                 total_observation_cov_matrix = scipy.linalg.block_diag(total_observation_cov_matrix, observation_cov_matrix)
 
-                # Sensitivity matrix (partial derivatives), here assumed as identity
-                design_matrix = np.identity(6)
-                total_design_matrix = np.vstack([total_design_matrix, design_matrix])
+                # Initialize a 6x6 matrix for this observation
+                design_matrix_observation = np.zeros((len(apriori_state_vector), len(apriori_state_vector)))
+                perturbation = 0.01  # 1 cm perturbation
+                # Numerically determine design matrix for this observation
+                for j in range(len(apriori_state_vector)):  # Assuming state_vector has 6 elements
+                    perturbed_state_vector = apriori_state_vector.copy()
+                    perturbed_state_vector[j] += perturbation
+                    perturbed_propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, perturbed_state_vector, frame=eci)
+                    
+                    # Calculate partial derivatives for each observation component
+                    for k in range(6):
+                        design_matrix_observation[k, j] = (perturbed_propagated_state[k] - propagated_state[k]) / perturbation
 
+                # Add this observation's design matrix to the total design matrix
+                total_design_matrix = np.vstack([total_design_matrix, design_matrix_observation])
+
+            Residuals_dict[idx] = total_residuals_vector
             print(f'Magnitude of pos residuals: {np.linalg.norm(total_residuals_vector[:3])}')
             print(f'Magnitude of vel residuals: {np.linalg.norm(total_residuals_vector[3:])}')
+                    # Store the residuals for this configuration
+            
             # Weight matrix (inverse of observation covariance matrix)
             Wk = np.linalg.inv(total_observation_cov_matrix)
 
-            # Least squares calculations
             HtWH = total_design_matrix.T @ Wk @ total_design_matrix
             HtWY = total_design_matrix.T @ Wk @ total_residuals_vector
 
             # Update state vector
             delta_X = np.linalg.inv(HtWH) @ HtWY
             apriori_state_vector += delta_X.flatten()
-            Delta_xs_dict[iteration] = delta_X.flatten()            
+            Delta_xs_dict[iteration] = delta_X.flatten()
             # Calculate and store the covariance matrix for the current iteration
             estimation_error = apriori_state_vector - true_state
-            estimation_errors.append(estimation_error)
+            errors_for_this_propagator.append(estimation_error)
 
             # Check for convergence
             print("norm of delta_X: ", np.linalg.norm(delta_X))
             if np.linalg.norm(delta_X) < convergence_threshold:
                 print("Convergence thresh. reached")
                 break
+
             #check max iterations
             if iteration == max_iterations - 1:
-                print("Max it. reached")
                 break
 
-        estimation_errors_matrix = np.array(estimation_errors)
-        covariance_matrix = np.cov(estimation_errors_matrix.T)
-        cov_matx_dict[idx] = covariance_matrix
+        estimation_errors_list.append(np.array(errors_for_this_propagator))
 
-        # Store the residuals for this configuration
-        Residuals_dict[idx] = total_residuals_vector
-    
-    def covariance_to_correlation(cov_matrix):
-        """Convert a covariance matrix to a correlation matrix."""
-        d = np.sqrt(np.diag(cov_matrix))
-        d_inv = np.reciprocal(d, where=d!=0)  # Avoid division by zero
-        corr_matrix = cov_matrix * np.outer(d_inv, d_inv)
-        return corr_matrix
+        # Calculate a priori covariance matrix
+        a_priori_cov_matrix = np.linalg.inv(total_design_matrix.T @ Wk @ total_design_matrix)
 
-    num_matrices = len(cov_matx_dict)
-    labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+        # Calculate sigma_zero_squared
+        num_observations = len(total_residuals_vector)
+        num_parameters = len(a_priori_cov_matrix)  # Assuming square matrix with size = number of parameters
+        sigma_zero_squared = (total_residuals_vector.T @ Wk @ total_residuals_vector) / (num_observations - num_parameters)
 
+        # Calculate a posteriori covariance matrix
+        a_posteriori_cov_matrix = a_priori_cov_matrix * sigma_zero_squared
 
-    # Plotting covariance matrices
-    plt.figure(figsize=(8 * num_matrices, 7))
-    for idx, cov_matrix in cov_matx_dict.items():
-        plt.subplot(1, num_matrices, idx + 1)
+        # Plotting the a posteriori covariance matrix
+        plt.figure(figsize=(8, 7))
         plt.rcParams.update({'font.size': 8})  # Set font size
-        #make sure format is scientific notation
-        sns.heatmap(cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
-        plt.title(f'Covariance Matrix: {idx}')
-
-    plt.tight_layout()
-    plt.show()
-
-    # Convert covariance matrices to correlation matrices
-    for idx, cov_matrix in cov_matx_dict.items():
-        corr_matrix = covariance_to_correlation(cov_matrix)
-        cov_matx_dict[idx] = corr_matrix
-
-    # Plotting correlation matrices
-    plt.figure(figsize=(8 * num_matrices, 7))
-    for idx, corr_matrix in cov_matx_dict.items():
-        plt.subplot(1, num_matrices, idx + 1)
-        plt.rcParams.update({'font.size': 8})  # Set font size
-        sns.heatmap(corr_matrix, annot=True, fmt=".2f", xticklabels=labels, yticklabels=labels, cmap="viridis")
-        plt.title(f'Correlation Matrix: {idx}')
-
-    plt.tight_layout()
-    plt.show()
+        labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+        sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
+        plt.title('A Posteriori Covariance Matrix')
+        plt.tight_layout()
+        plt.show()
 
 ########## Convergence Plots ##########
     # Convert lists to numpy arrays for easier handling
@@ -452,7 +441,6 @@ def main():
 
     # Using the 'Dark2' colormap
     colormap = plt.get_cmap('nipy_spectral')(np.linspace(0, 1, num_iterations))
-
     fig, axes = plt.subplots(num_propagators, 1, figsize=(15, 5 * num_propagators), sharex=True)
 
     # Initialize max and min values for y-axis limits
@@ -481,7 +469,9 @@ def main():
 
         ax.set_ylim(min_norm_diff, max_norm_diff)
         #log the y axis
-        ax.set_title(f'Propagator #{propagator_idx + 1} - Position Norm Difference')
+        ax.set_title(f'Force Model #{propagator_idx + 1}')
+        # add the final position error to the plot as text
+        ax.text(0.05, 0.9, f'Final Position Error: {norm_difference[-1]:.2e} m', transform=ax.transAxes)
         ax.set_xlabel('Observation')
         ax.set_ylabel('Norm Difference (m)')
         ax.grid(True)
