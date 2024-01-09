@@ -447,13 +447,16 @@ def main():
         a_posteriori_cov_matrix = a_priori_cov_matrix * sigma_zero_squared
 
         # Plotting the a posteriori covariance matrix
-        # plt.figure(figsize=(8, 7))
-        # plt.rcParams.update({'font.size': 8})  # Set font size
-        # labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'cd']
-        # sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
-        # plt.title('A Posteriori Covariance Matrix')
-        # plt.tight_layout()
-        # plt.show()
+        plt.figure(figsize=(8, 7))
+        plt.rcParams.update({'font.size': 8})  # Set font size
+        if configurations[idx]['enable_atmospheric_drag']:
+            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'cd']
+        else:
+            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+        sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
+        plt.title('A Posteriori Covariance Matrix')
+        plt.tight_layout()
+        plt.show()
 
 ########## Convergence Plots ##########
     # Convert lists to numpy arrays for easier handling
