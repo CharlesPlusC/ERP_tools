@@ -255,7 +255,7 @@ def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, force
     """
     Extracts acceleration data using a specified force model and optionally computes RTN components.
 
-    :param state_vector_data: Dictionary containing state vectors and corresponding times.
+    :param state_vector_data: Single state vector or Dictionary containing state vectors and corresponding times.
     :param TLE_epochDate: The initial epoch date for TLE.
     :param SATELLITE_MASS: The mass of the satellite.
     :param forceModel: The instance of the force model to be used.
@@ -268,6 +268,11 @@ def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, force
         if norm == 0:
             raise ValueError("Cannot normalize zero vector")
         return Vector3D(vector.getX() / norm, vector.getY() / norm, vector.getZ() / norm)
+
+    # Check if state_vector_data is a dictionary or a single state vector
+    if not isinstance(state_vector_data, dict):
+        # Assume state_vector_data is a single state vector
+        state_vector_data = {'single_state': ([0], [state_vector_data])}
 
     # Extract states and times for the ephemeris
     states_and_times = state_vector_data[next(iter(state_vector_data))]
