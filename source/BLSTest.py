@@ -72,6 +72,7 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
 def propagate_state_using_propagator(propagator, start_date, end_date, initial_state_vector, frame, cr=None, cross_section=None, **config_flags):
     
     if len(initial_state_vector) == 7:
+        print("using extended state vector")
         #TODO: need something more elegant than this again, but for n
         x, y, z, vx, vy, vz, cd = initial_state_vector 
         # Extract cd from the state vector 
@@ -254,12 +255,17 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
 
     return spacex_ephem_df
 
+
+
+# Reconfig all this so that it can take in any trajectory 
+# if covariance is not provided for the trajectory then assume they are perfect and set all covariances to 0
+
 def main():
     SATELLITE_MASS = 800.0
     INTEGRATOR_MIN_STEP = 0.001
     INTEGRATOR_MAX_STEP = 15.0
     INTEGRATOR_INIT_STEP = 15.0
-    POSITION_TOLERANCE = 1e-3
+    POSITION_TOLERANCE = 1e-2
 
     spacex_ephem_dfwcov = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
@@ -320,7 +326,7 @@ def main():
 
     max_iterations = 10
     points_to_use = 35  # Number of observations to use
-    convergence_threshold = 1e-6 # Convergence threshold for delta_X
+    convergence_threshold = 1e-3 # Convergence threshold for delta_X
 
     # Initialize dictionaries for storing results
     Delta_xs_dict = {}
@@ -372,14 +378,6 @@ def main():
 
                 # (Observed - Computed)
                 residual = observed_state - propagated_state
-
-                # constrain Cd to be of magnitude 5
-                if configurations[idx]['enable_atmospheric_drag']:
-                    if residual[-1] > 5:
-                        residual[-1] = 5 - np.linalg.norm(residual[:3])
-                    elif residual[-1] < -5:
-                        residual[-1] = -5 + np.linalg.norm(residual[:3])
-                        raise Warning('Cd is negative')
                     
                 residuals_vector = residual.reshape(-1, 1)
                 total_residuals_vector = np.vstack([total_residuals_vector, residuals_vector])
@@ -390,23 +388,25 @@ def main():
                 else:
                     sigma_vec = np.array([row['sigma_xs'], row['sigma_ys'], row['sigma_zs'], row['sigma_us'], row['sigma_vs'], row['sigma_ws']]) * 1000
 
-                observation_cov_matrix = np.diag(sigma_vec ** 2)
+                observation_cov_matrix = np.diag(1/(sigma_vec ** 2))
                 total_observation_cov_matrix = scipy.linalg.block_diag(total_observation_cov_matrix, observation_cov_matrix)
 
-                design_matrix_observation = np.zeros((len(apriori_state_vector), len(apriori_state_vector)))
-                perturbation = 1e-2  # 1 cm perturbation #NOTE: this being applied to pos, vel and Cd
+                num_obs_elements = len(observed_state)
+                design_matrix_observation = np.zeros((num_obs_elements, len(apriori_state_vector)))
+
+                perturbation_size = 1  # 10 m perturbation
 
                 # Numerically determine design matrix for this observation
                 for j in range(len(apriori_state_vector)):
                     perturbed_state_vector = apriori_state_vector.copy()
-                    perturbed_state_vector[j] += perturbation
-
+                    perturbed_state_vector[j] += perturbation_size
                     perturbed_propagated_state = propagate_state_using_propagator(propagator, Orbit0_epoch, measurement_epoch, perturbed_state_vector, eci, sat_list[sc_name]['cr'], sat_list[sc_name]['cross_section'], **config)
-
                     for k in range(len(perturbed_propagated_state)):
-                        design_matrix_observation[k, j] = (perturbed_propagated_state[k] - propagated_state[k]) / perturbation
-
+                        design_matrix_observation[k, j] = (perturbed_propagated_state[k] - propagated_state[k]) / perturbation_size
                 total_design_matrix = np.vstack([total_design_matrix, design_matrix_observation])
+
+            expected_rows_design_mat_rows = points_to_use * num_obs_elements
+            assert total_design_matrix.shape == (expected_rows_design_mat_rows, len(apriori_state_vector)), f"Design matrix has shape{total_design_matrix.shape}, expected {expected_rows_design_mat_rows} rows"
 
             Residuals_dict[idx] = total_residuals_vector # store residuals
             print(f'Magnitude of pos residuals: {np.linalg.norm(total_residuals_vector[:3])}')
@@ -415,10 +415,14 @@ def main():
                 print(f'Magnitude of Cd residual: {np.linalg.norm(total_residuals_vector[-1])}')
             
             # Weight matrix (inverse of observation covariance matrix)
+            print(f'first three submatrices of total_observation_cov_matrix:\n{total_observation_cov_matrix[:3]}')
             Wk = np.linalg.inv(total_observation_cov_matrix)
-            HtWH = total_design_matrix.T @ Wk @ total_design_matrix
+            print(f"first three submatrices of Wk:\n{Wk[:3]}")
+            print(f"first three submatrices of total_design_matrix:\n{total_design_matrix[:3]}")
+            HtWH = total_design_matrix.T @ Wk @ total_design_matrix # normal matrix
+            print(f'first three submatrices of HtWH:\n{HtWH[:3, :3]}')
             HtWY = total_design_matrix.T @ Wk @ total_residuals_vector
-
+             
             # Update state vector
             delta_X = np.linalg.inv(HtWH) @ HtWY
             print(f'delta_X: {delta_X.flatten()}')
@@ -436,7 +440,7 @@ def main():
                 break
 
         # Calculate a priori covariance matrix
-        a_priori_cov_matrix = np.linalg.inv(total_design_matrix.T @ Wk @ total_design_matrix)
+        a_priori_cov_matrix = np.linalg.inv(HtWH)
 
         # Calculate sigma_zero_squared
         num_observations = len(total_residuals_vector)
@@ -446,15 +450,27 @@ def main():
         # Calculate a posteriori covariance matrix (Marek's method)
         a_posteriori_cov_matrix = a_priori_cov_matrix * sigma_zero_squared
 
-        # Plotting the a posteriori covariance matrix
-        plt.figure(figsize=(8, 7))
-        plt.rcParams.update({'font.size': 8})  # Set font size
+        # Set the labels based on the condition
         if configurations[idx]['enable_atmospheric_drag']:
             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'cd']
         else:
             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+
+        # Set up the figure and axes
+        plt.figure(figsize=(16, 7))  # Adjust the size as needed
+        plt.rcParams.update({'font.size': 8})  # Set font size
+
+        # Plotting the a priori covariance matrix
+        plt.subplot(1, 2, 1)  # 1 row, 2 columns, first subplot
+        sns.heatmap(a_priori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
+        plt.title('A Priori Covariance Matrix')
+
+        # Plotting the a posteriori covariance matrix
+        plt.subplot(1, 2, 2)  # 1 row, 2 columns, second subplot
         sns.heatmap(a_posteriori_cov_matrix, annot=True, fmt=".2e", xticklabels=labels, yticklabels=labels, cmap="viridis")
         plt.title('A Posteriori Covariance Matrix')
+
+        # Adjust layout and show plot
         plt.tight_layout()
         plt.show()
 
