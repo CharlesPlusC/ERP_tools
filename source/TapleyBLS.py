@@ -87,6 +87,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     return propagator
 
 def propagate_state(start_date, end_date, initial_state_vector, cr=None, cd=None, cross_section=None, **config_flags):
+    print(f"propagating from {start_date} to {end_date}")
     x, y, z, vx, vy, vz = initial_state_vector
     frame = FramesFactory.getEME2000() # j2000 frame by default
     # Propagation using the configured propagator
@@ -268,8 +269,7 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
     # Initialize
     t0 = observations_df['UTC'][0]
-    ti_minus1 = t0
-    state_ti_minus1 = a_priori_estimate[1:7]  # assuming this is [x, y, z, u, v, w]
+    x_bar_0 = np.array(a_priori_estimate[1:7])  # assuming this is [x, y, z, u, v, w]
     state_covs = a_priori_estimate[7:13]
     #make it a diagonal matrix
     state_covs = np.diag(state_covs)
@@ -287,11 +287,14 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
     convergence_threshold = 1e-3  # Define convergence threshold for RMS change
 
     while not converged and iteration < max_iterations:
+        print(f"Iteration: {iteration}")
         N = np.zeros(6)  # reset N to zero
         lamda = np.linalg.inv(P_0)  # reset lambda to P_0
         y_all = np.empty((0, 6))  # Initialize residuals array
+        ti_minus1 = t0
+        state_ti_minus1 = x_bar_0 
         for obs, row in observations_df.iterrows():
-            print(f"Observation: {obs}")
+            print(f"Obs: {obs}")
             ti = row['UTC']
             observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
             obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']].values**2)
@@ -300,7 +303,9 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
             # Propagate state and STM
             dt = ti - ti_minus1
-            state_ti = propagate_state(start_date = ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1,cr=None, cd=None, cross_section=None,config_flags= force_model_config)
+            print(f"state_ti: {state_ti_minus1}")
+            state_ti = propagate_state(start_date = ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=None, cd=None, cross_section=None,config_flags= force_model_config)
+            print(f"state_ti: {state_ti}")
             phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1)
 
             # Compute H matrix for this observation
@@ -308,16 +313,17 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             H_matrix = np.vstack([H_matrix, H_matrix_row]) # Append row to H matrix
             y_i = observed_state - rho_i(state_ti, 'state')
             y_i = np.array(y_i, dtype=float)
+            print(f"y_i: {y_i}")
             y_all = np.vstack([y_all, y_i])
             
             # Update lambda and N matrices
             lamda += H_matrix_row.T @ inv_obs_covariance @ H_matrix_row
             N += H_matrix_row.T @ inv_obs_covariance @ y_i
 
-        # Update for next iteration
-        ti_minus1 = ti
-        state_ti_minus1 = state_ti
-        phi_ti_minus1 = phi_ti
+            # Update for next iteration
+            ti_minus1 = ti
+            state_ti_minus1 = state_ti
+            phi_ti_minus1 = phi_ti
 
         # Solve normal equations
         xhat = np.linalg.inv(lamda) @ N
@@ -327,18 +333,60 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
         # Check for convergence
         if abs(rms_residuals - rms_residuals_last) < convergence_threshold:
+            print("Converged!")
             converged = True
         else:
             rms_residuals_last = rms_residuals
             print(f"RMS residuals: {rms_residuals}")
             print(f"correction: {xhat}")
-            state_ti_minus1 += xhat  # Update nominal trajectory
+            print(f"not updated state: {x_bar_0}")
+            x_bar_0 += xhat  # Update nominal trajectory
+            print(f"updated state: {state_ti_minus1}")
 
         iteration += 1
 
-    return state_ti_minus1, np.linalg.inv(lamda)
+    return x_bar_0, np.linalg.inv(lamda)
 
-# def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
+if __name__ == "__main__":
+    spacex_ephem_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
+
+    # Initialize state vector from the first point in the SpaceX ephemeris
+    # TODO: Can perturb this initial state vector to test convergence later
+    initial_X = spacex_ephem_df['x'][0]
+    initial_Y = spacex_ephem_df['y'][0]
+    initial_Z = spacex_ephem_df['z'][0]
+    initial_VX = spacex_ephem_df['xv'][0]
+    initial_VY = spacex_ephem_df['yv'][0]
+    initial_VZ = spacex_ephem_df['zv'][0]
+    initial_sigma_X = spacex_ephem_df['sigma_x'][0]
+    initial_sigma_Y = spacex_ephem_df['sigma_y'][0]
+    initial_sigma_Z = spacex_ephem_df['sigma_z'][0]
+    initial_sigma_XV = spacex_ephem_df['sigma_xv'][0]
+    initial_sigma_YV = spacex_ephem_df['sigma_yv'][0]
+    initial_sigma_ZV = spacex_ephem_df['sigma_zv'][0]
+    cd = 2.2
+    cr = 1.5
+    cross_section = 10.0
+    initial_t = spacex_ephem_df['UTC'][0]
+    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
+                                  initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
+                                    cr, cd, cross_section])
+    #cast all the values except the first one to floats
+    a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]])
+    a_priori_estimate = np.array([initial_t, *a_priori_estimate])
+
+    observations_df = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+    #use only the first 20 observations 
+    observations_df = observations_df.iloc[:10]
+    force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
+
+    print(f"a priori estimate: {a_priori_estimate}")
+    optimized_state, associated_covariance = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
+    print(f"optimized state: {optimized_state}")
+    print(f"associated covariance: {associated_covariance}")
+
+
+    # def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 #     """
 #     Batch Least Squares orbit determination algorithm.
 
@@ -444,38 +492,3 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 #     #         # go to step 1
 
 #     # return state_t0, P_0
-
-if __name__ == "__main__":
-    spacex_ephem_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
-
-    # Initialize state vector from the first point in the SpaceX ephemeris
-    # TODO: Can perturb this initial state vector to test convergence later
-    initial_X = spacex_ephem_df['x'][0]
-    initial_Y = spacex_ephem_df['y'][0]
-    initial_Z = spacex_ephem_df['z'][0]
-    initial_VX = spacex_ephem_df['xv'][0]
-    initial_VY = spacex_ephem_df['yv'][0]
-    initial_VZ = spacex_ephem_df['zv'][0]
-    initial_sigma_X = spacex_ephem_df['sigma_x'][0]
-    initial_sigma_Y = spacex_ephem_df['sigma_y'][0]
-    initial_sigma_Z = spacex_ephem_df['sigma_z'][0]
-    initial_sigma_XV = spacex_ephem_df['sigma_xv'][0]
-    initial_sigma_YV = spacex_ephem_df['sigma_yv'][0]
-    initial_sigma_ZV = spacex_ephem_df['sigma_zv'][0]
-    cd = 2.2
-    cr = 1.5
-    cross_section = 10.0
-    initial_t = spacex_ephem_df['UTC'][0]
-    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
-                                  initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
-                                    cr, cd, cross_section])
-    #cast all the values except the first one to floats
-    a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]])
-    a_priori_estimate = np.array([initial_t, *a_priori_estimate])
-
-    observations_df = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    #use only the first 20 observations 
-    observations_df = observations_df.iloc[:20]
-    force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
-
-    BLS_optimize(observations_df, force_model_config, a_priori_estimate)
