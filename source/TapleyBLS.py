@@ -335,8 +335,11 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
     iteration = 1
     max_iterations = 10  # Set a max number of iterations
     weighted_rms_last = np.inf
-    convergence_threshold = 0.01 # Define convergence threshold for RMS change
+    convergence_threshold = 0.001 # Define convergence threshold for RMS change
     no_times_diff_increased = 0
+
+    all_residuals = np.empty((0, 6))  # Initialize residuals array
+
     while not converged and iteration < max_iterations:
         print(f"Iteration: {iteration}")
         N = np.zeros(6)  # reset N to zero
@@ -385,23 +388,8 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
         # Solve normal equations
         xhat = np.linalg.inv(lamda) @ N
 
-        #new figure
-        plt.figure()
-        plt.plot(observations_df['UTC'], y_all)
-        plt.xlabel('UTC')
-        plt.ylabel('Residuals (m)')
-        #set ylim between -1 and 1
-        if len(observations_df) == 120:
-            plt.ylim(-15, 15)
-        else:
-            plt.ylim(-1, 1)
-        plt.grid(True)
-        plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/tapleyBLS/allforce_iter_{iteration}_#pts{len(observations_df)}.png")
-        # plt.show()
-
         # Check for convergence
         if abs(weighted_rms - weighted_rms_last) < convergence_threshold:
-            
             print("Converged!")
             converged = True
 
@@ -416,14 +404,13 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
                 no_times_diff_increased = 0 #reset the counter
             weighted_rms_last = weighted_rms
             
-            print(f"correction: {xhat}")
-            print("state before correction: ", x_bar_0)
             x_bar_0 += xhat  # Update nominal trajectory
-            print(f"updated state: {x_bar_0}")
 
+        all_residuals = np.vstack([all_residuals, y_all])
         iteration += 1
 
-    return x_bar_0, np.linalg.inv(lamda)
+    # return the optimized state and covariance, and the residuals from each iteration
+    return x_bar_0, np.linalg.inv(lamda), all_residuals, weighted_rms
 
 if __name__ == "__main__":
     spacex_ephem_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
@@ -452,12 +439,46 @@ if __name__ == "__main__":
     #cast all the values except the first one to floats
     a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]])
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
+    
+    observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+    obs_lengths_to_test = [20, 35, 50, 75, 100, 120]
 
-    observations_df = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    observations_df = observations_df.iloc[:120]
-    force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
+    force_model_configs = [
+        {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
-    optimized_state, associated_covariance = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
-    print(f"a priori estimate: {a_priori_estimate}")
-    print(f"optimized state: {optimized_state}")
-    print(f"associated covariance\n: {associated_covariance}")
+    for i, force_model_config in enumerate(force_model_configs):
+        print(f"Force model config: {force_model_config}")
+        
+        for obs_length in obs_lengths_to_test:
+            observations_df = observations_df_full.iloc[:obs_length]
+            optimized_state, associated_covariance, residuals, final_RMS = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
+
+            #last iteration's residuals
+            residuals_final = residuals[-len(observations_df):]
+            #plot the last iteration's residuals
+            plt.figure()
+            print("shape of utc: ", observations_df['UTC'].shape)
+            print("shape of residuals: ", residuals_final.shape)
+            plt.scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c = "xkcd:blue")
+            plt.scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c = "xkcd:green")
+            plt.scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c = "xkcd:red")
+            plt.scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c = "xkcd:purple")
+            plt.scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c = "xkcd:orange")
+            plt.scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c = "xkcd:yellow")
+
+            plt.title("Residuals (O-C) for final BLS iteration")
+            plt.xlabel("Observation time (UTC)")
+            plt.xticks(rotation=45)
+            plt.ylabel("Residual (m)")
+            #add final rms as text
+            plt.text(0.05, 0.95, f"Weighted RMS: {final_RMS:.2f}", transform=plt.gca().transAxes)
+            if len(observations_df) <= 60:
+                plt.ylim(-2,2)
+            elif len(observations_df) <= 100:
+                plt.ylim(-15,15)
+            plt.grid(True)
+            plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
+            plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/Tapley_residuals/force_model_{i}_#pts_{len(observations_df)}.png")
