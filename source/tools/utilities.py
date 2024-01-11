@@ -246,7 +246,6 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
 
         times.append(current_date.durationFrom(initial_date))
         state_vectors.append(state_vector)
-
         current_date = current_date.shiftedBy(step)
 
     return times, state_vectors
@@ -283,7 +282,10 @@ def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, force
     rtn_components = [] if rtn else None
     for i, pv in enumerate(states):
         duration = times[i]  # Duration in seconds
-        current_date = TLE_epochDate.shiftedBy(duration)
+        if duration == 0:
+            current_date = TLE_epochDate
+        else:
+            current_date = TLE_epochDate.shiftedBy(duration)
 
         position = Vector3D(float(pv[0]), float(pv[1]), float(pv[2]))
         velocity = Vector3D(float(pv[3]), float(pv[4]), float(pv[5]))

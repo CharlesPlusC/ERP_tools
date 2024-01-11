@@ -215,15 +215,20 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     # TODO: I am gaining 3 milisecond per minute in the UTC time. Why?
     return spacex_ephem_df
 
-def propagate_STM(state_ti, dt, phi_i):
+def propagate_STM(state_ti, t0, dt, phi_i):
 
     df_dy = np.zeros((len(state_ti),len(state_ti))) #initialize matrix of partial derivatives (partials at time t0)
     # numerical estimation of partial derivatives
     # get the state at ti and the accelerations at ti
-    state_vector_data = tuple(state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5])
-    t0 = state_ti[0]
-    gravity_eci = extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, HolmesFeatherstoneAttractionModel)
-
+    state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5])
+    print(f"state_vector_data: {state_vector_data}")
+    print(f"t0: {t0}")
+    epochDate = datetime_to_absolutedate(t0)
+    print(f"TLE_epochDate: {epochDate}")
+    gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
+    gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
+    gravity_eci_to = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravity_force_model)
+    print(f"gravity_eci_to: {gravity_eci_to}")
     # perturb each state variable by a small amount and get the new accelerations
     # new accelerations - old accelerations / small amount = partial derivative
 
@@ -307,45 +312,47 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
     print("propagated state from t-1 to t0")
     print(f"difference between propagated state and state at t0: {(state_t0 - observed_state)}")
 
-    phi_ti = propagate_STM(phi_ti_minus1, ti)
+    dt = ti - ti_minus1
+    phi_ti = propagate_STM(state_t0,ti_minus1, dt, phi_ti_minus1)
+    print("phi ti:", phi_ti)
 
-    ### 4) compute H-matrix
-        # H-tilde is the observation-state mapping matrix
-        H_tilde_i = dg/d_state #where g is the observation-state relationship along the reference trajectory
-        d_rho/d_state * phi_t1 = one row in the H matrix 
-        y_i = yi - rho_i(state_ti) #residual (except for perfect state measurements this is just yi)
-        H_i = H_tilde_i * phi_ti
-        lamda = lamda + H_i.T * np.linalg.inv(ri) * H_i
-        N = N + H_i.T * np.linalg.inv(ri) * y_i
+    # ### 4) compute H-matrix
+    #     # H-tilde is the observation-state mapping matrix
+    #     H_tilde_i = dg/d_state #where g is the observation-state relationship along the reference trajectory
+    #     d_rho/d_state * phi_t1 = one row in the H matrix 
+    #     y_i = yi - rho_i(state_ti) #residual (except for perfect state measurements this is just yi)
+    #     H_i = H_tilde_i * phi_ti
+    #     lamda = lamda + H_i.T * np.linalg.inv(ri) * H_i
+    #     N = N + H_i.T * np.linalg.inv(ri) * y_i
 
-    ### 5) Time check
-        if ti < tfinal:
-            i = i + 1
-            ti_minus1 = ti
-            state_ti_minus1 = state_ti
-            phi_ti_minus1 = phi_ti
-            # go to step 2
-        if ti>=tfinal:
-            # solve normal equations
-            # lamda_xhat = N
-            lamda_0 = H_i.T * np.linalg.inv(ri) * H_i + np.linalg.inv(P_0)
-            xhat_0 = np.linalg.inv(lamda_0) * N
-            P_0 = np.linalg.inv(lamda)
+    # ### 5) Time check
+    #     if ti < tfinal:
+    #         i = i + 1
+    #         ti_minus1 = ti
+    #         state_ti_minus1 = state_ti
+    #         phi_ti_minus1 = phi_ti
+    #         # go to step 2
+    #     if ti>=tfinal:
+    #         # solve normal equations
+    #         # lamda_xhat = N
+    #         lamda_0 = H_i.T * np.linalg.inv(ri) * H_i + np.linalg.inv(P_0)
+    #         xhat_0 = np.linalg.inv(lamda_0) * N
+    #         P_0 = np.linalg.inv(lamda)
 
-    ### 6) convergence check
-        residuals = yi - H_i * xhat_0
-        if np.linalg.norm(lamda_xhat - lamda_xhat_old) < 0.01:
-            break
-        else:
-            #update nominal trajectory
-            state_t0 = state_t0 + lamda_xhat
-            x_bar_0 = x_bar_0 - lamda_xhat
+    # ### 6) convergence check
+    #     residuals = yi - H_i * xhat_0
+    #     if np.linalg.norm(lamda_xhat - lamda_xhat_old) < 0.01:
+    #         break
+    #     else:
+    #         #update nominal trajectory
+    #         state_t0 = state_t0 + lamda_xhat
+    #         x_bar_0 = x_bar_0 - lamda_xhat
 
-            # use original value of P_0
+    #         # use original value of P_0
 
-            # go to step 1
+    #         # go to step 1
 
-    pass
+    # pass
 
 if __name__ == "__main__":
     spacex_ephem_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
