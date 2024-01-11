@@ -32,6 +32,8 @@ from tools.spaceX_ephem_tools import  parse_spacex_datetime_stamps
 import pandas as pd
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 SATELLITE_MASS = 800.0
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
@@ -87,7 +89,6 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     return propagator
 
 def propagate_state(start_date, end_date, initial_state_vector, cr=None, cd=None, cross_section=None, **config_flags):
-    print(f"propagating from {start_date} to {end_date}")
     x, y, z, vx, vy, vz = initial_state_vector
     frame = FramesFactory.getEME2000() # j2000 frame by default
     # Propagation using the configured propagator
@@ -229,25 +230,73 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-def propagate_STM(state_ti, t0, dt, phi_i):
+def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
 
     df_dy = np.zeros((len(state_ti),len(state_ti))) #initialize matrix of partial derivatives (partials at time t0)
     # numerical estimation of partial derivatives
     # get the state at ti and the accelerations at ti
     state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5])
     epochDate = datetime_to_absolutedate(t0)
-    gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
-    gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
-    gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravity_force_model)
-    gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
+    accelerations_t0 = np.zeros(3)
+    force_models = []
+    if force_model_config.get('enable_gravity', True):
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
+        gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
+        force_models.append(gravity_force_model)
+        gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravity_force_model)
+        gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
+        accelerations_t0+=gravity_eci_t0
+
+    if force_model_config.get('enable_third_body', True):
+        moon = CelestialBodyFactory.getMoon()
+        sun = CelestialBodyFactory.getSun()
+        moon_3dbodyattraction = ThirdBodyAttraction(moon)
+        force_models.append(moon_3dbodyattraction)
+        sun_3dbodyattraction = ThirdBodyAttraction(sun)
+        force_models.append(sun_3dbodyattraction)
+        moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, moon_3dbodyattraction)
+        moon_eci_t0 = np.array([moon_eci_t0[0].getX(), moon_eci_t0[0].getY(), moon_eci_t0[0].getZ()])
+        accelerations_t0+=moon_eci_t0
+        sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, sun_3dbodyattraction)
+        sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
+        accelerations_t0+=sun_eci_t0
+
+    if force_model_config.get('enable_solar_radiation', True):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        cross_section = float(10.0) #TODO: get from state vector
+        cr = float(1.0)
+        isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
+        solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
+        force_models.append(solarRadiationPressure)
+        solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, solarRadiationPressure)
+        solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
+        accelerations_t0+=solar_radiation_eci_t0
+
+    if force_model_config.get('enable_atmospheric_drag', True):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(10.0), float(2.2))
+        dragForce = DragForce(atmosphere, isotropicDrag)
+        force_models.append(dragForce)
+        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        accelerations_t0+=atmospheric_drag_eci_t0
+
     # perturb each state variable by a small amount and get the new accelerations
-    perturbation = 0.1  # 10cm
+    perturbation = 0.1 # 10 cm
+    
     for i in range(len(state_ti)):
+        perturbed_accelerations = np.zeros(3)
         state_ti_perturbed = state_ti.copy()
         state_ti_perturbed[i] += perturbation
-        gravity_eci_ti_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, gravity_force_model)
-        gravity_eci_ti_perturbed = np.array([gravity_eci_ti_perturbed[0].getX(), gravity_eci_ti_perturbed[0].getY(), gravity_eci_ti_perturbed[0].getZ()])
-        partial_derivatives = (gravity_eci_ti_perturbed - gravity_eci_t0) / perturbation
+        for force_model in force_models:
+            acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
+            acc_perturbed = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
+            perturbed_accelerations+=acc_perturbed
+        partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
 
         # Assign partial derivatives to the appropriate submatrix
         if i < 3:  # Position components affect acceleration
@@ -269,7 +318,7 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
     # Initialize
     t0 = observations_df['UTC'][0]
-    x_bar_0 = np.array(a_priori_estimate[1:7])  # assuming this is [x, y, z, u, v, w]
+    x_bar_0 = np.array(a_priori_estimate[1:7])  # assuming this is [x, y, z, u, v, w] for now. TODO: enable adding other state variables
     state_covs = a_priori_estimate[7:13]
     #make it a diagonal matrix
     state_covs = np.diag(state_covs)
@@ -281,11 +330,11 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
     H_matrix = np.empty((0, 6))  # 6 columns for 6 state variables
 
     converged = False
-    iteration = 0
+    iteration = 1
     max_iterations = 10  # Set a max number of iterations
-    rms_residuals_last = np.inf
-    convergence_threshold = 1e-3  # Define convergence threshold for RMS change
-
+    weighted_rms_last = np.inf
+    convergence_threshold = 0.01 # Define convergence threshold for RMS change
+    no_times_diff_increased = 0
     while not converged and iteration < max_iterations:
         print(f"Iteration: {iteration}")
         N = np.zeros(6)  # reset N to zero
@@ -293,57 +342,75 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
         y_all = np.empty((0, 6))  # Initialize residuals array
         ti_minus1 = t0
         state_ti_minus1 = x_bar_0 
+        RMSs = []
         for obs, row in observations_df.iterrows():
-            print(f"Obs: {obs}")
+            print(f"Obs: {obs+1}")
             ti = row['UTC']
             observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
-            obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']].values**2)
+            obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
             obs_covariance = np.array(obs_covariance, dtype=float)
-            inv_obs_covariance = np.linalg.inv(obs_covariance)  # Inverse of observation covariance
+            W_i = np.linalg.inv(obs_covariance)  # Inverse of observation covariances
 
             # Propagate state and STM
             dt = ti - ti_minus1
-            print(f"state_ti: {state_ti_minus1}")
             state_ti = propagate_state(start_date = ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=None, cd=None, cross_section=None,config_flags= force_model_config)
-            print(f"state_ti: {state_ti}")
-            phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1)
+            phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, force_model_config)
 
             # Compute H matrix for this observation
-            H_matrix_row = d_rho_d_state @ phi_ti  # 6x6 @ 6x6 -> 6x6
+            H_matrix_row = d_rho_d_state @ phi_ti
             H_matrix = np.vstack([H_matrix, H_matrix_row]) # Append row to H matrix
             y_i = observed_state - rho_i(state_ti, 'state')
             y_i = np.array(y_i, dtype=float)
-            print(f"y_i: {y_i}")
             y_all = np.vstack([y_all, y_i])
             
             # Update lambda and N matrices
-            lamda += H_matrix_row.T @ inv_obs_covariance @ H_matrix_row
-            N += H_matrix_row.T @ inv_obs_covariance @ y_i
+            lamda += H_matrix_row.T @ W_i @ H_matrix_row
+            N += H_matrix_row.T @ W_i @ y_i
 
             # Update for next iteration
             ti_minus1 = ti
             state_ti_minus1 = state_ti
             phi_ti_minus1 = phi_ti
+            #RMS for this observation is y_i.T @ inv_obs_covariance @ y_i
+            RMSs.append(y_i.T @ W_i @ y_i)
+
+        # sum all the RMSs
+        RMSs = np.array(RMSs)
+        #weighted RMS is sqrt(RMS divided by m. where m is (number of observations * number of state variables))
+        weighted_rms = np.sqrt(np.sum(RMSs) / (len(x_bar_0) * len (y_all)))
+        print(f"Weighted RMS: {weighted_rms}")
 
         # Solve normal equations
         xhat = np.linalg.inv(lamda) @ N
 
-        # Calculate RMS of residuals
-        rms_residuals = np.sqrt(np.mean(y_i**2))
-
         # Check for convergence
-        if abs(rms_residuals - rms_residuals_last) < convergence_threshold:
+        if abs(weighted_rms - weighted_rms_last) < convergence_threshold:
+            
             print("Converged!")
             converged = True
+
         else:
-            rms_residuals_last = rms_residuals
-            print(f"RMS residuals: {rms_residuals}")
+            if weighted_rms > weighted_rms_last:
+                no_times_diff_increased += 1
+                print(f"RMS increased {no_times_diff_increased} times in a row.")
+                if no_times_diff_increased > 2:
+                    print("RMS increased 3 times in a row. Stopping iteration.")
+                    break
+            else:
+                no_times_diff_increased = 0 #reset the counter
+            weighted_rms_last = weighted_rms
+            
             print(f"correction: {xhat}")
-            print(f"not updated state: {x_bar_0}")
             x_bar_0 += xhat  # Update nominal trajectory
-            print(f"updated state: {state_ti_minus1}")
+            print(f"updated state: {x_bar_0}")
 
         iteration += 1
+
+    plt.plot(observations_df['UTC'], y_all)
+    plt.xlabel('UTC')
+    plt.ylabel('Residuals (m)')
+    plt.grid(True)
+    plt.show()
 
     return x_bar_0, np.linalg.inv(lamda)
 
@@ -365,7 +432,7 @@ if __name__ == "__main__":
     initial_sigma_YV = spacex_ephem_df['sigma_yv'][0]
     initial_sigma_ZV = spacex_ephem_df['sigma_zv'][0]
     cd = 2.2
-    cr = 1.5
+    cr = 2
     cross_section = 10.0
     initial_t = spacex_ephem_df['UTC'][0]
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
@@ -376,119 +443,13 @@ if __name__ == "__main__":
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
 
     observations_df = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    #use only the first 20 observations 
-    observations_df = observations_df.iloc[:10]
-    force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
+    observations_df = observations_df.iloc[:60]
+    # force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
+    force_model_config =  {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False}
 
-    print(f"a priori estimate: {a_priori_estimate}")
     optimized_state, associated_covariance = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
+    print(f"a priori estimate: {a_priori_estimate}")
     print(f"optimized state: {optimized_state}")
-    print(f"associated covariance: {associated_covariance}")
+    print(f"associated covariance\n: {associated_covariance}")
 
-
-    # def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
-#     """
-#     Batch Least Squares orbit determination algorithm.
-
-#     Parameters
-#     ----------
-#     state_vector : np.array
-#         Initial state vector. Must be in the form [t, x, y, z, u, v, w, cd].
-#     observations_df : pd.DataFrame
-#         Observations dataframe. Must have columns: ['UTC', 'x', 'y', 'z', 'u', 'v', 'w', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv'].
-#     force_model_config : dict
-#         Dictionary containing force model configuration parameters.
-#     t0 : float
-#         Initial time of orbit determination.
-#     tfinal : float
-#         Final time of orbit determination.
-#     a_priori_estimate : np.array, optional
-#         A priori state estimate. The default is None.
-
-#     Returns
-#     -------
-#     None.
-
-#     """
-    
-#     #observations must be in the form of a pandas dataframe with columns:
-#     #   t, x, y, z, u, v, w, sigma_x, sigma_y, sigma_z, sigma_u, sigma_v, sigma_w
-#     assert isinstance(observations_df, pd.DataFrame), "observations must be a pandas dataframe"
-#     assert len(observations_df.columns) == 13, "observations dataframe must have 13 columns"
-#     required_obs_cols = ['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']
-#     assert all([col in observations_df.columns for col in required_obs_cols]), f"observations dataframe must have columns: {required_obs_cols}"
-    
-#     ### 1) initialize iteration
-#     iteration = 1
-#     t0 = observations_df['UTC'][0]
-#     ti_minus1 = t0
-#     ti = ti_minus1
-#     print(f"ti_minus1: {ti_minus1}")
-#     print(f"t0: {t0}")
-#     state_t0 = observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].iloc[0].values
-#     state_ti_minus1 = state_t0
-#     phi_t0 = np.identity(len(state_t0)) #STM
-#     phi_ti_minus1 = phi_t0 
-
-#     #from a priori estimate
-#     x_bar_0 = np.array(a_priori_estimate[1:7])
-#     a_priori_sigmas = a_priori_estimate[7:13]
-#     P_0 = (np.diag(np.array(a_priori_sigmas)))
-#     P_0_inv = np.linalg.inv(P_0)
-#     N = np.linalg.inv(P_0) * x_bar_0
-
-#     ### 2) read next observation (corresping to time ti)
-#     observation_time = observations_df['UTC'][1]
-#     observed_state = observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].iloc[1].values
-#     obs_covariance = observations_df[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']].iloc[1].values
-
-#     # in Tapley notation
-#     ti = observation_time
-#     yi = observed_state
-#     ri = obs_covariance
-
-#     ### 3) propagate state and STM from ti_minus1 to ti
-#     #Start with the state at t0 and propagate to t1
-#     state_t0 = propagate_state(start_date=ti_minus1, end_date=t0, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
-#     print("propagated state from t-1 to t0")
-#     print(f"difference between propagated state and state at t0: {(state_t0 - observed_state)}")
-
-#     dt = ti - ti_minus1
-#     phi_ti = propagate_STM(state_t0,ti_minus1, dt, phi_ti_minus1)
-
-#     # ### 4) compute H-matrix
-#     d_rho_d_state = np.ones((1, len(state_t0))) #TODO: this is just ones for perfect state measurements, will have to change for different measurement types
-#     H_matrix_row = d_rho_d_state @ phi_ti  #TODO: accumulate this into one big H matrix -> one of these for each of the obs?
-#     y_i = yi - rho_i(state_t0) #residual (except for perfect state measurements this is just yi)
-#     print("residual: ", y_i)
-#     lamda = lamda + H_matrix_row.T * np.linalg.inv(ri) * H_matrix_row
-#     N = N + H_matrix_row.T * np.linalg.inv(ri) * y_i
-
-#     # ### 5) Time check
-#     #     if ti < tfinal:
-#     #         i = i + 1
-#     #         ti_minus1 = ti
-#     #         state_ti_minus1 = state_ti
-#     #         phi_ti_minus1 = phi_ti
-#     #         # go to step 2
-#     #     if ti>=tfinal:
-#     #         # solve normal equations
-#     #         # lamda_xhat = N
-#     #         lamda_0 = H_i.T * np.linalg.inv(ri) * H_i + np.linalg.inv(P_0)
-#     #         xhat_0 = np.linalg.inv(lamda_0) * N
-#     #         P_0 = np.linalg.inv(lamda)
-
-#     # ### 6) convergence check
-#     #     residuals = yi - H_i * xhat_0
-#     #     if np.linalg.norm(lamda_xhat - lamda_xhat_old) < 0.01:
-#     #         break
-#     #     else:
-#     #         #update nominal trajectory
-#     #         state_t0 = state_t0 + lamda_xhat
-#     #         x_bar_0 = x_bar_0 - lamda_xhat
-
-#     #         # use original value of P_0
-
-#     #         # go to step 1
-
-#     # return state_t0, P_0
+    #either state or STM propagation is bugged because when i turn force model components off, I get better results

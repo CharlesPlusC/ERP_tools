@@ -257,7 +257,7 @@ def main():
 
     # Estimator parameters
     estimator_position_scale = 1.0 # m
-    estimator_convergence_thres = 0.01 # m
+    estimator_convergence_thres = 0.1 # m
     estimator_max_iterations = 100
     estimator_max_evaluations = 100
     gcrf = FramesFactory.getGCRF()
@@ -298,7 +298,8 @@ def main():
     estimated_positions_dict = {}
     estimated_velocities_dict = {}
     for idx, configured_propagatorBuilder in enumerate(propagatorBuilders):
-        for points_to_use in range(15, 16, 15):
+        for points_to_use in range(1):
+            points_to_use = 60
             print(f"points_to_use: {points_to_use}")
             # Reset the initial state
             tleOrbit_ECI = CartesianOrbit(tlePV_ECI, eci, wgs84Ellipsoid.getGM())
@@ -327,22 +328,20 @@ def main():
                 date = datetime_to_absolutedate((row['UTC']).to_pydatetime())
                 position = Vector3D(row['x']*1000, row['y']*1000, row['z']*1000)
                 velocity = Vector3D(row['u']*1000, row['v']*1000, row['w']*1000)
-                sigmaPosition = row['sigma_pos']
-                sigmaVelocity = row['sigma_vel']
+                sigmaPosition = row['sigma_pos']*1000
+                sigmaVelocity = row['sigma_vel']*1000
                 baseWeight = 1.0
                 observableSatellite = ObservableSatellite(0)
                 orekitPV_measurement = PV(date, position, velocity, sigmaPosition, sigmaVelocity, baseWeight, observableSatellite)
                 estimator.addMeasurement(orekitPV_measurement)
 
             # Perform estimation
-            print(f"#Observables: {points_to_use}\nForce Model Config:{idx}")
             estimatedPropagatorArray = estimator.estimate()
 
             date_start = datetime_to_absolutedate(startCollectionDate).shiftedBy(-86400.0)
             date_end = datetime_to_absolutedate(odDate).shiftedBy(86400.0)
 
             estimatedPropagator = estimatedPropagatorArray[0]
-            print(f"Final estimated parameters for configuration {idx}:")
             print(estimatedPropagator.getInitialState().getOrbit())
             estpos = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getPosition()
             estvel = estimatedPropagator.getInitialState().getOrbit().getPVCoordinates().getVelocity()
@@ -354,9 +353,7 @@ def main():
 
             # estimated_params = estimatedPropagator.getInitialState().getOrbit()
             estimatedInitialState = estimatedPropagator.getInitialState()
-            print(f"Estimated initial state: {estimatedInitialState}")
             actualOdDate = estimatedInitialState.getDate()
-            print(f"Actual OD date: {actualOdDate}")
             estimatedPropagator.resetInitialState(estimatedInitialState)
             estimatedgenerator = estimatedPropagator.getEphemerisGenerator()
             estimatedPropagator.propagate(date_start, date_end)
