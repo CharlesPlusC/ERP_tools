@@ -17,7 +17,7 @@ from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity
+from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity, NewtonianAttraction
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.models.earth.atmosphere import DTM2000
@@ -44,6 +44,11 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Earth gravity field with degree 64 and order 64
     if config_flags.get('enable_gravity', True):
+        MU = Constants.WGS84_EARTH_MU
+        newattr = NewtonianAttraction(MU)
+        propagator.addForceModel(newattr)
+
+        ### 64x64 gravity model
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
@@ -66,11 +71,6 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
 
-    # Relativity
-    if config_flags.get('enable_relativity', True):
-        relativity = Relativity(orekit_constants.EIGEN5C_EARTH_MU)
-        propagator.addForceModel(relativity)
-
     # Atmospheric drag
     if config_flags.get('enable_atmospheric_drag', True):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
@@ -88,7 +88,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     return propagator
 
-def propagate_state(start_date, end_date, initial_state_vector, cr=None, cd=None, cross_section=None, **config_flags):
+def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=1.8, cross_section=10.0, **config_flags):
     x, y, z, vx, vy, vz = initial_state_vector
     frame = FramesFactory.getEME2000() # j2000 frame by default
     # Propagation using the configured propagator
@@ -105,12 +105,7 @@ def propagate_state(start_date, end_date, initial_state_vector, cr=None, cd=None
     propagator = NumericalPropagator(integrator)
     propagator.setOrbitType(OrbitType.CARTESIAN)
     propagator.setInitialState(initialState)
-    if cr is None:
-        cr = 1.0
-    if cd is None:
-        cd = 2.2
-    if cross_section is None:
-        cross_section = 10.0
+
     #TODO: make configure_force_models() not require cr, cd, and cross_section
     configured_propagator = configure_force_models(propagator,cr,cross_section, cd,**config_flags) # configure force models
     final_state = configured_propagator.propagate(datetime_to_absolutedate(end_date))
@@ -240,6 +235,13 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
     accelerations_t0 = np.zeros(3)
     force_models = []
     if force_model_config.get('enable_gravity', True):
+        MU = Constants.WGS84_EARTH_MU
+        newattr = NewtonianAttraction(MU)
+        force_models.append(newattr)
+        gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, newattr)
+        gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
+        accelerations_t0+=gravity_eci_t0
+
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
         gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         force_models.append(gravity_force_model)
@@ -264,7 +266,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
     if force_model_config.get('enable_solar_radiation', True):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(10.0) #TODO: get from state vector
-        cr = float(1.0)
+        cr = float(1.5)
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
         solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
         force_models.append(solarRadiationPressure)
@@ -278,7 +280,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-        isotropicDrag = IsotropicDrag(float(10.0), float(2.2))
+        isotropicDrag = IsotropicDrag(float(10.0), float(2.2)) #TODO: get from state vector
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
@@ -297,6 +299,8 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
             acc_perturbed = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
             perturbed_accelerations+=acc_perturbed
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
+        
+        print(f"Jacobian:\n {df_dy[3:, :3]}")
 
         # Assign partial derivatives to the appropriate submatrix
         if i < 3:  # Position components affect acceleration
@@ -307,7 +311,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
     assert np.allclose(df_dy[:3, :3], np.zeros((3, 3)), atol=1e-10), "First 3x3 submatrix is not all zeros"
     assert np.allclose(df_dy[3:, 3:], np.zeros((3, 3)), atol=1e-10), "Last 3x3 submatrix is not all zeros"
     assert np.allclose(df_dy[:3, 3:], np.eye(3), atol=1e-10), "Top right 3x3 submatrix is not the identity matrix"
-    assert not np.allclose(df_dy[3:, :3], np.zeros((3, 3)), atol=1e-12), "Bottom left 3x3 submatrix is very small"
+    assert not np.allclose(df_dy[3:, :3], np.zeros((3, 3)), atol=1e-15), "Bottom left 3x3 submatrix is very small"
 
     dt_seconds = float(dt.total_seconds())
     phi_t1 = phi_i + df_dy @ phi_i * dt_seconds #STM at time t1
@@ -353,7 +357,7 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
             # Propagate state and STM
             dt = ti - ti_minus1
-            state_ti = propagate_state(start_date = ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=None, cd=None, cross_section=None,config_flags= force_model_config)
+            state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=2, cd=1.8, cross_section=10.0,config_flags= force_model_config)
             phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, force_model_config)
 
             # Compute H matrix for this observation
@@ -383,6 +387,17 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
         # Solve normal equations
         xhat = np.linalg.inv(lamda) @ N
 
+        #new figure
+        plt.figure()
+        plt.plot(observations_df['UTC'], y_all)
+        plt.xlabel('UTC')
+        plt.ylabel('Residuals (m)')
+        #set ylim between -1 and 1
+        plt.ylim(-1, 1)
+        plt.grid(True)
+        plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/tapleyBLS/allforce_iter_{iteration}_#pts{len(observations_df)}.png")
+        # plt.show()
+
         # Check for convergence
         if abs(weighted_rms - weighted_rms_last) < convergence_threshold:
             
@@ -393,7 +408,7 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             if weighted_rms > weighted_rms_last:
                 no_times_diff_increased += 1
                 print(f"RMS increased {no_times_diff_increased} times in a row.")
-                if no_times_diff_increased > 2:
+                if no_times_diff_increased > 3:
                     print("RMS increased 3 times in a row. Stopping iteration.")
                     break
             else:
@@ -401,16 +416,11 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             weighted_rms_last = weighted_rms
             
             print(f"correction: {xhat}")
+            print("state before correction: ", x_bar_0)
             x_bar_0 += xhat  # Update nominal trajectory
             print(f"updated state: {x_bar_0}")
 
         iteration += 1
-
-    plt.plot(observations_df['UTC'], y_all)
-    plt.xlabel('UTC')
-    plt.ylabel('Residuals (m)')
-    plt.grid(True)
-    plt.show()
 
     return x_bar_0, np.linalg.inv(lamda)
 
@@ -444,12 +454,10 @@ if __name__ == "__main__":
 
     observations_df = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     observations_df = observations_df.iloc[:60]
-    # force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
-    force_model_config =  {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False}
+    force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
+    # force_model_config =  {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False}
 
     optimized_state, associated_covariance = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
     print(f"a priori estimate: {a_priori_estimate}")
     print(f"optimized state: {optimized_state}")
     print(f"associated covariance\n: {associated_covariance}")
-
-    #either state or STM propagation is bugged because when i turn force model components off, I get better results
