@@ -300,8 +300,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
             perturbed_accelerations+=acc_perturbed
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
         
-        print(f"Jacobian:\n {df_dy[3:, :3]}")
-
         # Assign partial derivatives to the appropriate submatrix
         if i < 3:  # Position components affect acceleration
             df_dy[3:, i] = partial_derivatives
@@ -393,7 +391,10 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
         plt.xlabel('UTC')
         plt.ylabel('Residuals (m)')
         #set ylim between -1 and 1
-        plt.ylim(-1, 1)
+        if len(observations_df) == 120:
+            plt.ylim(-15, 15)
+        else:
+            plt.ylim(-1, 1)
         plt.grid(True)
         plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/tapleyBLS/allforce_iter_{iteration}_#pts{len(observations_df)}.png")
         # plt.show()
@@ -453,9 +454,8 @@ if __name__ == "__main__":
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
 
     observations_df = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    observations_df = observations_df.iloc[:60]
+    observations_df = observations_df.iloc[:120]
     force_model_config =  {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}
-    # force_model_config =  {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False}
 
     optimized_state, associated_covariance = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
     print(f"a priori estimate: {a_priori_estimate}")
