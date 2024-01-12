@@ -315,11 +315,11 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
     assert not np.allclose(df_dy[3:, :3], np.zeros((3, 3)), atol=1e-15), "Bottom left 3x3 submatrix is very small"
 
     dt_seconds = float(dt.total_seconds())
-    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds #STM at time t1
+    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds # this is just a simple Euler integration step
 
     return phi_t1
 
-def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
+def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
 
     # Initialize
     t0 = observations_df['UTC'].iloc[0]
@@ -371,8 +371,6 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             y_all = np.vstack([y_all, y_i])
             
             # Update lambda and N matrices
-            print("H_matrix_row", H_matrix_row)
-            print("W_i", W_i)
             lamda += H_matrix_row.T @ W_i @ H_matrix_row
             N += H_matrix_row.T @ W_i @ y_i
 
@@ -451,7 +449,7 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [50]
+    obs_lengths_to_test = [35]
 
     force_model_configs = [
         {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
@@ -459,12 +457,14 @@ if __name__ == "__main__":
         {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
         {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
+    covariance_matrices = []
+
     for i, force_model_config in enumerate(force_model_configs):
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            optimized_state, covariance_matrix, residuals, final_RMS = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
-
+            optimized_state, covariance_matrix, residuals, final_RMS = OD_BLS(observations_df, force_model_config, a_priori_estimate)
+            covariance_matrices.append(covariance_matrix)
             #last iteration's residuals
             residuals_final = residuals[-len(observations_df):]
             #plot the last iteration's residuals
@@ -488,7 +488,21 @@ if __name__ == "__main__":
                 plt.ylim(-15,15)
             plt.grid(True)
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-            plt.savefig(f"output/BLS/Tapley/residuals/2000tstep_force_model_{i}_#pts_{len(observations_df)}.png")
+            plt.savefig(f"output/OD_BLS/Tapley/residuals/force_model_{i}_#pts_{len(observations_df)}.png")
+
+            #plot histograms of residuals
+            plt.figure()
+            plt.hist(residuals_final[:,0], bins=20, label='x', color="xkcd:blue")
+            plt.hist(residuals_final[:,1], bins=20, label='y', color="xkcd:green")
+            plt.hist(residuals_final[:,2], bins=20, label='z', color="xkcd:red")
+            plt.hist(residuals_final[:,3], bins=20, label='xv', color="xkcd:purple")
+            plt.hist(residuals_final[:,4], bins=20, label='yv', color="xkcd:orange")
+            plt.hist(residuals_final[:,5], bins=20, label='zv', color="xkcd:yellow")
+            plt.title("Residuals (O-C) for final BLS iteration")
+            plt.xlabel("Residual (m)")
+            plt.ylabel("Frequency")
+            plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
+            plt.savefig(f"output/OD_BLS/Tapley/residuals/histograms/hist_force_model_{i}_#pts_{len(observations_df)}.png")
 
             #ECI covariance matrix
             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
@@ -497,4 +511,18 @@ if __name__ == "__main__":
             sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
             #add title containing points_to_use and configuration
             plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-            plt.savefig(f"output/BLS/Tapley/covariances/2000tstep_covMat_#pts_{len(observations_df)}_config{i}.png")
+            plt.savefig(f"output/OD_BLS/Tapley/covariances/covMat_#pts_{len(observations_df)}_config{i}.png")
+
+    
+    relative_differences = []
+    for j in range(1, len(covariance_matrices)):
+        difference_matrix = covariance_matrices[j] - covariance_matrices[j-1]
+        
+        # Plotting the difference as a heatmap
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(difference_matrix, annot=True, fmt=".3e", cmap="coolwarm", center=0)
+        plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
+        plt.xlabel('Covariance Components')
+        plt.ylabel('Covariance Components')
+        plt.savefig(f'output/OD_BLS/Tapley/covariances/relative_differences/diff_covmat_run_{j}_vs_{j-1}.png')
+        plt.show()
