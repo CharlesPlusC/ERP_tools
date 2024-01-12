@@ -31,8 +31,9 @@ from tools.spaceX_ephem_tools import  parse_spacex_datetime_stamps
 
 import pandas as pd
 import numpy as np
-
 import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.colors import SymLogNorm
 
 SATELLITE_MASS = 800.0
 INTEGRATOR_MIN_STEP = 0.001
@@ -43,7 +44,7 @@ POSITION_TOLERANCE = 1e-3 # 1 mm
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Earth gravity field with degree 64 and order 64
-    if config_flags.get('enable_gravity', True):
+    if config_flags.get('enable_gravity', False):
         MU = Constants.WGS84_EARTH_MU
         newattr = NewtonianAttraction(MU)
         propagator.addForceModel(newattr)
@@ -54,7 +55,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(gravityAttractionModel)
 
     # Moon and Sun perturbations
-    if config_flags.get('enable_third_body', True):
+    if config_flags.get('enable_third_body', False):
         moon = CelestialBodyFactory.getMoon()
         sun = CelestialBodyFactory.getSun()
         moon_3dbodyattraction = ThirdBodyAttraction(moon)
@@ -63,7 +64,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(sun_3dbodyattraction)
 
     # Solar radiation pressure
-    if config_flags.get('enable_solar_radiation', True):
+    if config_flags.get('enable_solar_radiation', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(cross_section)
         cr = float(cr)
@@ -72,7 +73,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(solarRadiationPressure)
 
     # Atmospheric drag
-    if config_flags.get('enable_atmospheric_drag', True):
+    if config_flags.get('enable_atmospheric_drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
@@ -208,13 +209,16 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     # Multiply all the values except the times by 1000 to convert from km to m
     columns_to_multiply = ['x', 'y', 'z', 'xv', 'yv', 'zv', 
                         'sigma_x', 'sigma_y', 'sigma_z', 
-                        'sigma_xv', 'sigma_yv', 'sigma_zv'] + [f'cov_{i+1}' for i in range(21)]
+                        'sigma_xv', 'sigma_yv', 'sigma_zv']
 
     for col in columns_to_multiply:
         spacex_ephem_df[col] *= 1000
 
+    covariance_columns = [f'cov_{i+1}' for i in range(21)]
+    for col in covariance_columns:
+        spacex_ephem_df[col] *= 1000**2
+
     spacex_ephem_df['hours'] = (spacex_ephem_df['JD'] - spacex_ephem_df['JD'][0]) * 24.0 # hours since first timestamp
-    # calculate UTC time by applying jd_to_utc() to each JD value
     spacex_ephem_df['UTC'] = spacex_ephem_df['JD'].apply(jd_to_utc)
     # TODO: I am gaining 3 milisecond per minute in the UTC time. Why?
     return spacex_ephem_df
@@ -225,7 +229,7 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
+def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
 
     df_dy = np.zeros((len(state_ti),len(state_ti))) #initialize matrix of partial derivatives (partials at time t0)
     # numerical estimation of partial derivatives
@@ -234,7 +238,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
     epochDate = datetime_to_absolutedate(t0)
     accelerations_t0 = np.zeros(3)
     force_models = []
-    if force_model_config.get('enable_gravity', True):
+    if force_model_config.get('enable_gravity', False):
         MU = Constants.WGS84_EARTH_MU
         newattr = NewtonianAttraction(MU)
         force_models.append(newattr)
@@ -249,7 +253,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
         gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
         accelerations_t0+=gravity_eci_t0
 
-    if force_model_config.get('enable_third_body', True):
+    if force_model_config.get('enable_third_body', False):
         moon = CelestialBodyFactory.getMoon()
         sun = CelestialBodyFactory.getSun()
         moon_3dbodyattraction = ThirdBodyAttraction(moon)
@@ -263,10 +267,10 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
         accelerations_t0+=sun_eci_t0
 
-    if force_model_config.get('enable_solar_radiation', True):
+    if force_model_config.get('enable_solar_radiation', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(10.0) #TODO: get from state vector
-        cr = float(1.5)
+        cr = float(1.5) #TODO: get from state vector
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
         solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
         force_models.append(solarRadiationPressure)
@@ -274,7 +278,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
 
-    if force_model_config.get('enable_atmospheric_drag', True):
+    if force_model_config.get('enable_atmospheric_drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
@@ -289,7 +293,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, force_model_config):
 
     # perturb each state variable by a small amount and get the new accelerations
     perturbation = 0.1 # 10 cm
-    
     for i in range(len(state_ti)):
         perturbed_accelerations = np.zeros(3)
         state_ti_perturbed = state_ti.copy()
@@ -349,7 +352,6 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
         state_ti_minus1 = x_bar_0 
         RMSs = []
         for obs, row in observations_df.iterrows():
-            print(f"Obs: {obs+1}")
             ti = row['UTC']
             observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
             obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
@@ -358,8 +360,8 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
             # Propagate state and STM
             dt = ti - ti_minus1
-            state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=2, cd=1.8, cross_section=10.0,config_flags= force_model_config)
-            phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, force_model_config)
+            state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=2, cd=1.8, cross_section=10.0, **force_model_config)
+            phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, **force_model_config)
 
             # Compute H matrix for this observation
             H_matrix_row = d_rho_d_state @ phi_ti
@@ -378,6 +380,7 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             phi_ti_minus1 = phi_ti
             #RMS for this observation is y_i.T @ inv_obs_covariance @ y_i
             RMSs.append(y_i.T @ W_i @ y_i)
+        print(f"completed iteration {iteration} for {obs+1} obs")
 
         # sum all the RMSs
         RMSs = np.array(RMSs)
@@ -397,9 +400,10 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             if weighted_rms > weighted_rms_last:
                 no_times_diff_increased += 1
                 print(f"RMS increased {no_times_diff_increased} times in a row.")
-                if no_times_diff_increased > 3:
+                if no_times_diff_increased >= 3:
                     print("RMS increased 3 times in a row. Stopping iteration.")
                     break
+                #TODO: make it so that it takes the run with the best RMS
             else:
                 no_times_diff_increased = 0 #reset the counter
             weighted_rms_last = weighted_rms
@@ -441,7 +445,8 @@ if __name__ == "__main__":
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    obs_lengths_to_test = [20, 35, 50, 75, 100, 120]
+    # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
+    obs_lengths_to_test = [75]
 
     force_model_configs = [
         {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
@@ -450,18 +455,15 @@ if __name__ == "__main__":
         {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
     for i, force_model_config in enumerate(force_model_configs):
-        print(f"Force model config: {force_model_config}")
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            optimized_state, associated_covariance, residuals, final_RMS = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
+            optimized_state, covariance_matrix, residuals, final_RMS = BLS_optimize(observations_df, force_model_config, a_priori_estimate)
 
             #last iteration's residuals
             residuals_final = residuals[-len(observations_df):]
             #plot the last iteration's residuals
             plt.figure()
-            print("shape of utc: ", observations_df['UTC'].shape)
-            print("shape of residuals: ", residuals_final.shape)
             plt.scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c = "xkcd:blue")
             plt.scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c = "xkcd:green")
             plt.scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c = "xkcd:red")
@@ -481,4 +483,13 @@ if __name__ == "__main__":
                 plt.ylim(-15,15)
             plt.grid(True)
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-            plt.savefig(f"output/cov_heatmaps/starlink_fitting_test/Tapley_residuals/force_model_{i}_#pts_{len(observations_df)}.png")
+            plt.savefig(f"output/BLS/Tapley/residuals/force_model_{i}_#pts_{len(observations_df)}.png")
+
+            #ECI covariance matrix
+            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+            log_norm = SymLogNorm(linthresh=1e-10, vmin=covariance_matrix.min(), vmax=covariance_matrix.max())
+            plt.figure(figsize=(8, 7))
+            sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
+            #add title containing points_to_use and configuration
+            plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
+            plt.savefig(f"output/BLS/Tapley/covariances/covMat_#pts_{len(observations_df)}_config{i}.png")

@@ -444,7 +444,7 @@ def jd_to_utc(jd: float) -> datetime:
         UTC time tag.
     """
     #convert jd to astropy time object
-    time = Time(jd, format='jd', scale='utc')
+    time = Time(jd, format='jd', scale='utc', precision=9)
     #convert astropy time object to datetime object
     utc = time.datetime
     return utc
