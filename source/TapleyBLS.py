@@ -83,6 +83,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
+    # TODO: just add Knocke model for now its already implemented in Orekit and runs way faster than CERES?
     # TODO: CERES ERP force model
     # if enable_ceres:
     #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data) # pass the time and radiation data to the force model
@@ -90,7 +91,12 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     return propagator
 
 def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=1.8, cross_section=10.0, **config_flags):
-    x, y, z, vx, vy, vz = initial_state_vector
+
+    if len(initial_state_vector) == 6:
+        x, y, z, vx, vy, vz = initial_state_vector
+    elif len(initial_state_vector) == 7:
+        x, y, z, vx, vy, vz, cd = initial_state_vector
+    
     frame = FramesFactory.getEME2000() # j2000 frame by default
     # Propagation using the configured propagator
     initial_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(x), float(y), float(z)),
@@ -107,7 +113,6 @@ def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=1.8, 
     propagator.setOrbitType(OrbitType.CARTESIAN)
     propagator.setInitialState(initialState)
 
-    #TODO: make configure_force_models() not require cr, cd, and cross_section
     configured_propagator = configure_force_models(propagator,cr,cross_section, cd,**config_flags) # configure force models
     final_state = configured_propagator.propagate(datetime_to_absolutedate(end_date))
 
@@ -229,15 +234,18 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
+
+def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_config):
 
     df_dy = np.zeros((len(state_ti),len(state_ti))) #initialize matrix of partial derivatives (partials at time t0)
     # numerical estimation of partial derivatives
     # get the state at ti and the accelerations at ti
-    state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5])
+    state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5]) # x,y,z,xv,yv,zv
+
     epochDate = datetime_to_absolutedate(t0)
     accelerations_t0 = np.zeros(3)
     force_models = []
+
     if force_model_config.get('enable_gravity', False):
         MU = Constants.WGS84_EARTH_MU
         newattr = NewtonianAttraction(MU)
@@ -269,8 +277,8 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
 
     if force_model_config.get('enable_solar_radiation', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        cross_section = float(10.0) #TODO: get from state vector
-        cr = float(1.5) #TODO: get from state vector
+        cross_section = float(cross_section) 
+        cr = float(cr) 
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
         solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
         force_models.append(solarRadiationPressure)
@@ -284,7 +292,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-        isotropicDrag = IsotropicDrag(float(10.0), float(2.2)) #TODO: get from state vector
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
@@ -293,75 +301,97 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
 
     # perturb each state variable by a small amount and get the new accelerations
     perturbation = 0.1 # 10 cm
+
     for i in range(len(state_ti)):
+        #TODO: check that this loop correctly accomodates for the addition of Cd as a state variable
         perturbed_accelerations = np.zeros(3)
         state_ti_perturbed = state_ti.copy()
         state_ti_perturbed[i] += perturbation
+        print(f"perturbing state variable {i}")
+        print(f"state_ti_perturbed: {state_ti_perturbed}")
         for force_model in force_models:
             acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
             acc_perturbed = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
+            print(f"acc_perturbed: {acc_perturbed}")
             perturbed_accelerations+=acc_perturbed
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
-        
+        print(f"partial_derivatives: {partial_derivatives}")
+        #TODO: FIX MEEEE!!!
         # Assign partial derivatives to the appropriate submatrix
         if i < 3:  # Position components affect acceleration
             df_dy[3:, i] = partial_derivatives
         else:  # Velocity components affect position
             df_dy[i - 3, i] = 1  # Identity matrix in top-right 3x3 submatrix
 
-    assert np.allclose(df_dy[:3, :3], np.zeros((3, 3)), atol=1e-10), "First 3x3 submatrix is not all zeros"
-    assert np.allclose(df_dy[3:, 3:], np.zeros((3, 3)), atol=1e-10), "Last 3x3 submatrix is not all zeros"
-    assert np.allclose(df_dy[:3, 3:], np.eye(3), atol=1e-10), "Top right 3x3 submatrix is not the identity matrix"
-    assert not np.allclose(df_dy[3:, :3], np.zeros((3, 3)), atol=1e-15), "Bottom left 3x3 submatrix is very small"
-
     dt_seconds = float(dt.total_seconds())
     phi_t1 = phi_i + df_dy @ phi_i * dt_seconds # this is just a simple Euler integration step
 
     return phi_t1
 
-def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
+def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate_drag=False):
 
     # Initialize
-    t0 = observations_df['UTC'].iloc[0]
-    x_bar_0 = np.array(a_priori_estimate[1:7])  # assuming this is [x, y, z, u, v, w] for now. TODO: enable adding other state variables
-    state_covs = a_priori_estimate[7:13]
-    #make it a diagonal matrix
+    if estimate_drag==False:
+        t0 = observations_df['UTC'].iloc[0]
+        x_bar_0 = np.array(a_priori_estimate[1:7])  # x, y, z, u, v, w
+        state_covs = a_priori_estimate[7:13]
+    elif estimate_drag==True:
+        t0 = observations_df['UTC'].iloc[0]
+        x_bar_0 = np.array(a_priori_estimate[1:8]) #includes Cd
+        print(f"x_bar_0: {x_bar_0}")
+        state_covs = a_priori_estimate[8:14]
+
+    #make covs a diagonal matrix
     state_covs = np.diag(state_covs)
 
-    phi_ti_minus1 = np.identity(6)  # 6x6 identity matrix for 6 state variables
+    phi_ti_minus1 = np.identity(len(x_bar_0))  # n*n identity matrix for n state variables
     P_0 = np.array(state_covs, dtype=float)  # Covariance matrix from a priori estimate
 
-    d_rho_d_state = np.eye(6)  # Identity matrix for perfect state measurements
-    H_matrix = np.empty((0, 6))  # 6 columns for 6 state variables
+    d_rho_d_state = np.eye(len(x_bar_0))  # Identity matrix: assume perfect state measurements
+    H_matrix = np.empty((0, len(x_bar_0)))  # n columns for n state variables
 
     converged = False
     iteration = 1
     max_iterations = 10  # Set a max number of iterations
-    weighted_rms_last = np.inf
+    weighted_rms_last = np.inf # Initialize weighted RMS to infinity
     convergence_threshold = 0.001 # Define convergence threshold for RMS change
     no_times_diff_increased = 0
 
-    all_residuals = np.empty((0, 6))  # Initialize residuals array
+    all_residuals = np.empty((0, len(x_bar_0)))  # Initialize residuals array
 
     while not converged and iteration < max_iterations:
         print(f"Iteration: {iteration}")
-        N = np.zeros(6)  # reset N to zero
+        N = np.zeros(len(x_bar_0))  # reset N to zero
         lamda = np.linalg.inv(P_0)  # reset lambda to P_0
-        y_all = np.empty((0, 6))  # Initialize residuals array
+        y_all = np.empty((0, len(x_bar_0)))  # Initialize residuals array
         ti_minus1 = t0
         state_ti_minus1 = x_bar_0 
         RMSs = []
         for obs, row in observations_df.iterrows():
             ti = row['UTC']
-            observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
-            obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
-            obs_covariance = np.array(obs_covariance, dtype=float)
-            W_i = np.linalg.inv(obs_covariance)  # Inverse of observation covariances
 
+            observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
+            #add Cd from the last iteration to the observed state
+            if estimate_drag==True:
+                observed_state = np.append(observed_state, x_bar_0[-1])
+                obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
+                cd_covariance = 0.1  # TODO: is this even allowed?
+                obs_covariance = np.pad(obs_covariance, ((0, 1), (0, 1)), 'constant', constant_values=0)
+                obs_covariance[-1, -1] = cd_covariance
+            else:
+                obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
+
+            obs_covariance = np.array(obs_covariance, dtype=float) #convert to numpy array
+            W_i = np.linalg.inv(obs_covariance)  # Weight matrix is the inverse of observation covariances
+            
             # Propagate state and STM
             dt = ti - ti_minus1
-            state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=2, cd=1.8, cross_section=10.0, **force_model_config)
-            phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, **force_model_config)
+            if estimate_drag==True:
+                state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=1.5, cd=state_ti_minus1[-1], cross_section=10.0, **force_model_config)
+                phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=1.5, cd=state_ti_minus1[-1], cross_section=10.0, **force_model_config)
+            else:
+                state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=1.5, cd=2.2, cross_section=10.0, **force_model_config)
+                phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=1.5, cd=2.2, cross_section=10.0, **force_model_config)
 
             # Compute H matrix for this observation
             H_matrix_row = d_rho_d_state @ phi_ti
@@ -378,7 +408,6 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
             ti_minus1 = ti
             state_ti_minus1 = state_ti
             phi_ti_minus1 = phi_ti
-            #RMS for this observation is y_i.T @ inv_obs_covariance @ y_i
             RMSs.append(y_i.T @ W_i @ y_i)
         print(f"completed iteration {iteration} for {obs+1} obs")
 
@@ -403,12 +432,13 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
                 if no_times_diff_increased >= 3:
                     print("RMS increased 3 times in a row. Stopping iteration.")
                     break
-                #TODO: make it so that it takes the run with the best RMS
+                #TODO: make it so that it takes the run with the best RMS if it doesn't converge ?
             else:
                 no_times_diff_increased = 0 #reset the counter
             weighted_rms_last = weighted_rms
             
             x_bar_0 += xhat  # Update nominal trajectory
+            print(f"New nominal trajectory: {x_bar_0}")
 
         all_residuals = np.vstack([all_residuals, y_all])
         iteration += 1
@@ -420,7 +450,7 @@ if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
     # # Select the 2000th to 2200th rows of the SpaceX ephemeris
-    spacex_ephem_df = spacex_ephem_df_full.iloc[2000:2200]
+    spacex_ephem_df = spacex_ephem_df_full.iloc[0:1000]
 
     # Initialize state vector from the first point in the SpaceX ephemeris
     # TODO: Can perturb this initial state vector to test convergence later
@@ -440,9 +470,9 @@ if __name__ == "__main__":
     cr = 2
     cross_section = 10.0
     initial_t = spacex_ephem_df['UTC'].iloc[0]
-    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
+    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
-                                    cr, cd, cross_section])
+                                    ])
     #cast all the values except the first one to floats
     a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]])
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
@@ -463,7 +493,7 @@ if __name__ == "__main__":
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            optimized_state, covariance_matrix, residuals, final_RMS = OD_BLS(observations_df, force_model_config, a_priori_estimate)
+            optimized_state, covariance_matrix, residuals, final_RMS = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=True)
             covariance_matrices.append(covariance_matrix)
             #last iteration's residuals
             residuals_final = residuals[-len(observations_df):]
