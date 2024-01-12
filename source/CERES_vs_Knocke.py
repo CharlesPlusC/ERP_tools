@@ -212,15 +212,9 @@ def main(TLE, sat_name):
 
     from astropy.time import Time
     knocke_times_julian = [Time(TLE_epochDate_datetime + datetime.timedelta(seconds=duration)).jd for duration in knocke_times]
-    print("knocke_times_julian:", knocke_times_julian)
-    print("ceres_rtn_times:", ceres_rtn_times)
     start_date = max(min(ceres_rtn_times), min(knocke_times_julian))
     end_date = min(max(ceres_rtn_times), max(knocke_times_julian))
-    print("start_date:", start_date)
-    print("end_date:", end_date)
-    
-    #TODO: these time steps are not the same as the CERES ERP time steps, so the plots don't line up
-    #TODO: Best way to do this is to interface to the CERES ERP force model as I did to the Knocke ERP force model
+
 
     # Determine max and min for scalar acceleration and RTN acceleration
     max_scalar_acc = max(max(ceres_scalar_acc_data), max(knocke_scalar_acc_data))

@@ -337,7 +337,6 @@ def keplerian_elements_from_orekit_ephem(ephemeris, initial_date, end_date, step
 
     return times, keplerian_elements
 
-
 def hcl_acc_from_sc_state(spacecraftState, acc_vec):
     """
     Calculate the HCL (Radial, Transverse, Normal) components of the given acc_vec.
@@ -375,8 +374,6 @@ def hcl_acc_from_sc_state(spacecraftState, acc_vec):
     normal_component = Vector3D.dotProduct(erp_vec_eci, normal_unit_vector)
 
     return radial_component, transverse_component, normal_component
-
-
 
 def yyyy_mm_dd_hh_mm_ss_to_jd(year: int, month: int, day: int, hour: int, minute: int, second: int, milisecond: int) -> float:
     """

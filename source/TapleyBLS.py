@@ -322,7 +322,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
 def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
 
     # Initialize
-    t0 = observations_df['UTC'][0]
+    t0 = observations_df['UTC'].iloc[0]
     x_bar_0 = np.array(a_priori_estimate[1:7])  # assuming this is [x, y, z, u, v, w] for now. TODO: enable adding other state variables
     state_covs = a_priori_estimate[7:13]
     #make it a diagonal matrix
@@ -371,6 +371,8 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
             y_all = np.vstack([y_all, y_i])
             
             # Update lambda and N matrices
+            print("H_matrix_row", H_matrix_row)
+            print("W_i", W_i)
             lamda += H_matrix_row.T @ W_i @ H_matrix_row
             N += H_matrix_row.T @ W_i @ y_i
 
@@ -417,26 +419,29 @@ def BLS_optimize(observations_df, force_model_config, a_priori_estimate=None):
     return x_bar_0, np.linalg.inv(lamda), all_residuals, weighted_rms
 
 if __name__ == "__main__":
-    spacex_ephem_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
+    spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
+
+    # # Select the 2000th to 2200th rows of the SpaceX ephemeris
+    spacex_ephem_df = spacex_ephem_df_full.iloc[2000:2200]
 
     # Initialize state vector from the first point in the SpaceX ephemeris
     # TODO: Can perturb this initial state vector to test convergence later
-    initial_X = spacex_ephem_df['x'][0]
-    initial_Y = spacex_ephem_df['y'][0]
-    initial_Z = spacex_ephem_df['z'][0]
-    initial_VX = spacex_ephem_df['xv'][0]
-    initial_VY = spacex_ephem_df['yv'][0]
-    initial_VZ = spacex_ephem_df['zv'][0]
-    initial_sigma_X = spacex_ephem_df['sigma_x'][0]
-    initial_sigma_Y = spacex_ephem_df['sigma_y'][0]
-    initial_sigma_Z = spacex_ephem_df['sigma_z'][0]
-    initial_sigma_XV = spacex_ephem_df['sigma_xv'][0]
-    initial_sigma_YV = spacex_ephem_df['sigma_yv'][0]
-    initial_sigma_ZV = spacex_ephem_df['sigma_zv'][0]
+    initial_X = spacex_ephem_df['x'].iloc[0]
+    initial_Y = spacex_ephem_df['y'].iloc[0]
+    initial_Z = spacex_ephem_df['z'].iloc[0]
+    initial_VX = spacex_ephem_df['xv'].iloc[0]
+    initial_VY = spacex_ephem_df['yv'].iloc[0]
+    initial_VZ = spacex_ephem_df['zv'].iloc[0]
+    initial_sigma_X = spacex_ephem_df['sigma_x'].iloc[0]
+    initial_sigma_Y = spacex_ephem_df['sigma_y'].iloc[0]
+    initial_sigma_Z = spacex_ephem_df['sigma_z'].iloc[0]
+    initial_sigma_XV = spacex_ephem_df['sigma_xv'].iloc[0]
+    initial_sigma_YV = spacex_ephem_df['sigma_yv'].iloc[0]
+    initial_sigma_ZV = spacex_ephem_df['sigma_zv'].iloc[0]
     cd = 2.2
     cr = 2
     cross_section = 10.0
-    initial_t = spacex_ephem_df['UTC'][0]
+    initial_t = spacex_ephem_df['UTC'].iloc[0]
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
                                     cr, cd, cross_section])
@@ -446,7 +451,7 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [75]
+    obs_lengths_to_test = [50]
 
     force_model_configs = [
         {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
@@ -483,7 +488,7 @@ if __name__ == "__main__":
                 plt.ylim(-15,15)
             plt.grid(True)
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-            plt.savefig(f"output/BLS/Tapley/residuals/force_model_{i}_#pts_{len(observations_df)}.png")
+            plt.savefig(f"output/BLS/Tapley/residuals/2000tstep_force_model_{i}_#pts_{len(observations_df)}.png")
 
             #ECI covariance matrix
             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
@@ -492,4 +497,4 @@ if __name__ == "__main__":
             sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
             #add title containing points_to_use and configuration
             plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-            plt.savefig(f"output/BLS/Tapley/covariances/covMat_#pts_{len(observations_df)}_config{i}.png")
+            plt.savefig(f"output/BLS/Tapley/covariances/2000tstep_covMat_#pts_{len(observations_df)}_config{i}.png")
