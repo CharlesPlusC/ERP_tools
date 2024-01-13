@@ -234,7 +234,6 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-
 def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_config):
 
     df_dy = np.zeros((len(state_ti),len(state_ti))) #initialize matrix of partial derivatives (partials at time t0)
@@ -300,28 +299,41 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         accelerations_t0+=atmospheric_drag_eci_t0
 
     # perturb each state variable by a small amount and get the new accelerations
-    perturbation = 0.1 # 10 cm
+    perturbation = 0.1 
 
-    for i in range(len(state_ti)):
-        #TODO: check that this loop correctly accomodates for the addition of Cd as a state variable
-        perturbed_accelerations = np.zeros(3)
+    for i in range(len(state_ti) + 1): # Adding +1 for Cd
         state_ti_perturbed = state_ti.copy()
-        state_ti_perturbed[i] += perturbation
-        print(f"perturbing state variable {i}")
-        print(f"state_ti_perturbed: {state_ti_perturbed}")
+        if i < len(state_ti): # Perturb state variables
+            state_ti_perturbed[i] += perturbation
+        else: # Perturb Cd
+            perturbed_cd = cd + perturbation
+
+        perturbed_accelerations = np.zeros(3)
         for force_model in force_models:
-            acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
+            if i < len(state_ti): # Use perturbed state vector
+                acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
+            else: # Use perturbed Cd
+                # Recreate drag force model with perturbed Cd
+                wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+                msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+                sun = CelestialBodyFactory.getSun()
+                atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+                isotropicDrag = IsotropicDrag(float(cross_section), float(perturbed_cd))
+                dragForce = DragForce(atmosphere, isotropicDrag)
+
+                acc_perturbed = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
+
             acc_perturbed = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
-            print(f"acc_perturbed: {acc_perturbed}")
-            perturbed_accelerations+=acc_perturbed
+            perturbed_accelerations += acc_perturbed
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
-        print(f"partial_derivatives: {partial_derivatives}")
-        #TODO: FIX MEEEE!!!
+
         # Assign partial derivatives to the appropriate submatrix
         if i < 3:  # Position components affect acceleration
-            df_dy[3:, i] = partial_derivatives
-        else:  # Velocity components affect position
-            df_dy[i - 3, i] = 1  # Identity matrix in top-right 3x3 submatrix
+            df_dy[3:6, i] = partial_derivatives
+        elif i < 6:  # Velocity components affect acceleration
+            df_dy[3:6, i] = partial_derivatives # Now includes effect of velocity
+        elif i == 6: # Cd affects acceleration
+            df_dy[3:6, 6] = partial_derivatives # Includes effect of Cd on acceleration
 
     dt_seconds = float(dt.total_seconds())
     phi_t1 = phi_i + df_dy @ phi_i * dt_seconds # this is just a simple Euler integration step
@@ -338,26 +350,27 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     elif estimate_drag==True:
         t0 = observations_df['UTC'].iloc[0]
         x_bar_0 = np.array(a_priori_estimate[1:8]) #includes Cd
-        print(f"x_bar_0: {x_bar_0}")
         state_covs = a_priori_estimate[8:14]
 
     #make covs a diagonal matrix
     state_covs = np.diag(state_covs)
-
     phi_ti_minus1 = np.identity(len(x_bar_0))  # n*n identity matrix for n state variables
     P_0 = np.array(state_covs, dtype=float)  # Covariance matrix from a priori estimate
+    if estimate_drag:
+        P_0 = np.pad(P_0, ((0, 1), (0, 1)), 'constant', constant_values=0)
+        # Assign a non-zero variance to the drag coefficient to avoid non-invertible matrix
+        initial_cd_variance = 0.1  # Setting an arbitrary value for now (but still high)
+        P_0[-1, -1] = initial_cd_variance
 
     d_rho_d_state = np.eye(len(x_bar_0))  # Identity matrix: assume perfect state measurements
-    H_matrix = np.empty((0, len(x_bar_0)))  # n columns for n state variables
-
+    H_matrix = np.empty((0, len(x_bar_0)))
     converged = False
     iteration = 1
-    max_iterations = 10  # Set a max number of iterations
-    weighted_rms_last = np.inf # Initialize weighted RMS to infinity
-    convergence_threshold = 0.001 # Define convergence threshold for RMS change
+    max_iterations = 10
+    weighted_rms_last = np.inf 
+    convergence_threshold = 0.001 
     no_times_diff_increased = 0
-
-    all_residuals = np.empty((0, len(x_bar_0)))  # Initialize residuals array
+    all_residuals = np.empty((0, len(x_bar_0)))
 
     while not converged and iteration < max_iterations:
         print(f"Iteration: {iteration}")
@@ -375,7 +388,9 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             if estimate_drag==True:
                 observed_state = np.append(observed_state, x_bar_0[-1])
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
-                cd_covariance = 0.1  # TODO: is this even allowed?
+                #TODO: am i just repeating the code from above?
+                cd_covariance = 0.01  # TODO: is this even allowed? just setting a high value for now
+                # TODO: do i want to reduce the covariance of Cd after each iteration?
                 obs_covariance = np.pad(obs_covariance, ((0, 1), (0, 1)), 'constant', constant_values=0)
                 obs_covariance[-1, -1] = cd_covariance
             else:
@@ -396,7 +411,10 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             # Compute H matrix for this observation
             H_matrix_row = d_rho_d_state @ phi_ti
             H_matrix = np.vstack([H_matrix, H_matrix_row]) # Append row to H matrix
+            if estimate_drag==True:
+                state_ti = np.append(state_ti, state_ti_minus1[-1]) #add Cd to state_ti
             y_i = observed_state - rho_i(state_ti, 'state')
+            print(f"y_i: {y_i}")
             y_i = np.array(y_i, dtype=float)
             y_all = np.vstack([y_all, y_i])
             
