@@ -318,13 +318,21 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
                 msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
                 sun = CelestialBodyFactory.getSun()
                 atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+                print(f"perturbed_cd: {perturbed_cd}")
                 isotropicDrag = IsotropicDrag(float(cross_section), float(perturbed_cd))
+                isotropicDrag2 = IsotropicDrag(float(cross_section), float(perturbed_cd+2))
+                
                 dragForce = DragForce(atmosphere, isotropicDrag)
-
+                dragForce2 = DragForce(atmosphere, isotropicDrag2)
+                print(f"dragForce: {dragForce}")
+                print(f"dragForce2: {dragForce2}")
                 acc_perturbed = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
-
+                print(f"acc_perturbed: {acc_perturbed}")
+                print(f"acc_perturbed2: {extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce2)}")
+            
             acc_perturbed = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
             perturbed_accelerations += acc_perturbed
+
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
 
         # Assign partial derivatives to the appropriate submatrix
@@ -500,9 +508,9 @@ if __name__ == "__main__":
     obs_lengths_to_test = [35]
 
     force_model_configs = [
-        {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
+        # {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
         {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
     covariance_matrices = []
