@@ -386,7 +386,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     if estimate_drag:
         P_0 = np.pad(P_0, ((0, 1), (0, 1)), 'constant', constant_values=0)
         # Assign a non-zero variance to the drag coefficient to avoid non-invertible matrix
-        initial_cd_variance = 10  # Setting an arbitrary value for now (but still high)
+        initial_cd_variance = 1  # Setting an arbitrary value for now (but still high)
         P_0[-1, -1] = initial_cd_variance
 
     d_rho_d_state = np.eye(len(x_bar_0))  # Identity matrix: assume perfect state measurements
@@ -416,7 +416,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 observed_state = np.append(observed_state, x_bar_0[-1])
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
                                     #TODO: am i just repeating the code from above?
-                cd_covariance = 10  # TODO: is this even allowed? just setting a high value for now
+                cd_covariance = 1  # TODO: is this even allowed? just setting a high value for now
                                      # TODO: do i want to reduce the covariance of Cd after each iteration?
                 obs_covariance = np.pad(obs_covariance, ((0, 1), (0, 1)), 'constant', constant_values=0)
                 obs_covariance[-1, -1] = cd_covariance
@@ -470,8 +470,8 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             if weighted_rms > weighted_rms_last:
                 no_times_diff_increased += 1
                 print(f"RMS increased {no_times_diff_increased} times in a row.")
-                if no_times_diff_increased >= 3:
-                    print("RMS increased 3 times in a row. Stopping iteration.")
+                if no_times_diff_increased >= 2:
+                    print("RMS increased 2 times in a row. Stopping iteration.")
                     break
                 #TODO: make it so that it takes the run with the best RMS if it doesn't converge ?
             else:
@@ -519,7 +519,7 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [25]
+    obs_lengths_to_test = [120]
     estimate_drag = True
     force_model_configs = [
         # {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
