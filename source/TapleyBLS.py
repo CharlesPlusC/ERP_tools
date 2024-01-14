@@ -307,7 +307,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
             perturbation = 0.1
             state_ti_perturbed[i] += perturbation
         else:
-            perturbation = 0.001
+            perturbation = 0.01
             state_ti_perturbed[-1] += perturbation
 
         perturbed_accelerations = np.zeros(3)
@@ -345,7 +345,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
     print(f"df_dy: {df_dy}")
 
     dt_seconds = float(dt.total_seconds())
-    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds  # this is just a simple Euler integration step
+    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds  #TODO: this is just a simple Euler integration step- should use a better integrator
 
     return phi_t1
 
@@ -368,7 +368,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     if estimate_drag:
         P_0 = np.pad(P_0, ((0, 1), (0, 1)), 'constant', constant_values=0)
         # Assign a non-zero variance to the drag coefficient to avoid non-invertible matrix
-        initial_cd_variance = 0.1  # Setting an arbitrary value for now (but still high)
+        initial_cd_variance = 0.01  # Setting an arbitrary value for now (but still high)
         P_0[-1, -1] = initial_cd_variance
 
     d_rho_d_state = np.eye(len(x_bar_0))  # Identity matrix: assume perfect state measurements
@@ -423,7 +423,6 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             if estimate_drag==True:
                 state_ti = np.append(state_ti, state_ti_minus1[-1]) #add Cd to state_ti
             y_i = observed_state - rho_i(state_ti, 'state')
-            print(f"y_i: {y_i}")
             y_i = np.array(y_i, dtype=float)
             y_all = np.vstack([y_all, y_i])
             
