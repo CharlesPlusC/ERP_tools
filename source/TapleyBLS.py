@@ -35,6 +35,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 
 SATELLITE_MASS = 800.0
@@ -236,12 +237,26 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_config):
+def stm_derivative(t, phi_flat, df_dy):
+    """
+    Computes the derivative of the flattened state transition matrix (STM).
 
-    df_dy = np.zeros((len(state_ti),len(state_ti))) #initialize matrix of partial derivatives (partials at time t0)
-    # numerical estimation of partial derivatives
-    # get the state at ti and the accelerations at ti
-    state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5]) # x,y,z,xv,yv,zv
+    Parameters:
+    - t: Time (not used in this function as the ODE is time-invariant, but required by solve_ivp)
+    - phi_flat: Flattened state transition matrix (STM)
+    - df_dy: Jacobian of the system dynamics (partial derivatives matrix)
+
+    Returns:
+    - Flattened derivative of the STM
+    """
+    n = int(np.sqrt(len(phi_flat)))
+    phi = phi_flat.reshape((n, n))
+    phi_dot = df_dy @ phi
+    return phi_dot.flatten()
+
+def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_config):
+    df_dy = np.zeros((len(state_ti),len(state_ti)))  # Initialize matrix of partial derivatives
+    state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5])  # x, y, z, xv, yv, zv
 
     epochDate = datetime_to_absolutedate(t0)
     accelerations_t0 = np.zeros(3)
@@ -303,12 +318,8 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
 
     for i in range(len(state_ti)):
         state_ti_perturbed = state_ti.copy()
-        if i < len(state_ti):  # Perturb state variables
-            perturbation = 0.1
-            state_ti_perturbed[i] += perturbation
-        else:
-            perturbation = 0.01
-            state_ti_perturbed[-1] += perturbation
+        perturbation = 0.1
+        state_ti_perturbed[i] += perturbation
 
         perturbed_accelerations = np.zeros(3)
         for force_model in force_models:
@@ -335,17 +346,23 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
 
         # Assign partial derivatives to the appropriate submatrix
-        if i < 3:  # Position components affect acceleration
+        if i < 3:  # Position components 
             df_dy[3:6, i] = partial_derivatives
-        elif i < 6:  # Velocity components affect acceleration
+        elif i < 6:  # Velocity components 
             df_dy[3:6, i] = partial_derivatives
-        elif i == 6:  # Cd affects acceleration
+        elif i == 6:  # Cd component
             df_dy[3:6, 6] = partial_derivatives
 
-    print(f"df_dy: {df_dy}")
+    # Flatten the initial STM for integration
+    phi_i_flat = phi_i.flatten()
 
+    # Set up time span for integration
     dt_seconds = float(dt.total_seconds())
-    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds  #TODO: this is just a simple Euler integration step- should use a better integrator
+    t_span = [0, dt_seconds]
+
+    # Use solve_ivp to integrate the STM
+    sol = solve_ivp(stm_derivative, t_span, phi_i_flat, args=(df_dy,), method='RK45')
+    phi_t1 = sol.y[:, -1].reshape(phi_i.shape)
 
     return phi_t1
 
@@ -368,7 +385,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     if estimate_drag:
         P_0 = np.pad(P_0, ((0, 1), (0, 1)), 'constant', constant_values=0)
         # Assign a non-zero variance to the drag coefficient to avoid non-invertible matrix
-        initial_cd_variance = 0.01  # Setting an arbitrary value for now (but still high)
+        initial_cd_variance = 10  # Setting an arbitrary value for now (but still high)
         P_0[-1, -1] = initial_cd_variance
 
     d_rho_d_state = np.eye(len(x_bar_0))  # Identity matrix: assume perfect state measurements
@@ -391,15 +408,15 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
         RMSs = []
         for obs, row in observations_df.iterrows():
             ti = row['UTC']
-
+            print(f"Observation {obs+1} of {len(observations_df)}")
             observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
             #add Cd from the last iteration to the observed state
             if estimate_drag==True:
                 observed_state = np.append(observed_state, x_bar_0[-1])
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
-                #TODO: am i just repeating the code from above?
-                cd_covariance = 0.01  # TODO: is this even allowed? just setting a high value for now
-                # TODO: do i want to reduce the covariance of Cd after each iteration?
+                                    #TODO: am i just repeating the code from above?
+                cd_covariance = 10  # TODO: is this even allowed? just setting a high value for now
+                                     # TODO: do i want to reduce the covariance of Cd after each iteration?
                 obs_covariance = np.pad(obs_covariance, ((0, 1), (0, 1)), 'constant', constant_values=0)
                 obs_covariance[-1, -1] = cd_covariance
             else:
@@ -464,7 +481,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             weighted_rms_last = weighted_rms
             
             x_bar_0 += xhat  # Update nominal trajectory
-            print(f"New nominal trajectory: {x_bar_0}")
+            print(f"Estimated state: {x_bar_0}")
 
         all_residuals = np.vstack([all_residuals, y_all])
         iteration += 1
@@ -475,7 +492,6 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
 if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
-    # # Select the 2000th to 2200th rows of the SpaceX ephemeris
     spacex_ephem_df = spacex_ephem_df_full.iloc[0:1000]
 
     # Initialize state vector from the first point in the SpaceX ephemeris
@@ -492,7 +508,7 @@ if __name__ == "__main__":
     initial_sigma_XV = spacex_ephem_df['sigma_xv'].iloc[0]
     initial_sigma_YV = spacex_ephem_df['sigma_yv'].iloc[0]
     initial_sigma_ZV = spacex_ephem_df['sigma_zv'].iloc[0]
-    cd = 2.2
+    cd = 1.2
     cr = 2
     cross_section = 10.0
     initial_t = spacex_ephem_df['UTC'].iloc[0]
@@ -505,7 +521,7 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [35]
+    obs_lengths_to_test = [20]
 
     force_model_configs = [
         # {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
@@ -514,7 +530,6 @@ if __name__ == "__main__":
         {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
     covariance_matrices = []
-
     for i, force_model_config in enumerate(force_model_configs):
         
         for obs_length in obs_lengths_to_test:
