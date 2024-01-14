@@ -317,18 +317,15 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         accelerations_t0+=atmospheric_drag_eci_t0
 
     for i in range(len(state_ti)):
-        print(f"Computing partial derivatives for state variable {i+1} of {len(state_ti)}")
         state_ti_perturbed = state_ti.copy()
         perturbation = 0.1
         state_ti_perturbed[i] += perturbation
 
         perturbed_accelerations = np.zeros(3)
         for force_model in force_models:
-            print(f"Computing perturbed acceleration for force model {force_model}")
             if i < 6:  # Use perturbed state vector
                 acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
             elif i == 6:
-                print(f"Computing perturbed acceleration for Cd")
                 # Recreate drag force model with perturbed Cd
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
                 msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
@@ -433,55 +430,37 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             dt = ti - ti_minus1
             if estimate_drag==True:
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=1.5, cd=state_ti_minus1[-1], cross_section=10.0, **force_model_config)
-                print(f"shape of state_ti: {state_ti.shape}")
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=1.5, cd=state_ti_minus1[-1], cross_section=10.0, **force_model_config)
-                print(f"shape of phi_ti: {phi_ti.shape}")
             else:
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=1.5, cd=2.2, cross_section=10.0, **force_model_config)
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=1.5, cd=2.2, cross_section=10.0, **force_model_config)
 
             # Compute H matrix for this observation
             H_matrix_row = d_rho_d_state @ phi_ti
-            print(f"shape of H_matrix_row: {H_matrix_row.shape}")
             H_matrix = np.vstack([H_matrix, H_matrix_row]) # Append row to H matrix
-            print(f"shape of H_matrix: {H_matrix.shape}")
             if estimate_drag==True:
-                state_ti = np.concatenate(state_ti, state_ti_minus1[-1]) #add Cd to state_ti
-                print(f"state_ti: {state_ti}")
-                print(f"shape of state_ti: {state_ti.shape}")
+                state_ti = np.append(state_ti, state_ti_minus1[-1]) #add Cd to state_ti
             y_i = observed_state - rho_i(state_ti, 'state')
             y_i = np.array(y_i, dtype=float)
             y_all = np.vstack([y_all, y_i])
             
             # Update lambda and N matrices
-            print(f"shape of W_i: {W_i.shape}")
-            print(f"shape of H_matrix_row: {H_matrix_row.shape}")
             lamda += H_matrix_row.T @ W_i @ H_matrix_row
-            print(f"shape of lamda: {lamda.shape}")
             N += H_matrix_row.T @ W_i @ y_i
-            print(f"shape of N: {N.shape}")
 
             # Update for next iteration
-            print(f'resetting state_ti_minus1 to state_ti')
             ti_minus1 = ti
-            print(f"state_ti: {state_ti}")
             state_ti_minus1 = np.array(state_ti)
-            print(f"shape of state_ti: {state_ti_minus1.shape}")
-            print(f"shape of state_ti_minus1: {state_ti_minus1.shape}")
             phi_ti_minus1 = phi_ti
-            print(f"shape of phi_ti_minus1: {phi_ti_minus1.shape}")
             RMSs.append(y_i.T @ W_i @ y_i)
-        print(f"completed iteration {iteration} for {obs+1} obs")
 
         # sum all the RMSs
         RMSs = np.array(RMSs)
         #weighted RMS is sqrt(RMS divided by m. where m is (number of observations * number of state variables))
         weighted_rms = np.sqrt(np.sum(RMSs) / (len(x_bar_0) * len (y_all)))
         print(f"Weighted RMS: {weighted_rms}")
-
         # Solve normal equations
         xhat = np.linalg.inv(lamda) @ N
-        print(f"shape of xhat: {xhat.shape}")
         # Check for convergence
         if abs(weighted_rms - weighted_rms_last) < convergence_threshold:
             print("Converged!")
@@ -540,8 +519,8 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [35]
-    estimate_drag = False
+    obs_lengths_to_test = [25]
+    estimate_drag = True
     force_model_configs = [
         # {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
         # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
@@ -550,6 +529,10 @@ if __name__ == "__main__":
 
     covariance_matrices = []
     for i, force_model_config in enumerate(force_model_configs):
+        #force estimate_drag to be False if the force model doesn't have drag
+        if not force_model_config.get('enable_atmospheric_drag', False):
+            estimate_drag = False
+            raise Warning("Force model doesn't have drag. Setting estimate_drag to False.")
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
