@@ -5,6 +5,8 @@ orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
 
+import pprint
+
 from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import Constants as orekit_constants
@@ -246,19 +248,20 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
     force_models = []
 
     if force_model_config.get('enable_gravity', False):
+        
         MU = Constants.WGS84_EARTH_MU
-        newattr = NewtonianAttraction(MU)
-        force_models.append(newattr)
-        gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, newattr)
-        gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
-        accelerations_t0+=gravity_eci_t0
+        monopolegrav = NewtonianAttraction(MU)
+        force_models.append(monopolegrav)
+        monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, monopolegrav)
+        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+        accelerations_t0+=monopole_gravity_eci_t0
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
-        gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
-        force_models.append(gravity_force_model)
-        gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravity_force_model)
-        gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
-        accelerations_t0+=gravity_eci_t0
+        gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
+        force_models.append(gravityfield)
+        gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravityfield)
+        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+        accelerations_t0+=gravityfield_eci_t0
 
     if force_model_config.get('enable_third_body', False):
         moon = CelestialBodyFactory.getMoon()
@@ -298,53 +301,51 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
-    # perturb each state variable by a small amount and get the new accelerations
-    perturbation = 0.1 
-
-    for i in range(len(state_ti) + 1): # Adding +1 for Cd
+    for i in range(len(state_ti)):
         state_ti_perturbed = state_ti.copy()
-        if i < len(state_ti): # Perturb state variables
+        if i < len(state_ti):  # Perturb state variables
+            perturbation = 0.1
             state_ti_perturbed[i] += perturbation
-        else: # Perturb Cd
-            perturbed_cd = cd + perturbation
+        else:
+            perturbation = 0.001
+            state_ti_perturbed[-1] += perturbation
 
         perturbed_accelerations = np.zeros(3)
         for force_model in force_models:
-            if i < len(state_ti): # Use perturbed state vector
+            if i < 6:  # Use perturbed state vector
                 acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
-            else: # Use perturbed Cd
+            elif i == 6:
                 # Recreate drag force model with perturbed Cd
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
                 msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
                 sun = CelestialBodyFactory.getSun()
                 atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-                print(f"perturbed_cd: {perturbed_cd}")
-                isotropicDrag = IsotropicDrag(float(cross_section), float(perturbed_cd))
-                isotropicDrag2 = IsotropicDrag(float(cross_section), float(perturbed_cd+2))
-                
-                dragForce = DragForce(atmosphere, isotropicDrag)
-                dragForce2 = DragForce(atmosphere, isotropicDrag2)
-                print(f"dragForce: {dragForce}")
-                print(f"dragForce2: {dragForce2}")
-                acc_perturbed = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
-                print(f"acc_perturbed: {acc_perturbed}")
-                print(f"acc_perturbed2: {extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce2)}")
-            
-            acc_perturbed = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
-            perturbed_accelerations += acc_perturbed
+                perturbed_isotropicDrag = IsotropicDrag(float(cross_section), float(state_ti_perturbed[-1]))                
+                perturbed_dragForce = DragForce(atmosphere, perturbed_isotropicDrag)
+                #replace the final force model with the perturbed one
+                force_models[-1] = perturbed_dragForce
+                acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
 
+            if isinstance(acc_perturbed, np.ndarray): #TODO: hacky fix for the stupid output of extract_acceleration
+                acc_perturbed_values = acc_perturbed
+            else:
+                acc_perturbed_values = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
+
+            perturbed_accelerations += acc_perturbed_values
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
 
         # Assign partial derivatives to the appropriate submatrix
         if i < 3:  # Position components affect acceleration
             df_dy[3:6, i] = partial_derivatives
         elif i < 6:  # Velocity components affect acceleration
-            df_dy[3:6, i] = partial_derivatives # Now includes effect of velocity
-        elif i == 6: # Cd affects acceleration
-            df_dy[3:6, 6] = partial_derivatives # Includes effect of Cd on acceleration
+            df_dy[3:6, i] = partial_derivatives
+        elif i == 6:  # Cd affects acceleration
+            df_dy[3:6, 6] = partial_derivatives
+
+    print(f"df_dy: {df_dy}")
 
     dt_seconds = float(dt.total_seconds())
-    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds # this is just a simple Euler integration step
+    phi_t1 = phi_i + df_dy @ phi_i * dt_seconds  # this is just a simple Euler integration step
 
     return phi_t1
 
