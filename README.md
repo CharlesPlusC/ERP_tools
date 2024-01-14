@@ -72,7 +72,7 @@ These plots record the cumulative radiative flux over a given orbit. The flux is
 
 ## Orekit Custom CERES ERP Force Model
 
-I have implemented a ERP force model for Orekit that uses the CERES data to calculate the radiative flux at a given satellite's position. This force model can be used to propagate a satellite's trajectory and calculate the radiative flux at each point along the trajectory. It is still in need of some refinement but it seems to perform similarly to the Knocke model in Orekit.
+I have implemented a ERP force model for Orekit that uses the CERES data to calculate the radiative flux at a given satellite's position. This force model can be used to propagate a satellite's trajectory and calculate the radiative flux at each point along the trajectory.
 
 HCL Difference between the two models relative to a trajectory with no ERP force model for a Starlink satellite over a 6-hour period:
 ![Knocke vs CERES Starlink](output/ERP_prop/SL_6hr_Knocke_vs_CERES.jpeg)
