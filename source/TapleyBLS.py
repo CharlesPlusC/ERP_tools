@@ -35,10 +35,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import datetime
+import os
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 
-SATELLITE_MASS = 500.0 #TBC (v1s are 250 , and v2mini are 800 or something?)
+SATELLITE_MASS = 500.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
@@ -111,7 +113,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     return propagator
 
-def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=1.8, cross_section=10.0, **config_flags):
+def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=2.2, cross_section=30.0, **config_flags):
 
     if len(initial_state_vector) == 6:
         x, y, z, vx, vy, vz = initial_state_vector
@@ -463,7 +465,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     convergence_threshold = 0.001 
     no_times_diff_increased = 0
 
-    all_residuals = np.empty((0, len(x_bar_0)))
+    all_residuals = []
     all_rms = []
     all_xbar_0s = []
     all_covs = []
@@ -549,14 +551,13 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             x_bar_0 += xhat  # Update nominal trajectory
             print(f"Estimated state: {x_bar_0}")
 
-        all_residuals = np.vstack([all_residuals, y_all])
+        all_residuals.append(y_all)
         all_rms.append(weighted_rms)
         all_xbar_0s.append(x_bar_0)
         all_covs.append(np.linalg.inv(lamda))
         iteration += 1
 
-    return x_bar_0, np.linalg.inv(lamda), all_residuals, weighted_rms
-
+    return all_xbar_0s, all_covs, all_residuals, all_rms
 
 if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
@@ -590,11 +591,11 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [100]
+    obs_lengths_to_test = [5]
     estimate_drag = True
     force_model_configs = [
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True},
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True},
         {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True, 'enable_erp_knocke': True},
         ]
 
@@ -608,15 +609,33 @@ if __name__ == "__main__":
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
             optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
-            
+            #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
+            #save the optimized states, covariance matrices, residuals, RMSs
+            date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            folder_path = "output/OD_BLS/Tapley/saved_runs"
+            output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
+            os.makedirs(output_folder)
+            np.save(f"{output_folder}/optimized_states.npy", optimized_states)
+            np.save(f"{output_folder}/cov_mats.npy", cov_mats)
+            np.save(f"{output_folder}/residuals.npy", residuals)
+            np.save(f"{output_folder}/RMSs.npy", RMSs)
+
             #find the index of the minimum RMS
             min_RMS_index = np.argmin(RMSs)
             optimized_state = optimized_states[min_RMS_index]
             covariance_matrix = cov_mats[min_RMS_index]
             final_RMS = RMSs[min_RMS_index]
             residuals_final = residuals[min_RMS_index]
-
             covariance_matrices.append(covariance_matrix)
+
+            print(f"numpy shape of optimized_state: {np.shape(optimized_state)}")
+            print(f"numpy shape of covariance_matrix: {np.shape(covariance_matrix)}")
+            print(f"numpy shape of residuals_final: {np.shape(residuals_final)}")
+            print(f"numpy shape of final_RMS: {np.shape(final_RMS)}")
+            print(f"numpy shape of residuals: {np.shape(residuals)}")
+            print(f"numpy shape of RMSs: {np.shape(RMSs)}")
+            print(f"numpy shape of cov_mats: {np.shape(cov_mats)}")
+            print(f"numpy shape of optimized_states: {np.shape(optimized_states)}")
 
             plt.figure()
             plt.scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c = "xkcd:blue")
@@ -629,10 +648,13 @@ if __name__ == "__main__":
             plt.xlabel("Observation time (UTC)")
             plt.xticks(rotation=45)
             plt.ylabel("Residual (m)")
-            plt.text(0.05, 0.95, f"Weighted RMS: {final_RMS:.2f}", transform=plt.gca().transAxes)
             force_model_keys_str = keys_to_string(force_model_config)
-            wrapped_text = textwrap.fill(force_model_keys_str, 40)
-            plt.text(0.05, 0.90, f"Force model:\n{wrapped_text}", transform=plt.gca().transAxes)
+            wrapped_text = textwrap.fill(force_model_keys_str, 20)
+            plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
+                    transform=plt.gca().transAxes,
+                    fontsize=10, 
+                    verticalalignment='bottom',
+                    bbox=dict(facecolor='white', alpha=0.5))
             if len(observations_df) <= 60:
                 plt.ylim(-2,2)
             elif len(observations_df) <= 100:
@@ -656,8 +678,12 @@ if __name__ == "__main__":
             plt.xlabel("Residual (m)")
             plt.ylabel("Frequency")
             force_model_keys_str = keys_to_string(force_model_config)
-            wrapped_text = textwrap.fill(force_model_keys_str, 40)
-            plt.text(0.05, 0.90, f"Force model:\n{wrapped_text}", transform=plt.gca().transAxes)
+            wrapped_text = textwrap.fill(force_model_keys_str, 20)
+            plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
+                    transform=plt.gca().transAxes,
+                    fontsize=10, 
+                    verticalalignment='bottom',
+                    bbox=dict(facecolor='white', alpha=0.5))
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
             plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/hist_force_model_{i}_#pts_{len(observations_df)}.png")
 
@@ -670,9 +696,6 @@ if __name__ == "__main__":
             plt.figure(figsize=(8, 7))
             sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
             plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-            force_model_keys_str = keys_to_string(force_model_config)
-            wrapped_text = textwrap.fill(force_model_keys_str, 40)
-            plt.text(0.05, 0.90, f"Force model:\n{wrapped_text}", transform=plt.gca().transAxes)
             save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}.png"
             if estimate_drag:
                 save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
