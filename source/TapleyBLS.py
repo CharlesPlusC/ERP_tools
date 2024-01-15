@@ -44,16 +44,23 @@ INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
 POSITION_TOLERANCE = 1e-3 # 1 mm
 
+def keys_to_string(d):
+    """
+    Convert the keys of a dictionary to a string with each key on a new line.
+    """
+    return '\n'.join(d.keys())
+
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Earth gravity field with degree 64 and order 64
     if config_flags.get('enable_gravity', False):
         MU = Constants.WGS84_EARTH_MU
+        ### monopole gravity model
         newattr = NewtonianAttraction(MU)
         propagator.addForceModel(newattr)
 
-        ### 64x64 gravity model
-        gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
+        ### 64x64 gravity model 
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)#TODO: i think Vishal Ray's paper seems to suggest at least 80x80 would be good- double check
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
@@ -127,7 +134,7 @@ def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=1.8, 
     propagator.setOrbitType(OrbitType.CARTESIAN)
     propagator.setInitialState(initialState)
 
-    configured_propagator = configure_force_models(propagator,cr,cross_section, cd,**config_flags) # configure force models
+    configured_propagator = configure_force_models(propagator,cr,cross_section, cd,**config_flags)
     final_state = configured_propagator.propagate(datetime_to_absolutedate(end_date))
 
     pv_coordinates = final_state.getPVCoordinates()
@@ -349,7 +356,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         state_ti_perturbed = state_ti.copy()
         perturbation = 0.1
         state_ti_perturbed[i] += perturbation
-
         perturbed_accelerations = np.zeros(3)
         for force_model in force_models:
             if i < 6:  # Use perturbed state vector
@@ -362,15 +368,12 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
                 atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
                 perturbed_isotropicDrag = IsotropicDrag(float(cross_section), float(state_ti_perturbed[-1]))                
                 perturbed_dragForce = DragForce(atmosphere, perturbed_isotropicDrag)
-                #replace the final force model with the perturbed one
-                force_models[-1] = perturbed_dragForce
+                force_models[-1] = perturbed_dragForce # Replace the last force model with the perturbed drag force model
                 acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
-
             if isinstance(acc_perturbed, np.ndarray): #TODO: hacky fix for the stupid output of extract_acceleration
                 acc_perturbed_values = acc_perturbed
             else:
                 acc_perturbed_values = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
-
             perturbed_accelerations += acc_perturbed_values
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
 
@@ -395,6 +398,39 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
     phi_t1 = sol.y[:, -1].reshape(phi_i.shape)
 
     return phi_t1
+
+def calculate_cross_correlation_matrix(covariance_matrices):
+    """
+    Calculate cross-correlation matrices for a list of covariance matrices.
+
+    Args:
+    covariance_matrices (list of np.array): List of covariance matrices.
+
+    Returns:
+    List of np.array: List of cross-correlation matrices corresponding to each covariance matrix.
+    """
+    correlation_matrices = []
+    for cov_matrix in covariance_matrices:
+        # Ensure the matrix is a numpy array
+        cov_matrix = np.array(cov_matrix)
+
+        # Diagonal elements (variances)
+        variances = np.diag(cov_matrix)
+
+        # Standard deviations (sqrt of variances)
+        std_devs = np.sqrt(variances)
+
+        # Initialize correlation matrix
+        corr_matrix = np.zeros_like(cov_matrix)
+
+        # Calculate correlation matrix
+        for i in range(len(cov_matrix)):
+            for j in range(len(cov_matrix)):
+                corr_matrix[i, j] = cov_matrix[i, j] / (std_devs[i] * std_devs[j])
+
+        correlation_matrices.append(corr_matrix)
+
+    return correlation_matrices
 
 def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate_drag=False):
 
@@ -426,7 +462,11 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     weighted_rms_last = np.inf 
     convergence_threshold = 0.001 
     no_times_diff_increased = 0
+
     all_residuals = np.empty((0, len(x_bar_0)))
+    all_rms = []
+    all_xbar_0s = []
+    all_covs = []
 
     while not converged and iteration < max_iterations:
         print(f"Iteration: {iteration}")
@@ -444,7 +484,6 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             if estimate_drag==True:
                 observed_state = np.append(observed_state, x_bar_0[-1])
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
-                                    #TODO: am i just repeating the code from above?
                 cd_covariance = 1  # TODO: is this even allowed? just setting a high value for now
                                      # TODO: do i want to reduce the covariance of Cd after each iteration?
                 obs_covariance = np.pad(obs_covariance, ((0, 1), (0, 1)), 'constant', constant_values=0)
@@ -511,48 +550,18 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             print(f"Estimated state: {x_bar_0}")
 
         all_residuals = np.vstack([all_residuals, y_all])
+        all_rms.append(weighted_rms)
+        all_xbar_0s.append(x_bar_0)
+        all_covs.append(np.linalg.inv(lamda))
         iteration += 1
 
-    # return the optimized state and covariance, and the residuals from each iteration
     return x_bar_0, np.linalg.inv(lamda), all_residuals, weighted_rms
 
-def calculate_cross_correlation_matrix(covariance_matrices):
-    """
-    Calculate cross-correlation matrices for a list of covariance matrices.
-
-    Args:
-    covariance_matrices (list of np.array): List of covariance matrices.
-
-    Returns:
-    List of np.array: List of cross-correlation matrices corresponding to each covariance matrix.
-    """
-    correlation_matrices = []
-    for cov_matrix in covariance_matrices:
-        # Ensure the matrix is a numpy array
-        cov_matrix = np.array(cov_matrix)
-
-        # Diagonal elements (variances)
-        variances = np.diag(cov_matrix)
-
-        # Standard deviations (sqrt of variances)
-        std_devs = np.sqrt(variances)
-
-        # Initialize correlation matrix
-        corr_matrix = np.zeros_like(cov_matrix)
-
-        # Calculate correlation matrix
-        for i in range(len(cov_matrix)):
-            for j in range(len(cov_matrix)):
-                corr_matrix[i, j] = cov_matrix[i, j] / (std_devs[i] * std_devs[j])
-
-        correlation_matrices.append(corr_matrix)
-
-    return correlation_matrices
 
 if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
-    spacex_ephem_df = spacex_ephem_df_full.iloc[0:1000]
+    spacex_ephem_df = spacex_ephem_df_full.iloc[2000:2200]
 
     # Initialize state vector from the first point in the SpaceX ephemeris
     # TODO: Can perturb this initial state vector to test convergence later
@@ -581,31 +590,34 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [60]
+    obs_lengths_to_test = [100]
     estimate_drag = True
     force_model_configs = [
         {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True, 'enable_relativity': True},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True, 'enable_relativity': True, 'enable_erp_knocke': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True, 'enable_erp_knocke': True},
         ]
 
     covariance_matrices = []
     optimized_states = []
     for i, force_model_config in enumerate(force_model_configs):
-        #force estimate_drag to be False if the force model doesn't have drag
         if not force_model_config.get('enable_atmospheric_drag', False):
             estimate_drag = False
             raise Warning("Force model doesn't have drag. Setting estimate_drag to False.")
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            optimized_state, covariance_matrix, residuals, final_RMS = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
+            optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
+            
+            #find the index of the minimum RMS
+            min_RMS_index = np.argmin(RMSs)
+            optimized_state = optimized_states[min_RMS_index]
+            covariance_matrix = cov_mats[min_RMS_index]
+            final_RMS = RMSs[min_RMS_index]
+            residuals_final = residuals[min_RMS_index]
+
             covariance_matrices.append(covariance_matrix)
-            optimized_states.append(optimized_state)
-            #last iteration's residuals
-            residuals_final = residuals[-len(observations_df):]
-            #plot the last iteration's residuals
+
             plt.figure()
             plt.scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c = "xkcd:blue")
             plt.scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c = "xkcd:green")
@@ -617,10 +629,10 @@ if __name__ == "__main__":
             plt.xlabel("Observation time (UTC)")
             plt.xticks(rotation=45)
             plt.ylabel("Residual (m)")
-            #add final rms as text
             plt.text(0.05, 0.95, f"Weighted RMS: {final_RMS:.2f}", transform=plt.gca().transAxes)
-            wrapped_text = textwrap.fill(force_model_config, 40)
-            plt.text(0.05, 0.90, f"Force model contains: {wrapped_text}", transform=plt.gca().transAxes)
+            force_model_keys_str = keys_to_string(force_model_config)
+            wrapped_text = textwrap.fill(force_model_keys_str, 40)
+            plt.text(0.05, 0.90, f"Force model:\n{wrapped_text}", transform=plt.gca().transAxes)
             if len(observations_df) <= 60:
                 plt.ylim(-2,2)
             elif len(observations_df) <= 100:
@@ -643,8 +655,9 @@ if __name__ == "__main__":
             plt.title("Residuals (O-C) for final BLS iteration")
             plt.xlabel("Residual (m)")
             plt.ylabel("Frequency")
-            wrapped_text = textwrap.fill(force_model_config, 40)
-            plt.text(0.05, 0.90, f"Force model contains: {wrapped_text}", transform=plt.gca().transAxes)
+            force_model_keys_str = keys_to_string(force_model_config)
+            wrapped_text = textwrap.fill(force_model_keys_str, 40)
+            plt.text(0.05, 0.90, f"Force model:\n{wrapped_text}", transform=plt.gca().transAxes)
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
             plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/hist_force_model_{i}_#pts_{len(observations_df)}.png")
 
@@ -657,8 +670,9 @@ if __name__ == "__main__":
             plt.figure(figsize=(8, 7))
             sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
             plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-            wrapped_text = textwrap.fill(force_model_config, 40)
-            plt.text(0.05, 0.90, f"Force model contains: {wrapped_text}", transform=plt.gca().transAxes)
+            force_model_keys_str = keys_to_string(force_model_config)
+            wrapped_text = textwrap.fill(force_model_keys_str, 40)
+            plt.text(0.05, 0.90, f"Force model:\n{wrapped_text}", transform=plt.gca().transAxes)
             save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}.png"
             if estimate_drag:
                 save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
@@ -667,13 +681,14 @@ if __name__ == "__main__":
     relative_differences = []
     for j in range(1, len(covariance_matrices)):
         difference_matrix = covariance_matrices[j] - covariance_matrices[j-1]
-        
+        if estimate_drag:
+            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
+        else:
+            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
         # Plotting the difference as a heatmap
         plt.figure(figsize=(10, 8))
-        sns.heatmap(difference_matrix, annot=True, fmt=".3e", cmap="coolwarm", center=0)
+        sns.heatmap(difference_matrix, annot=True, fmt=".3e",xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
         plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
-        plt.xlabel('Covariance Components')
-        plt.ylabel('Covariance Components')
         plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/diff_covmat_run_{j}_vs_{j-1}.png')
 
     correlation_matrices =  calculate_cross_correlation_matrix(covariance_matrices)
@@ -697,4 +712,4 @@ if __name__ == "__main__":
 
     plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
     plt.title("Cd values estimated by BLS under different force models")
-    plt.savefig("output/OD_BLS/Tapley/estimation_experiment/Cd_values.png")
+    plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
