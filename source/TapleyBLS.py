@@ -84,17 +84,6 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
 
-    # Atmospheric drag
-    if config_flags.get('enable_atmospheric_drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
-        dragForce = DragForce(atmosphere, isotropicDrag)
-        propagator.addForceModel(dragForce)
-
     if force_model_config.get('enable_relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         propagator.addForceModel(relativity)
@@ -106,6 +95,17 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
         knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
         propagator.addForceModel(knockeModel)
+
+    # Atmospheric drag
+    if config_flags.get('enable_atmospheric_drag', False):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        dragForce = DragForce(atmosphere, isotropicDrag)
+        propagator.addForceModel(dragForce)
 
     # TODO: CERES ERP force model
     # if enable_ceres:
@@ -323,19 +323,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
 
-    if force_model_config.get('enable_atmospheric_drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
-        dragForce = DragForce(atmosphere, isotropicDrag)
-        force_models.append(dragForce)
-        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
-        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
-        accelerations_t0+=atmospheric_drag_eci_t0
-
     if force_model_config.get('enable_relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         force_models.append(relativity)
@@ -353,7 +340,21 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
-    
+
+    ###NOTE: this one has to stay last in the if-loop (see below)
+    if force_model_config.get('enable_atmospheric_drag', False):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        dragForce = DragForce(atmosphere, isotropicDrag)
+        force_models.append(dragForce)
+        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        accelerations_t0+=atmospheric_drag_eci_t0
+
     for i in range(len(state_ti)):
         state_ti_perturbed = state_ti.copy()
         perturbation = 0.1
@@ -591,11 +592,11 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [5]
+    obs_lengths_to_test = [60]
     estimate_drag = True
     force_model_configs = [
-        # {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
-        # {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True},
         {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True, 'enable_erp_knocke': True},
         ]
 
@@ -628,39 +629,48 @@ if __name__ == "__main__":
             residuals_final = residuals[min_RMS_index]
             covariance_matrices.append(covariance_matrix)
 
-            print(f"numpy shape of optimized_state: {np.shape(optimized_state)}")
-            print(f"numpy shape of covariance_matrix: {np.shape(covariance_matrix)}")
-            print(f"numpy shape of residuals_final: {np.shape(residuals_final)}")
-            print(f"numpy shape of final_RMS: {np.shape(final_RMS)}")
-            print(f"numpy shape of residuals: {np.shape(residuals)}")
-            print(f"numpy shape of RMSs: {np.shape(RMSs)}")
-            print(f"numpy shape of cov_mats: {np.shape(cov_mats)}")
-            print(f"numpy shape of optimized_states: {np.shape(optimized_states)}")
+            # Create two subplots: one for position, one for velocity
+            fig, axs = plt.subplots(2, 1, figsize=(10, 8))
 
-            plt.figure()
-            plt.scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c = "xkcd:blue")
-            plt.scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c = "xkcd:green")
-            plt.scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c = "xkcd:red")
-            plt.scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c = "xkcd:purple")
-            plt.scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c = "xkcd:orange")
-            plt.scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c = "xkcd:yellow")
-            plt.title("Residuals (O-C) for final BLS iteration")
-            plt.xlabel("Observation time (UTC)")
+            # Position residuals plot
+            axs[0].scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c="xkcd:blue")
+            axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
+            axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
+            axs[0].set_ylabel("Position Residual (m)")
+            axs[0].set_ylim(-10, 10)
+            axs[0].legend(['x', 'y', 'z'])
+            axs[0].grid(True)
+
+            # Velocity residuals plot
+            axs[1].scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c="xkcd:purple")
+            axs[1].scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c="xkcd:orange")
+            axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
+            axs[1].set_xlabel("Observation time (UTC)")
+            axs[1].set_ylabel("Velocity Residual (m/s)")
+            axs[1].set_ylim(-10e-3, 10e-3)
+            axs[1].legend(['xv', 'yv', 'zv'])
+            axs[1].grid(True)
+
+            # Shared title, rotation of x-ticks, and force model text
+            plt.suptitle("Residuals (O-C) for final BLS iteration")
             plt.xticks(rotation=45)
-            plt.ylabel("Residual (m)")
             force_model_keys_str = keys_to_string(force_model_config)
             wrapped_text = textwrap.fill(force_model_keys_str, 20)
-            plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
-                    transform=plt.gca().transAxes,
-                    fontsize=10, 
-                    verticalalignment='bottom',
-                    bbox=dict(facecolor='white', alpha=0.5))
+            axs[1].text(0.8, -0.2, f"Force model:\n{wrapped_text}", 
+                        transform=axs[1].transAxes,
+                        fontsize=10, 
+                        verticalalignment='bottom',
+                        bbox=dict(facecolor='white', alpha=0.5))
+
+            # Adjustments for number of observations
             if len(observations_df) <= 60:
-                plt.ylim(-2,2)
+                axs[0].set_ylim(-2, 2)
+                axs[1].set_ylim(-2e-3, 2e-3)
             elif len(observations_df) <= 100:
-                plt.ylim(-15,15)
-            plt.grid(True)
-            plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
+                axs[0].set_ylim(-10, 10)
+                axs[1].set_ylim(-10e-3, 10e-3)
+
+            # Save the figure
             save_to = f"output/OD_BLS/Tapley/estimation_experiment/fmodel_{i}_#pts_{len(observations_df)}.png"
             if estimate_drag:
                 save_to = f"output/OD_BLS/Tapley/estimation_experiment/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
@@ -724,7 +734,7 @@ if __name__ == "__main__":
         plt.ylabel('Components')
         plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/corr_covmat_run_{j}.png')
 
-    # Plot a bar chart of the Cd values
+    # Plot a bar chart of the final Cd values
     plt.figure()
     bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
 
@@ -736,3 +746,13 @@ if __name__ == "__main__":
     plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
     plt.title("Cd values estimated by BLS under different force models")
     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+
+    #plot a linegraph of the Cd values at each iteration
+    plt.figure()
+    for i, optimized_state in enumerate(optimized_states):
+        plt.plot(np.arange(len(optimized_state)), optimized_state[:, -1], label=f"Run {i}")
+    plt.xlabel("Iteration")
+    plt.ylabel("Cd")
+    plt.title("Cd values at each iteration")
+    plt.legend()
+    plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
