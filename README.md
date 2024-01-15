@@ -18,13 +18,15 @@
 </p>
 
 
-### Combined Flux Animation
-This particular animation combines both longwave and shortwave radiative fluxes:
-![Combined Flux Animation](output/FOV_sliced_data/combined_flux_animation_nipy.gif)
-
 ## Example Animations
 
-The ERP Tools generate several GIFs that visualize the radiative flux. Here are some examples:
+`make_animations.py` can be used to generate several GIFs that visualize the radiative flux along a given trajectory. By default a TLE can be specified along with a start and stop date. 
+
+Some examples:
+
+### Combined Flux Animation
+This particular animation combines both longwave and shortwave radiative fluxes at the top of the atmosphere and calculate the ensuing radiation pressure exerted by them on the satellite.
+![Combined Flux Animation](output/animations/combined_flux_animation_nipy.gif)
 
 Longwave Hourly Flux:
 ![Longwave Hourly Flux](output/animations/oneweb_lw_hrly_flux.gif)
