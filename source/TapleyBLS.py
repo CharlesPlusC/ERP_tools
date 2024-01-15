@@ -5,7 +5,7 @@ orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
 
-import pprint
+import textwrap
 
 from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
@@ -20,7 +20,7 @@ from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity, NewtonianAttraction
-from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient
+from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.models.earth.atmosphere import DTM2000
 from org.orekit.forces.drag import DragForce, IsotropicDrag
@@ -38,7 +38,7 @@ import seaborn as sns
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 
-SATELLITE_MASS = 800.0
+SATELLITE_MASS = 500.0 #TBC (v1s are 250 , and v2mini are 800 or something?)
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
@@ -86,7 +86,18 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
-    # TODO: just add Knocke model for now its already implemented in Orekit and runs way faster than CERES?
+    if force_model_config.get('enable_relativity', False):
+        relativity = Relativity(Constants.WGS84_EARTH_MU)
+        propagator.addForceModel(relativity)
+
+    if force_model_config.get('enable_erp_knocke', False):
+        sun = CelestialBodyFactory.getSun()
+        spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        onedeg_in_rad = np.radians(1.0)
+        angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
+        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
+        propagator.addForceModel(knockeModel)
+
     # TODO: CERES ERP force model
     # if enable_ceres:
     #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data) # pass the time and radiation data to the force model
@@ -316,6 +327,24 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
+    if force_model_config.get('enable_relativity', False):
+        relativity = Relativity(Constants.WGS84_EARTH_MU)
+        force_models.append(relativity)
+        relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, relativity)
+        relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
+        accelerations_t0+=relativity_eci_t0
+
+    if force_model_config.get('enable_erp_knocke', False):
+        sun = CelestialBodyFactory.getSun()
+        spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        onedeg_in_rad = np.radians(1.0)
+        angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
+        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
+        force_models.append(knockeModel)
+        knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, knockeModel)
+        knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
+        accelerations_t0+=knocke_eci_t0
+    
     for i in range(len(state_ti)):
         state_ti_perturbed = state_ti.copy()
         perturbation = 0.1
@@ -487,6 +516,39 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     # return the optimized state and covariance, and the residuals from each iteration
     return x_bar_0, np.linalg.inv(lamda), all_residuals, weighted_rms
 
+def calculate_cross_correlation_matrix(covariance_matrices):
+    """
+    Calculate cross-correlation matrices for a list of covariance matrices.
+
+    Args:
+    covariance_matrices (list of np.array): List of covariance matrices.
+
+    Returns:
+    List of np.array: List of cross-correlation matrices corresponding to each covariance matrix.
+    """
+    correlation_matrices = []
+    for cov_matrix in covariance_matrices:
+        # Ensure the matrix is a numpy array
+        cov_matrix = np.array(cov_matrix)
+
+        # Diagonal elements (variances)
+        variances = np.diag(cov_matrix)
+
+        # Standard deviations (sqrt of variances)
+        std_devs = np.sqrt(variances)
+
+        # Initialize correlation matrix
+        corr_matrix = np.zeros_like(cov_matrix)
+
+        # Calculate correlation matrix
+        for i in range(len(cov_matrix)):
+            for j in range(len(cov_matrix)):
+                corr_matrix[i, j] = cov_matrix[i, j] / (std_devs[i] * std_devs[j])
+
+        correlation_matrices.append(corr_matrix)
+
+    return correlation_matrices
+
 if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
@@ -508,7 +570,7 @@ if __name__ == "__main__":
     initial_sigma_ZV = spacex_ephem_df['sigma_zv'].iloc[0]
     cd = 2.2
     cr = 1.5
-    cross_section = 10.0
+    cross_section = 30.0 # from https://lilibots.blogspot.com/2020/04/starlink-satellite-dimension-estimates.html
     initial_t = spacex_ephem_df['UTC'].iloc[0]
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
@@ -519,15 +581,17 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [120]
+    obs_lengths_to_test = [60]
     estimate_drag = True
     force_model_configs = [
-        # {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True, 'enable_relativity': True},
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True, 'enable_relativity': True, 'enable_erp_knocke': True},
+        ]
 
     covariance_matrices = []
+    optimized_states = []
     for i, force_model_config in enumerate(force_model_configs):
         #force estimate_drag to be False if the force model doesn't have drag
         if not force_model_config.get('enable_atmospheric_drag', False):
@@ -538,6 +602,7 @@ if __name__ == "__main__":
             observations_df = observations_df_full.iloc[:obs_length]
             optimized_state, covariance_matrix, residuals, final_RMS = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
             covariance_matrices.append(covariance_matrix)
+            optimized_states.append(optimized_state)
             #last iteration's residuals
             residuals_final = residuals[-len(observations_df):]
             #plot the last iteration's residuals
@@ -548,22 +613,23 @@ if __name__ == "__main__":
             plt.scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c = "xkcd:purple")
             plt.scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c = "xkcd:orange")
             plt.scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c = "xkcd:yellow")
-
             plt.title("Residuals (O-C) for final BLS iteration")
             plt.xlabel("Observation time (UTC)")
             plt.xticks(rotation=45)
             plt.ylabel("Residual (m)")
             #add final rms as text
             plt.text(0.05, 0.95, f"Weighted RMS: {final_RMS:.2f}", transform=plt.gca().transAxes)
+            wrapped_text = textwrap.fill(force_model_config, 40)
+            plt.text(0.05, 0.90, f"Force model contains: {wrapped_text}", transform=plt.gca().transAxes)
             if len(observations_df) <= 60:
                 plt.ylim(-2,2)
             elif len(observations_df) <= 100:
                 plt.ylim(-15,15)
             plt.grid(True)
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-            save_to = f"output/OD_BLS/Tapley/residuals/fmodel_{i}_#pts_{len(observations_df)}.png"
+            save_to = f"output/OD_BLS/Tapley/estimation_experiment/fmodel_{i}_#pts_{len(observations_df)}.png"
             if estimate_drag:
-                save_to = f"output/OD_BLS/Tapley/residuals/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
+                save_to = f"output/OD_BLS/Tapley/estimation_experiment/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
             plt.savefig(save_to)
 
             #plot histograms of residuals
@@ -577,18 +643,26 @@ if __name__ == "__main__":
             plt.title("Residuals (O-C) for final BLS iteration")
             plt.xlabel("Residual (m)")
             plt.ylabel("Frequency")
+            wrapped_text = textwrap.fill(force_model_config, 40)
+            plt.text(0.05, 0.90, f"Force model contains: {wrapped_text}", transform=plt.gca().transAxes)
             plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-            plt.savefig(f"output/OD_BLS/Tapley/residuals/histograms/hist_force_model_{i}_#pts_{len(observations_df)}.png")
+            plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/hist_force_model_{i}_#pts_{len(observations_df)}.png")
 
             #ECI covariance matrix
-            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+            if estimate_drag:
+                labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
+            else:
+                labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
             log_norm = SymLogNorm(linthresh=1e-10, vmin=covariance_matrix.min(), vmax=covariance_matrix.max())
             plt.figure(figsize=(8, 7))
             sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
-            #add title containing points_to_use and configuration
             plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-            plt.savefig(f"output/OD_BLS/Tapley/covariances/covMat_#pts_{len(observations_df)}_config{i}.png")
-
+            wrapped_text = textwrap.fill(force_model_config, 40)
+            plt.text(0.05, 0.90, f"Force model contains: {wrapped_text}", transform=plt.gca().transAxes)
+            save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}.png"
+            if estimate_drag:
+                save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
+            plt.savefig(save_to)
     
     relative_differences = []
     for j in range(1, len(covariance_matrices)):
@@ -600,5 +674,27 @@ if __name__ == "__main__":
         plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
         plt.xlabel('Covariance Components')
         plt.ylabel('Covariance Components')
-        plt.savefig(f'output/OD_BLS/Tapley/covariances/relative_differences/diff_covmat_run_{j}_vs_{j-1}.png')
-        plt.show()
+        plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/diff_covmat_run_{j}_vs_{j-1}.png')
+
+    correlation_matrices =  calculate_cross_correlation_matrix(covariance_matrices)
+    for j in range(len(correlation_matrices)):
+        # Plotting the correlation matrix as a heatmap
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(correlation_matrices[j], annot=True, fmt=".3f", cmap="coolwarm", center=0)
+        plt.title(f'Correlation Matrix: Run {j}')
+        plt.xlabel('Components')
+        plt.ylabel('Components')
+        plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/corr_covmat_run_{j}.png')
+
+    # Plot a bar chart of the Cd values
+    plt.figure()
+    bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
+
+    # Adding labels on each bar
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
+
+    plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
+    plt.title("Cd values estimated by BLS under different force models")
+    plt.savefig("output/OD_BLS/Tapley/estimation_experiment/Cd_values.png")
