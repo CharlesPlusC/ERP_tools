@@ -2,6 +2,7 @@
 
 
 from orekit import JArray_double
+from orekit.pyhelpers import absolutedate_to_datetime
 from org.orekit.time import AbsoluteDate, TimeScalesFactory
 from org.orekit.orbits import KeplerianOrbit, PositionAngleType, OrbitType
 from org.orekit.frames import FramesFactory
@@ -9,7 +10,7 @@ from org.orekit.utils import Constants, IERSConventions
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation.analytical.tle import TLEPropagator
 from org.orekit.forces.gravity.potential import GravityFieldFactory
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel
+from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, NewtonianAttraction
 from org.orekit.propagation import SpacecraftState
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from org.orekit.bodies import CelestialBodyFactory
@@ -28,11 +29,11 @@ from tools.plotting import plot_kepels_evolution, plot_hcl_differences
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 48.0 
-INTEGRATOR_MIN_STEP = 0.001
-INTEGRATOR_MAX_STEP = 1000.0
+PROPAGATION_TIME = 3600.0 * 24.0 * 7.0
+INTEGRATOR_MIN_STEP = 0.01
+INTEGRATOR_MAX_STEP = 120.0
 INTEGRATOR_INIT_STEP = 30.0
-POSITION_TOLERANCE = 1e-5
+POSITION_TOLERANCE = 1e-3
 
 def calculate_position_differences(end_state1, end_state2):
     position1 = end_state1.getPVCoordinates().getPosition()
@@ -76,6 +77,7 @@ def main(TLE, sat_name):
     # Load data
     data = nc.Dataset(dataset_path)
     ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+    
     combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
     # Convert JD start epoch to UTC and pass to AbsoluteDate
@@ -112,8 +114,9 @@ def main(TLE, sat_name):
     propagator_no_erp = NumericalPropagator(integrator)
     propagator_no_erp.setOrbitType(OrbitType.CARTESIAN)
     propagator_no_erp.setInitialState(initialState)
-    gravityProvider = GravityFieldFactory.getNormalizedProvider(1, 1)
-    propagator_no_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    MU = Constants.WGS84_EARTH_MU
+    newattr = NewtonianAttraction(MU)
+    propagator_no_erp.addForceModel(newattr)
     ephemGen_no_erp = propagator_no_erp.getEphemerisGenerator()  # Get the ephemeris generator
     end_state_no_erp = propagator_no_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
 
@@ -122,8 +125,10 @@ def main(TLE, sat_name):
     propagator_ceres_erp = NumericalPropagator(integrator)
     propagator_ceres_erp.setOrbitType(OrbitType.CARTESIAN)
     propagator_ceres_erp.setInitialState(initialState)
-    propagator_ceres_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
     propagator_ceres_erp.addForceModel(ceres_erp_force_model)
+    MU = Constants.WGS84_EARTH_MU
+    newattr = NewtonianAttraction(MU)
+    propagator_ceres_erp.addForceModel(newattr)
     ephemGen_CERES = propagator_ceres_erp.getEphemerisGenerator()  # Get the ephemeris generator
     end_state_ceres = propagator_ceres_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
     ceres_rtn_accs = ceres_erp_force_model.rtn_accs
@@ -139,7 +144,9 @@ def main(TLE, sat_name):
     propagator_knocke_erp = NumericalPropagator(integrator)
     propagator_knocke_erp.setOrbitType(OrbitType.CARTESIAN)
     propagator_knocke_erp.setInitialState(initialState)
-    propagator_knocke_erp.addForceModel(HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider))
+    MU = Constants.WGS84_EARTH_MU
+    newattr = NewtonianAttraction(MU)
+    propagator_knocke_erp.addForceModel(newattr)
     propagator_knocke_erp.addForceModel(knockeModel)
     ephemGen_knocke = propagator_knocke_erp.getEphemerisGenerator()  # Get the ephemeris generator
     end_state_with_knocke = propagator_knocke_erp.propagate(TLE_epochDate, TLE_epochDate.shiftedBy(PROPAGATION_TIME))
@@ -184,7 +191,6 @@ def main(TLE, sat_name):
     plot_hcl_differences(HCL_diffs, state_vector_data['No ERP'][0], titles, colors)
 
     ##### ERP Acceleration Plots #####
-    from orekit.pyhelpers import absolutedate_to_datetime
 
     TLE_epochDate_datetime = absolutedate_to_datetime(TLE_epochDate)
 
