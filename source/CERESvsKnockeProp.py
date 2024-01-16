@@ -231,6 +231,24 @@ def main(TLE, sat_name):
     min_rtn_acc = min(ceres_r_components.min(), ceres_t_components.min(), ceres_n_components.min(),
                     knocke_r_components.min(), knocke_t_components.min(), knocke_n_components.min())
 
+
+    #save all the data to .npy files in "output/ERP_prop/saved_runs"
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_r_components.npy', ceres_r_components)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_t_components.npy', ceres_t_components)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_n_components.npy', ceres_n_components)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_scalar_acc_data.npy', ceres_scalar_acc_data)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_r_components.npy', knocke_r_components)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_t_components.npy', knocke_t_components)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_n_components.npy', knocke_n_components)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_scalar_acc_data.npy', knocke_scalar_acc_data)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_times_julian.npy', knocke_times_julian)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_rtn_times.npy', ceres_rtn_times)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_HCL_diffs.npy', HCL_diffs)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_keplerian_element_data.npy', keplerian_element_data)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_state_vector_data.npy', state_vector_data)
+
+
     plt.figure(figsize=(12, 12))
 
     # Plot RTN components for CERES ERP
