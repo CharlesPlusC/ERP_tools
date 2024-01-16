@@ -4,12 +4,10 @@ from orekit.pyhelpers import setup_orekit_curdir
 orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
-
 import textwrap
 
 from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
-from org.orekit.utils import Constants as orekit_constants
 from org.orekit.frames import FramesFactory
 from org.orekit.utils import IERSConventions, PVCoordinates
 from org.orekit.models.earth import ReferenceEllipsoid
@@ -55,7 +53,7 @@ def keys_to_string(d):
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Earth gravity field with degree 64 and order 64
-    if config_flags.get('enable_gravity', False):
+    if config_flags.get('gravtiy', False):
         MU = Constants.WGS84_EARTH_MU
         ### monopole gravity model
         newattr = NewtonianAttraction(MU)
@@ -67,7 +65,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(gravityAttractionModel)
 
     # Moon and Sun perturbations
-    if config_flags.get('enable_third_body', False):
+    if config_flags.get('3BP', False):
         moon = CelestialBodyFactory.getMoon()
         sun = CelestialBodyFactory.getSun()
         moon_3dbodyattraction = ThirdBodyAttraction(moon)
@@ -76,7 +74,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(sun_3dbodyattraction)
 
     # Solar radiation pressure
-    if config_flags.get('enable_solar_radiation', False):
+    if config_flags.get('SRP', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(cross_section)
         cr = float(cr)
@@ -84,11 +82,11 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
 
-    if force_model_config.get('enable_relativity', False):
+    if force_model_config.get('relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         propagator.addForceModel(relativity)
 
-    if force_model_config.get('enable_erp_knocke', False):
+    if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
         spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         onedeg_in_rad = np.radians(1.0)
@@ -97,7 +95,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(knockeModel)
 
     # Atmospheric drag
-    if config_flags.get('enable_atmospheric_drag', False):
+    if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
@@ -282,7 +280,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
     accelerations_t0 = np.zeros(3)
     force_models = []
 
-    if force_model_config.get('enable_gravity', False):
+    if force_model_config.get('gravtiy', False):
         
         MU = Constants.WGS84_EARTH_MU
         monopolegrav = NewtonianAttraction(MU)
@@ -298,7 +296,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
         accelerations_t0+=gravityfield_eci_t0
 
-    if force_model_config.get('enable_third_body', False):
+    if force_model_config.get('3BP', False):
         moon = CelestialBodyFactory.getMoon()
         sun = CelestialBodyFactory.getSun()
         moon_3dbodyattraction = ThirdBodyAttraction(moon)
@@ -312,7 +310,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
         accelerations_t0+=sun_eci_t0
 
-    if force_model_config.get('enable_solar_radiation', False):
+    if force_model_config.get('SRP', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         cross_section = float(cross_section) 
         cr = float(cr) 
@@ -323,14 +321,14 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
 
-    if force_model_config.get('enable_relativity', False):
+    if force_model_config.get('relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         force_models.append(relativity)
         relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, relativity)
         relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
         accelerations_t0+=relativity_eci_t0
 
-    if force_model_config.get('enable_erp_knocke', False):
+    if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
         spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         onedeg_in_rad = np.radians(1.0)
@@ -342,7 +340,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         accelerations_t0+=knocke_eci_t0
 
     ###NOTE: this one has to stay last in the if-loop (see below)
-    if force_model_config.get('enable_atmospheric_drag', False):
+    if force_model_config.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
@@ -542,7 +540,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 no_times_diff_increased += 1
                 print(f"RMS increased {no_times_diff_increased} times in a row.")
                 if no_times_diff_increased >= 2:
-                    print("RMS increased 2 times in a row. Stopping iteration.")
+                    print("Stopping iteration.")
                     break
                 #TODO: make it so that it takes the run with the best RMS if it doesn't converge ?
             else:
@@ -563,7 +561,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
 if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
-    spacex_ephem_df = spacex_ephem_df_full.iloc[2000:2200]
+    spacex_ephem_df = spacex_ephem_df_full
 
     # Initialize state vector from the first point in the SpaceX ephemeris
     # TODO: Can perturb this initial state vector to test convergence later
@@ -591,19 +589,20 @@ if __name__ == "__main__":
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [60]
+    # obs_lengths_to_test = [35, 60, 90, 120]
+    obs_lengths_to_test = [150]
     estimate_drag = True
     force_model_configs = [
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_atmospheric_drag': True, 'enable_solar_radiation': True, 'enable_erp_knocke': True},
+        {'gravtiy': True, '3BP': True, 'drag': True},
+        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True},
+        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True},
+        # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True, 'relativity': True},
         ]
 
     covariance_matrices = []
     optimized_states = []
     for i, force_model_config in enumerate(force_model_configs):
-        if not force_model_config.get('enable_atmospheric_drag', False):
+        if not force_model_config.get('drag', False):
             estimate_drag = False
             raise Warning("Force model doesn't have drag. Setting estimate_drag to False.")
         
@@ -637,7 +636,7 @@ if __name__ == "__main__":
             axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
             axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
             axs[0].set_ylabel("Position Residual (m)")
-            axs[0].set_ylim(-10, 10)
+            axs[0].set_ylim(-3, 3)
             axs[0].legend(['x', 'y', 'z'])
             axs[0].grid(True)
 
@@ -647,12 +646,13 @@ if __name__ == "__main__":
             axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
             axs[1].set_xlabel("Observation time (UTC)")
             axs[1].set_ylabel("Velocity Residual (m/s)")
-            axs[1].set_ylim(-10e-3, 10e-3)
+            axs[1].set_ylim(-3e-3, 3e-3)
             axs[1].legend(['xv', 'yv', 'zv'])
             axs[1].grid(True)
 
             # Shared title, rotation of x-ticks, and force model text
-            plt.suptitle("Residuals (O-C) for final BLS iteration")
+            plt.suptitle(f"Residuals (O-C) for final BLS iteration. \nRMS: {final_RMS:.3f}")
+            #
             plt.xticks(rotation=45)
             force_model_keys_str = keys_to_string(force_model_config)
             wrapped_text = textwrap.fill(force_model_keys_str, 20)
@@ -660,20 +660,21 @@ if __name__ == "__main__":
                         transform=axs[1].transAxes,
                         fontsize=10, 
                         verticalalignment='bottom',
-                        bbox=dict(facecolor='white', alpha=0.5))
+                        bbox=dict(facecolor='white', alpha=0.3))
 
             # Adjustments for number of observations
             if len(observations_df) <= 60:
                 axs[0].set_ylim(-2, 2)
                 axs[1].set_ylim(-2e-3, 2e-3)
             elif len(observations_df) <= 100:
-                axs[0].set_ylim(-10, 10)
-                axs[1].set_ylim(-10e-3, 10e-3)
+                axs[0].set_ylim(-3, 3)
+                axs[1].set_ylim(-3e-3, 3e-3)
 
             # Save the figure
             save_to = f"output/OD_BLS/Tapley/estimation_experiment/fmodel_{i}_#pts_{len(observations_df)}.png"
             if estimate_drag:
                 save_to = f"output/OD_BLS/Tapley/estimation_experiment/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
+            plt.tight_layout()
             plt.savefig(save_to)
 
             #plot histograms of residuals
@@ -749,8 +750,8 @@ if __name__ == "__main__":
 
     #plot a linegraph of the Cd values at each iteration
     plt.figure()
-    for i, optimized_state in enumerate(optimized_states):
-        plt.plot(np.arange(len(optimized_state)), optimized_state[:, -1], label=f"Run {i}")
+    for optimized_state in optimized_states:
+        plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
     plt.xlabel("Iteration")
     plt.ylabel("Cd")
     plt.title("Cd values at each iteration")
