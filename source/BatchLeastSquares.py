@@ -20,7 +20,7 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity, NewtonianAttraction
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
-from org.orekit.models.earth.atmosphere import DTM2000
+from org.orekit.models.earth.atmosphere import DTM2000, NRLMSISE00
 from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
@@ -38,7 +38,7 @@ import os
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 
-SATELLITE_MASS = 500.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
+SATELLITE_MASS = 250.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
@@ -52,15 +52,14 @@ def keys_to_string(d):
 
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
-    # Earth gravity field with degree 64 and order 64
     if config_flags.get('gravtiy', False):
         MU = Constants.WGS84_EARTH_MU
         ### monopole gravity model
         newattr = NewtonianAttraction(MU)
         propagator.addForceModel(newattr)
 
-        ### 64x64 gravity model 
-        gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)#TODO: i think Vishal Ray's paper seems to suggest at least 80x80 would be good- double check
+        ### 120x120 gravity model 
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(120, 120)#TODO: i think Vishal Ray's paper seems to suggest at least 80x80 would be good- double check
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
@@ -97,10 +96,39 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     # Atmospheric drag
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, SOLFSMYDataLoader, DtcDataLoader
+        from org.orekit.models.earth.atmosphere import JB2008, JB2008InputParameters
+        from org.orekit.data import DataSource
+        import requests
+        from java.io import File
+
+        # Function to download file and return a java.io.File object
+        def download_file(url, local_filename):
+            with requests.get(url, stream=True) as r:
+                r.raise_for_status()
+                with open(local_filename, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            return File(local_filename)
+
+        # Download SOLFSMY and DTCFILE files
+        solfsmy_file = download_file("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
+        dtcfile_file = download_file("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
+
+        # Create DataSource instances
+        solfsmy_data_source = DataSource(solfsmy_file)
+        dtcfile_data_source = DataSource(dtcfile_file)
+
+        jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
+                                            dtcfile_data_source)
+        from org.orekit.time import TimeScalesFactory
+        utc = TimeScalesFactory.getUTC()
+        atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
+
+        # msafe = MarshallSolarActivityFutureEstimation(
+        #     MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+        #     MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        # atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
@@ -289,7 +317,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         accelerations_t0+=monopole_gravity_eci_t0
 
-        gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(120,120)
         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         force_models.append(gravityfield)
         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravityfield)
@@ -342,14 +370,43 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
     ###NOTE: this one has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        # msafe = MarshallSolarActivityFutureEstimation(
+        #     MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+        #     MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        # atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, SOLFSMYDataLoader, DtcDataLoader
+        from org.orekit.models.earth.atmosphere import JB2008, JB2008InputParameters
+        from org.orekit.data import DataSource
+        import requests
+        from java.io import File
+
+        # Function to download file and return a java.io.File object
+        def download_file(url, local_filename):
+            with requests.get(url, stream=True) as r:
+                r.raise_for_status()
+                with open(local_filename, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            return File(local_filename)
+
+        # Download SOLFSMY and DTCFILE files
+        solfsmy_file = download_file("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
+        dtcfile_file = download_file("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
+
+        # Create DataSource instances
+        solfsmy_data_source = DataSource(solfsmy_file)
+        dtcfile_data_source = DataSource(dtcfile_file)
+
+        jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
+                                            dtcfile_data_source)
+        from org.orekit.time import TimeScalesFactory
+        utc = TimeScalesFactory.getUTC()
+        atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
+        print(f"atmospheric_drag_eci_t0: {atmospheric_drag_eci_t0}")
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
@@ -366,7 +423,8 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
                 msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
                 sun = CelestialBodyFactory.getSun()
-                atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+                # atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+                atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
                 perturbed_isotropicDrag = IsotropicDrag(float(cross_section), float(state_ti_perturbed[-1]))                
                 perturbed_dragForce = DragForce(atmosphere, perturbed_isotropicDrag)
                 force_models[-1] = perturbed_dragForce # Replace the last force model with the perturbed drag force model
@@ -581,6 +639,9 @@ if __name__ == "__main__":
     cr = 1.5
     cross_section = 30.0 # from https://lilibots.blogspot.com/2020/04/starlink-satellite-dimension-estimates.html
     initial_t = spacex_ephem_df['UTC'].iloc[0]
+    #remove 1 year from the utc time to get the initial time
+    initial_t = initial_t - datetime.timedelta(days=365)
+    print(f"initial_t: {initial_t}")
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
                                     ])
@@ -589,22 +650,23 @@ if __name__ == "__main__":
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    # obs_lengths_to_test = [35, 60, 90, 120]
-    obs_lengths_to_test = [150]
-    estimate_drag = True
+    #remove 365 days from all the UTC times
+    observations_df_full['UTC'] = observations_df_full['UTC'].apply(lambda x: x - datetime.timedelta(days=365))
+    obs_lengths_to_test = [60]
+    estimate_drag = False
     force_model_configs = [
+        # {'gravtiy': True, '3BP': True},
         {'gravtiy': True, '3BP': True, 'drag': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True},
-        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True},
-        # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True, 'relativity': True},
-        ]
+        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
+        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True,'relativity': True, 'knocke_erp': True}]
 
     covariance_matrices = []
     optimized_states = []
     for i, force_model_config in enumerate(force_model_configs):
         if not force_model_config.get('drag', False):
             estimate_drag = False
-            raise Warning("Force model doesn't have drag. Setting estimate_drag to False.")
+            print("Force model doesn't have drag. Setting estimate_drag to False.")
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
@@ -636,7 +698,10 @@ if __name__ == "__main__":
             axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
             axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
             axs[0].set_ylabel("Position Residual (m)")
-            axs[0].set_ylim(-3, 3)
+            if estimate_drag:
+                axs[0].set_ylim(-3, 3)
+            else:
+                axs[0].set_ylim(-10, 10)
             axs[0].legend(['x', 'y', 'z'])
             axs[0].grid(True)
 
@@ -646,7 +711,10 @@ if __name__ == "__main__":
             axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
             axs[1].set_xlabel("Observation time (UTC)")
             axs[1].set_ylabel("Velocity Residual (m/s)")
-            axs[1].set_ylim(-3e-3, 3e-3)
+            if estimate_drag:
+                axs[1].set_ylim(-3e-3, 3e-3)
+            else:
+                axs[1].set_ylim(-10e-10, 10e-10)
             axs[1].legend(['xv', 'yv', 'zv'])
             axs[1].grid(True)
 
@@ -661,14 +729,6 @@ if __name__ == "__main__":
                         fontsize=10, 
                         verticalalignment='bottom',
                         bbox=dict(facecolor='white', alpha=0.3))
-
-            # Adjustments for number of observations
-            if len(observations_df) <= 60:
-                axs[0].set_ylim(-2, 2)
-                axs[1].set_ylim(-2e-3, 2e-3)
-            elif len(observations_df) <= 100:
-                axs[0].set_ylim(-3, 3)
-                axs[1].set_ylim(-3e-3, 3e-3)
 
             # Save the figure
             save_to = f"output/OD_BLS/Tapley/estimation_experiment/fmodel_{i}_#pts_{len(observations_df)}.png"
@@ -736,24 +796,25 @@ if __name__ == "__main__":
         plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/corr_covmat_run_{j}.png')
 
     # Plot a bar chart of the final Cd values
-    plt.figure()
-    bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
+    if estimate_drag:
+        plt.figure()
+        bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
 
-    # Adding labels on each bar
-    for bar in bars:
-        yval = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
+        # Adding labels on each bar
+        for bar in bars:
+            yval = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
 
-    plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
-    plt.title("Cd values estimated by BLS under different force models")
-    plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+        plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
+        plt.title("Cd values estimated by BLS under different force models")
+        plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
 
-    #plot a linegraph of the Cd values at each iteration
-    plt.figure()
-    for optimized_state in optimized_states:
-        plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
-    plt.xlabel("Iteration")
-    plt.ylabel("Cd")
-    plt.title("Cd values at each iteration")
-    plt.legend()
-    plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+        #plot a linegraph of the Cd values at each iteration
+        plt.figure()
+        for optimized_state in optimized_states:
+            plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
+        plt.xlabel("Iteration")
+        plt.ylabel("Cd")
+        plt.title("Cd values at each iteration")
+        plt.legend()
+        plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")

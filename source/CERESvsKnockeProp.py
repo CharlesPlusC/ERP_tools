@@ -174,6 +174,8 @@ def main(TLE, sat_name):
         state_vector_data[ephem_name] = (times, state_vectors)
         keplerian_element_data[ephem_name] = (times, keplerian_elements)
 
+    #TODO: this is what I need to save not the derived data
+
     knocke_accelerations, knocke_rtn_components = extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, knockeModel, rtn=True)
     plot_kepels_evolution(keplerian_element_data, sat_name)
 
@@ -238,16 +240,18 @@ def main(TLE, sat_name):
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_t_components.npy', ceres_t_components)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_n_components.npy', ceres_n_components)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_scalar_acc_data.npy', ceres_scalar_acc_data)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_rtn_times.npy', ceres_rtn_times)
+    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_times.npy', ceres_times)
+
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_r_components.npy', knocke_r_components)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_t_components.npy', knocke_t_components)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_n_components.npy', knocke_n_components)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_scalar_acc_data.npy', knocke_scalar_acc_data)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_knocke_times_julian.npy', knocke_times_julian)
-    np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_ceres_rtn_times.npy', ceres_rtn_times)
+
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_HCL_diffs.npy', HCL_diffs)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_keplerian_element_data.npy', keplerian_element_data)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_state_vector_data.npy', state_vector_data)
-
 
     plt.figure(figsize=(12, 12))
 
