@@ -14,7 +14,7 @@ from java.util.stream import Stream
 
 
 from tools.utilities import hcl_acc_from_sc_state, find_nearest_index, lla_to_ecef, julian_day_to_ceres_time
-from tools.data_processing import calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
+from source.tools.ceres_data_processing import calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 import numpy as np
 
 def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):

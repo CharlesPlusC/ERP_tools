@@ -10,7 +10,7 @@ import matplotlib.lines as mlines
 import datetime
 import cartopy.crs as ccrs
 from itertools import islice
-from .data_processing import latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
+from .ceres_data_processing import latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 from .utilities import convert_ceres_time_to_date, lla_to_ecef
 
 def plot_fov_radiation_mesh(variable_name, time_index, radiation_data, lat, lon, sat_lat, sat_lon, horizon_dist, output_path, ceres_times):

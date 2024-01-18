@@ -445,3 +445,49 @@ def jd_to_utc(jd: float) -> datetime:
     #convert astropy time object to datetime object
     utc = time.datetime
     return utc
+
+def utc_jd_date(year, month, day, hours, minutes, seconds, mjd=False):
+    try:
+        date = datetime(year, month, day, hours, minutes, seconds)
+    except ValueError as e:
+        print(f"Error in date conversion: {e}")
+        return None
+
+    mjd_val = (date - datetime(1858, 11, 17)).total_seconds() / 86400.0
+    return mjd_val if mjd else mjd_val + 2400000.5
+
+def std_dev_from_lower_triangular(lower_triangular_data):
+    cov_matrix = np.zeros((6, 6))
+    row, col = np.tril_indices(6)
+    cov_matrix[row, col] = lower_triangular_data
+    cov_matrix = cov_matrix + cov_matrix.T - np.diag(cov_matrix.diagonal())
+    std_dev = np.sqrt(np.diag(cov_matrix))
+    return std_dev
+
+def keys_to_string(d):
+    """
+    Convert the keys of a dictionary to a string with each key on a new line.
+    """
+    return '\n'.join(d.keys())
+
+def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
+    # Create a Time object from the Modified Julian Date
+    time_utc = Time(mjd, format="mjd", scale='utc')
+
+    # Create ITRS coordinates with position and velocity
+    itrs_cartesian = CartesianRepresentation(itrs_pos.T * u.km)
+    itrs_velocity = CartesianDifferential(itrs_vel.T * u.km / u.s)
+    itrs_coords = ITRS(itrs_cartesian.with_differentials(itrs_velocity), obstime=time_utc)
+
+    # Transform ITRS coordinates to GCRS
+    gcrs_coords = itrs_coords.transform_to(GCRS(obstime=time_utc))
+
+    # Extract the position and velocity from GCRS coordinates
+    gcrs_pos = np.column_stack((gcrs_coords.cartesian.x.value, 
+                                gcrs_coords.cartesian.y.value, 
+                                gcrs_coords.cartesian.z.value))
+    gcrs_vel = np.column_stack((gcrs_coords.cartesian.differentials['s'].d_x.value, 
+                                gcrs_coords.cartesian.differentials['s'].d_y.value, 
+                                gcrs_coords.cartesian.differentials['s'].d_z.value))
+
+    return gcrs_pos, gcrs_vel

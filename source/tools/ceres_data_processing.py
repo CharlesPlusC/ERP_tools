@@ -8,7 +8,6 @@ import math
 from geopy.distance import great_circle
 from .utilities import find_nearest_index, lla_to_ecef, eci2ecef_astropy, ecef_to_lla, julian_day_to_ceres_time
 
-
 def sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, pixel_lats, pixel_lons):
     """
     Compute the angle between the satellite's normal vector and the normal vectors at each pixel location on the Earth's surface.

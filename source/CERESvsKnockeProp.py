@@ -23,7 +23,7 @@ import datetime
 
 from tools.CERES_ERP import CERES_ERP_ForceModel
 from tools.utilities import pos_vel_from_orekit_ephem, HCL_diff, jd_to_utc, keplerian_elements_from_orekit_ephem, extract_acceleration
-from tools.data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
+from source.tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
 from tools.TLE_tools import twoLE_parse, tle_convert
 from tools.plotting import plot_kepels_evolution, plot_hcl_differences
 

@@ -26,8 +26,8 @@ from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 
-from tools.utilities import yyyy_mm_dd_hh_mm_ss_to_jd, jd_to_utc, extract_acceleration
-from tools.spaceX_ephem_tools import  parse_spacex_datetime_stamps
+from tools.utilities import extract_acceleration, keys_to_string
+from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 
 import pandas as pd
 import numpy as np
@@ -43,12 +43,6 @@ INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
 POSITION_TOLERANCE = 1e-3 # 1 mm
-
-def keys_to_string(d):
-    """
-    Convert the keys of a dictionary to a string with each key on a new line.
-    """
-    return '\n'.join(d.keys())
 
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
@@ -170,112 +164,6 @@ def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=2.2, 
     velocity = [pv_coordinates.getVelocity().getX(), pv_coordinates.getVelocity().getY(), pv_coordinates.getVelocity().getZ()]
 
     return position + velocity
-
-def std_dev_from_lower_triangular(lower_triangular_data):
-    cov_matrix = np.zeros((6, 6))
-    row, col = np.tril_indices(6)
-    cov_matrix[row, col] = lower_triangular_data
-    cov_matrix = cov_matrix + cov_matrix.T - np.diag(cov_matrix.diagonal())
-    std_dev = np.sqrt(np.diag(cov_matrix))
-    return std_dev
-
-def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
-    """
-    Convert SpaceX ephemeris data, including covariance terms, into a pandas DataFrame.
-
-    Parameters
-    ----------
-    ephem_path : str
-        Path to the ephemeris file.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing parsed SpaceX ephemeris data, including covariance terms.
-    """
-    with open(ephem_path) as f:
-        lines = f.readlines()
-
-    # Remove header lines and select every 4th line starting from the first data line
-    t_xyz_uvw = lines[4::4]
-
-    # Extract t, x, y, z, u, v, w
-    t = [float(i.split()[0]) for i in t_xyz_uvw]
-    x = [float(i.split()[1]) for i in t_xyz_uvw]
-    y = [float(i.split()[2]) for i in t_xyz_uvw]
-    z = [float(i.split()[3]) for i in t_xyz_uvw]
-    u = [float(i.split()[4]) for i in t_xyz_uvw]
-    v = [float(i.split()[5]) for i in t_xyz_uvw]
-    w = [float(i.split()[6]) for i in t_xyz_uvw]
-
-    # Extract the 21 covariance terms (3 lines after each primary data line)
-    covariance_data = {f'cov_{i+1}': [] for i in range(21)}
-    for i in range(5, len(lines), 4):  # Start from the first covariance line
-        cov_lines = lines[i:i+3]  # Get the three lines of covariance terms
-        cov_values = ' '.join(cov_lines).split()
-        for j, value in enumerate(cov_values):
-            covariance_data[f'cov_{j+1}'].append(float(value))
-
-    # Convert timestamps to strings and call parse_spacex_datetime_stamps
-    t_str = [str(int(i)) for i in t]  # Convert timestamps to string
-    parsed_timestamps = parse_spacex_datetime_stamps(t_str)
-
-    # Calculate Julian Dates for each timestamp
-    jd_stamps = np.zeros(len(parsed_timestamps))
-    for i in range(len(parsed_timestamps)):
-        jd_stamps[i] = yyyy_mm_dd_hh_mm_ss_to_jd(int(parsed_timestamps[i][0]), int(parsed_timestamps[i][1]), 
-                                                 int(parsed_timestamps[i][2]), int(parsed_timestamps[i][3]), 
-                                                 int(parsed_timestamps[i][4]), int(parsed_timestamps[i][5]), 
-                                                 int(parsed_timestamps[i][6]))
-
-    # Initialize lists for averaged position and velocity standard deviations
-    sigma_x, sigma_y, sigma_z, sigma_xv, sigma_yv, sigma_zv = [], [], [], [], [], []
-
-    # Calculate averaged standard deviations for each row
-    for _, row in pd.DataFrame(covariance_data).iterrows():
-        std_devs = std_dev_from_lower_triangular(row.values)
-        sigma_x.append(std_devs[0])
-        sigma_y.append(std_devs[1])
-        sigma_z.append(std_devs[2])
-        sigma_xv.append(std_devs[3])
-        sigma_yv.append(std_devs[4])
-        sigma_zv.append(std_devs[5])
-
-    # Construct the DataFrame with all data
-    spacex_ephem_df = pd.DataFrame({
-        't': t,
-        'x': x,
-        'y': y,
-        'z': z,
-        'xv': u,
-        'yv': v,
-        'zv': w,
-        'JD': jd_stamps,
-        'sigma_x': sigma_x,
-        'sigma_y': sigma_y,
-        'sigma_z': sigma_z,
-        'sigma_xv': sigma_xv,
-        'sigma_yv': sigma_yv,
-        'sigma_zv': sigma_zv,
-        **covariance_data
-    })
-
-    # Multiply all the values except the times by 1000 to convert from km to m
-    columns_to_multiply = ['x', 'y', 'z', 'xv', 'yv', 'zv', 
-                        'sigma_x', 'sigma_y', 'sigma_z', 
-                        'sigma_xv', 'sigma_yv', 'sigma_zv']
-
-    for col in columns_to_multiply:
-        spacex_ephem_df[col] *= 1000
-
-    covariance_columns = [f'cov_{i+1}' for i in range(21)]
-    for col in covariance_columns:
-        spacex_ephem_df[col] *= 1000**2
-
-    spacex_ephem_df['hours'] = (spacex_ephem_df['JD'] - spacex_ephem_df['JD'][0]) * 24.0 # hours since first timestamp
-    spacex_ephem_df['UTC'] = spacex_ephem_df['JD'].apply(jd_to_utc)
-    # TODO: I am gaining 3 milisecond per minute in the UTC time. Why?
-    return spacex_ephem_df
 
 def rho_i(measured_state, measurement_type='state'):
 # maps a state vector to a measurement vector
