@@ -96,8 +96,8 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     # Atmospheric drag
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, SOLFSMYDataLoader, DtcDataLoader
-        from org.orekit.models.earth.atmosphere import JB2008, JB2008InputParameters
+        from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData
+        from org.orekit.models.earth.atmosphere import JB2008
         from org.orekit.data import DataSource
         import requests
         from java.io import File
@@ -406,7 +406,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
-        print(f"atmospheric_drag_eci_t0: {atmospheric_drag_eci_t0}")
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
@@ -655,7 +654,7 @@ if __name__ == "__main__":
     obs_lengths_to_test = [60]
     estimate_drag = False
     force_model_configs = [
-        # {'gravtiy': True, '3BP': True},
+        {'gravtiy': True, '3BP': True},
         {'gravtiy': True, '3BP': True, 'drag': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
