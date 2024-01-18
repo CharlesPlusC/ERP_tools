@@ -6,6 +6,8 @@ from pyproj import Transformer
 from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
 from typing import Tuple, List
+import requests
+from java.io import File
 
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir
@@ -491,3 +493,13 @@ def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
                                 gcrs_coords.cartesian.differentials['s'].d_z.value))
 
     return gcrs_pos, gcrs_vel
+
+    # Function to download file and return a java.io.File object
+def download_file_url(url, local_filename):
+    #mianly used to download the  solfsmy and dtc files for JB2008
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(local_filename, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+    return File(local_filename)

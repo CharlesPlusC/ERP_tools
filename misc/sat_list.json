@@ -7,7 +7,7 @@
         "cd": 2.2,
         "cr": 1.5
     },
-    "GRACE-FO -A": {
+    "GRACE-FO-A": {
         "norad_id": 43476,
         "sp3-c_code": "L64",
         "mass": 600.2,
@@ -15,7 +15,7 @@
         "cd": 2.2,
         "cr": 1.5
     },
-    "GRACE-FO -B": {
+    "GRACE-FO-B": {
         "norad_id": 43477,
         "sp3-c_code": "L65",
         "mass": 600.2,

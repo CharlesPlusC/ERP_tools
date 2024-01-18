@@ -25,9 +25,14 @@ from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
+from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData
+from org.orekit.models.earth.atmosphere import JB2008
+from org.orekit.data import DataSource
+from org.orekit.time import TimeScalesFactory   
 
-from tools.utilities import extract_acceleration, keys_to_string
+from tools.utilities import extract_acceleration, keys_to_string, download_file_url
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
+from tools.sp3_2_ephemeris import sp3_ephem_to_df
 
 import pandas as pd
 import numpy as np
@@ -43,6 +48,14 @@ INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
 POSITION_TOLERANCE = 1e-3 # 1 mm
+
+# Download SOLFSMY and DTCFILE files for JB2008 model
+solfsmy_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
+dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
+
+# Create DataSource instances
+solfsmy_data_source = DataSource(solfsmy_file)
+dtcfile_data_source = DataSource(dtcfile_file)
 
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
@@ -90,32 +103,10 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     # Atmospheric drag
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData
-        from org.orekit.models.earth.atmosphere import JB2008
-        from org.orekit.data import DataSource
-        import requests
-        from java.io import File
-
-        # Function to download file and return a java.io.File object
-        def download_file(url, local_filename):
-            with requests.get(url, stream=True) as r:
-                r.raise_for_status()
-                with open(local_filename, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            return File(local_filename)
-
-        # Download SOLFSMY and DTCFILE files
-        solfsmy_file = download_file("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
-        dtcfile_file = download_file("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
-
-        # Create DataSource instances
-        solfsmy_data_source = DataSource(solfsmy_file)
-        dtcfile_data_source = DataSource(dtcfile_file)
 
         jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
                                             dtcfile_data_source)
-        from org.orekit.time import TimeScalesFactory
+
         utc = TimeScalesFactory.getUTC()
         atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
 
@@ -134,7 +125,9 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     return propagator
 
 def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=2.2, cross_section=30.0, **config_flags):
-
+    print(f"initial_state_vector: {initial_state_vector})")
+    print(f"start_date: {start_date}")
+    print(f"end_date: {end_date}")
     if len(initial_state_vector) == 6:
         x, y, z, vx, vy, vz = initial_state_vector
     elif len(initial_state_vector) == 7:
@@ -255,39 +248,16 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
 
-    ###NOTE: this one has to stay last in the if-loop (see below)
+    ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         # msafe = MarshallSolarActivityFutureEstimation(
         #     MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
         #     MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         # atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
-        from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, SOLFSMYDataLoader, DtcDataLoader
-        from org.orekit.models.earth.atmosphere import JB2008, JB2008InputParameters
-        from org.orekit.data import DataSource
-        import requests
-        from java.io import File
-
-        # Function to download file and return a java.io.File object
-        def download_file(url, local_filename):
-            with requests.get(url, stream=True) as r:
-                r.raise_for_status()
-                with open(local_filename, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            return File(local_filename)
-
-        # Download SOLFSMY and DTCFILE files
-        solfsmy_file = download_file("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
-        dtcfile_file = download_file("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
-
-        # Create DataSource instances
-        solfsmy_data_source = DataSource(solfsmy_file)
-        dtcfile_data_source = DataSource(dtcfile_file)
 
         jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
                                             dtcfile_data_source)
-        from org.orekit.time import TimeScalesFactory
         utc = TimeScalesFactory.getUTC()
         atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
@@ -705,3 +675,199 @@ if __name__ == "__main__":
         plt.title("Cd values at each iteration")
         plt.legend()
         plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+
+###### POD WITH GRACE ######
+    # sat_name = "GRACE-FO-A"
+    # grace_a_df = sp3_ephem_to_df(sat_name)
+    # print(grace_a_df.head())
+    # initial_X = grace_a_df['x'].iloc[0]
+    # initial_Y = grace_a_df['y'].iloc[0]
+    # initial_Z = grace_a_df['z'].iloc[0]
+    # initial_VX = grace_a_df['xv'].iloc[0]
+    # initial_VY = grace_a_df['yv'].iloc[0]
+    # initial_VZ = grace_a_df['zv'].iloc[0]
+    # initial_sigma_X = grace_a_df['sigma_x'].iloc[0]
+    # initial_sigma_Y = grace_a_df['sigma_y'].iloc[0]
+    # initial_sigma_Z = grace_a_df['sigma_z'].iloc[0]
+    # initial_sigma_XV = grace_a_df['sigma_xv'].iloc[0]
+    # initial_sigma_YV = grace_a_df['sigma_yv'].iloc[0]
+    # initial_sigma_ZV = grace_a_df['sigma_zv'].iloc[0]
+    # #TODO: get from sat_list.json
+    # cd = 2.2
+    # cr = 1.5
+    # cross_section = 30.0 
+    # initial_t = grace_a_df['UTC'].iloc[0]
+    # print(f"initial_t: {initial_t}")
+    # a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
+    #                               initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV])
+    # a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]]) #cast to float for compatibility with Orekit functions
+    # a_priori_estimate = np.array([initial_t, *a_priori_estimate])
+    
+    # observations_df_full = grace_a_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+    # obs_lengths_to_test = [60]
+    # estimate_drag = False
+    # force_model_configs = [
+    #     {'gravtiy': True, '3BP': True},
+    #     {'gravtiy': True, '3BP': True, 'drag': True},
+    #     {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True},
+    #     {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
+    #     {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True,'relativity': True, 'knocke_erp': True}]
+
+    # covariance_matrices = []
+    # optimized_states = []
+    # for i, force_model_config in enumerate(force_model_configs):
+    #     if not force_model_config.get('drag', False):
+    #         estimate_drag = False
+    #         print("Force model doesn't have drag. Setting estimate_drag to False.")
+        
+    #     for obs_length in obs_lengths_to_test:
+    #         observations_df = observations_df_full.iloc[:obs_length]
+    #         print("observations df: ", observations_df.head())
+    #         optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
+    #         #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
+    #         #save the optimized states, covariance matrices, residuals, RMSs
+    #         date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    #         folder_path = "output/OD_BLS/Tapley/saved_runs"
+    #         output_folder = f"{folder_path}/{sat_name}-{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
+    #         os.makedirs(output_folder)
+    #         np.save(f"{output_folder}/optimized_states.npy", optimized_states)
+    #         np.save(f"{output_folder}/cov_mats.npy", cov_mats)
+    #         np.save(f"{output_folder}/residuals.npy", residuals)
+    #         np.save(f"{output_folder}/RMSs.npy", RMSs)
+
+    #         #find the index of the minimum RMS
+    #         min_RMS_index = np.argmin(RMSs)
+    #         optimized_state = optimized_states[min_RMS_index]
+    #         covariance_matrix = cov_mats[min_RMS_index]
+    #         final_RMS = RMSs[min_RMS_index]
+    #         residuals_final = residuals[min_RMS_index]
+    #         covariance_matrices.append(covariance_matrix)
+
+    #         # Create two subplots: one for position, one for velocity
+    #         fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+
+    #         # Position residuals plot
+    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c="xkcd:blue")
+    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
+    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
+    #         axs[0].set_ylabel("Position Residual (m)")
+    #         if estimate_drag:
+    #             axs[0].set_ylim(-3, 3)
+    #         else:
+    #             axs[0].set_ylim(-10, 10)
+    #         axs[0].legend(['x', 'y', 'z'])
+    #         axs[0].grid(True)
+
+    #         # Velocity residuals plot
+    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c="xkcd:purple")
+    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c="xkcd:orange")
+    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
+    #         axs[1].set_xlabel("Observation time (UTC)")
+    #         axs[1].set_ylabel("Velocity Residual (m/s)")
+    #         if estimate_drag:
+    #             axs[1].set_ylim(-3e-3, 3e-3)
+    #         else:
+    #             axs[1].set_ylim(-10e-10, 10e-10)
+    #         axs[1].legend(['xv', 'yv', 'zv'])
+    #         axs[1].grid(True)
+
+    #         # Shared title, rotation of x-ticks, and force model text
+    #         plt.suptitle(f"Residuals (O-C) for final BLS iteration. \nRMS: {final_RMS:.3f}")
+    #         #
+    #         plt.xticks(rotation=45)
+    #         force_model_keys_str = keys_to_string(force_model_config)
+    #         wrapped_text = textwrap.fill(force_model_keys_str, 20)
+    #         axs[1].text(0.8, -0.2, f"Force model:\n{wrapped_text}", 
+    #                     transform=axs[1].transAxes,
+    #                     fontsize=10, 
+    #                     verticalalignment='bottom',
+    #                     bbox=dict(facecolor='white', alpha=0.3))
+
+    #         # Save the figure
+    #         save_to = f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-fmodel_{i}_#pts_{len(observations_df)}.png"
+    #         if estimate_drag:
+    #             save_to = f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
+    #         plt.tight_layout()
+    #         plt.savefig(save_to)
+
+    #         #plot histograms of residuals
+    #         plt.figure()
+    #         plt.hist(residuals_final[:,0], bins=20, label='x', color="xkcd:blue")
+    #         plt.hist(residuals_final[:,1], bins=20, label='y', color="xkcd:green")
+    #         plt.hist(residuals_final[:,2], bins=20, label='z', color="xkcd:red")
+    #         plt.hist(residuals_final[:,3], bins=20, label='xv', color="xkcd:purple")
+    #         plt.hist(residuals_final[:,4], bins=20, label='yv', color="xkcd:orange")
+    #         plt.hist(residuals_final[:,5], bins=20, label='zv', color="xkcd:yellow")
+    #         plt.title("Residuals (O-C) for final BLS iteration")
+    #         plt.xlabel("Residual (m)")
+    #         plt.ylabel("Frequency")
+    #         force_model_keys_str = keys_to_string(force_model_config)
+    #         wrapped_text = textwrap.fill(force_model_keys_str, 20)
+    #         plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
+    #                 transform=plt.gca().transAxes,
+    #                 fontsize=10, 
+    #                 verticalalignment='bottom',
+    #                 bbox=dict(facecolor='white', alpha=0.5))
+    #         plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
+    #         plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-hist_force_model_{i}_#pts_{len(observations_df)}.png")
+
+    #         #ECI covariance matrix
+    #         if estimate_drag:
+    #             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
+    #         else:
+    #             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+    #         log_norm = SymLogNorm(linthresh=1e-10, vmin=covariance_matrix.min(), vmax=covariance_matrix.max())
+    #         plt.figure(figsize=(8, 7))
+    #         sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
+    #         plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
+    #         save_to = f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-covMat_#pts_{len(observations_df)}_config{i}.png"
+    #         if estimate_drag:
+    #             save_to = f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
+    #         plt.savefig(save_to)
+    
+    # relative_differences = []
+    # for j in range(1, len(covariance_matrices)):
+    #     difference_matrix = covariance_matrices[j] - covariance_matrices[j-1]
+    #     if estimate_drag:
+    #         labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
+    #     else:
+    #         labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+    #     # Plotting the difference as a heatmap
+    #     plt.figure(figsize=(10, 8))
+    #     sns.heatmap(difference_matrix, annot=True, fmt=".3e",xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
+    #     plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
+    #     plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/{sat_name}-diff_covmat_run_{j}_vs_{j-1}.png')
+
+    # correlation_matrices =  calculate_cross_correlation_matrix(covariance_matrices)
+    # for j in range(len(correlation_matrices)):
+    #     # Plotting the correlation matrix as a heatmap
+    #     plt.figure(figsize=(10, 8))
+    #     sns.heatmap(correlation_matrices[j], annot=True, fmt=".3f", cmap="coolwarm", center=0)
+    #     plt.title(f'Correlation Matrix: Run {j}')
+    #     plt.xlabel('Components')
+    #     plt.ylabel('Components')
+    #     plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/{sat_name}-corr_covmat_run_{j}.png')
+
+    # # Plot a bar chart of the final Cd values
+    # if estimate_drag:
+    #     plt.figure()
+    #     bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
+
+    #     # Adding labels on each bar
+    #     for bar in bars:
+    #         yval = bar.get_height()
+    #         plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
+
+    #     plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
+    #     plt.title("Cd values estimated by BLS under different force models")
+    #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+
+    #     #plot a linegraph of the Cd values at each iteration
+    #     plt.figure()
+    #     for optimized_state in optimized_states:
+    #         plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
+    #     plt.xlabel("Iteration")
+    #     plt.ylabel("Cd")
+    #     plt.title("Cd values at each iteration")
+    #     plt.legend()
+    #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")

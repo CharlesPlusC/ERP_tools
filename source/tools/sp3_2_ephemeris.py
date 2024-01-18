@@ -8,8 +8,8 @@ import gzip
 import tempfile
 import os
 import glob
-
-from tools.utilities import utc_jd_date, itrs_to_gcrs
+from source.tools.utilities import utc_jd_date, itrs_to_gcrs
+#run from CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 def read_sp3_gz_file(sp3_gz_file_path):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.sp3')
@@ -71,6 +71,80 @@ def process_sp3_files(base_path, sat_list):
 
     return concatenated_dataframes
 
+def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
+    # Create directory for satellite if it doesn't exist
+    sat_dir = os.path.join(output_dir, satellite)
+    os.makedirs(sat_dir, exist_ok=True)
+
+    # Define the file name
+    start_date = df.index.min().strftime("%Y%m%d%H%M%S")
+    end_date = df.index.max().strftime("%Y%m%d%H%M%S")
+    start_day = df.index.min().strftime("%Y-%m-%d")
+    end_day = df.index.max().strftime("%Y-%m-%d")
+    norad_id = sat_dict[satellite]['norad_id']
+    file_name = f"NORAD{norad_id}-{start_day}-{end_day}.txt"
+    file_path = os.path.join(sat_dir, file_name)
+
+    # Write data to the ephemeris file
+    with open(file_path, 'w') as file:
+        for idx, row in df.iterrows():
+            utc = idx.strftime("%Y-%m-%d %H:%M:%S.%f")
+            line1 = f"{utc} {row['pos_x_eci']} {row['pos_y_eci']} {row['pos_z_eci']} {row['vel_x_eci']} {row['vel_y_eci']} {row['vel_z_eci']}\n"
+            line2 = f"{row['sigma_x']} {row['sigma_y']} {row['sigma_z']} {row['sigma_xv']} {row['sigma_yv']} {row['sigma_zv']}\n"
+            file.write(line1)
+            file.write(line2)
+
+def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
+    # Path to the directory containing the ephemeris files for the satellite
+    sat_dir = os.path.join(ephemeris_dir, satellite)
+
+    # List of all ephemeris files for the satellite
+    ephemeris_files = glob.glob(os.path.join(sat_dir, "*.txt"))
+
+    # Initialize an empty DataFrame
+    df = pd.DataFrame()
+
+    for file_path in ephemeris_files:
+        with open(file_path, 'r') as file:
+            data = []
+            while True:
+                line1 = file.readline()
+                line2 = file.readline()
+                if not line2:  # Check if second line is empty (end of file)
+                    break
+                
+                # Split lines and handle UTC timestamp
+                line1_parts = line1.strip().split()
+                utc = ' '.join(line1_parts[:2])
+                ephemeris_values = line1_parts[2:]
+                sigma_values = line2.strip().split()
+
+                if len(ephemeris_values) != 6 or len(sigma_values) != 6:
+                    raise ValueError("Incorrect number of values in ephemeris or sigma lines.")
+
+                # Convert positions and velocities from km to m
+                converted_values = [float(val) * 1000 if i < 6 else float(val) 
+                                    for i, val in enumerate(ephemeris_values)]
+                
+                sigma_converted_values = [float(val) * 1e6 for val in sigma_values]
+
+                # Combine all values and convert to appropriate types
+                row = [pd.to_datetime(utc)] + converted_values + sigma_converted_values
+                data.append(row)
+
+            # Create a DataFrame from the current file data
+            file_df = pd.DataFrame(data, columns=['UTC', 'x', 'y', 'z', 
+                                                  'xv', 'yv', 'zv', 
+                                                  'sigma_x', 'sigma_y', 'sigma_z', 
+                                                  'sigma_xv', 'sigma_yv', 'sigma_zv'])
+
+            # Append to the main DataFrame
+            df = pd.concat([df, file_df])
+
+    # Reset index
+    df.reset_index(drop=True, inplace=True)
+    return df
+
 def main():
     sat_list_path = "misc/sat_list.json"
     sp3_files_path = "external/sp3_files"
@@ -103,6 +177,21 @@ def main():
         # Add new columns for ECI coordinates
         df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T
         df['vel_x_eci'], df['vel_y_eci'], df['vel_z_eci'] = icrs_velocities.T
+
+    # Now add in  'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv' columns to each dataframe
+    # for the time being we will input dummy values consistent with 5cm and 1mm/s for position and velocity respectively
+    #TODO: replace this with actual values eventually
+    for satellite, df in sp3_dataframes.items():
+        df['sigma_x'] = 5e-5 #in km
+        df['sigma_y'] = 5e-5 #in km
+        df['sigma_z'] = 5e-5 #in km
+        df['sigma_xv'] = 1e-6 #in km/s
+        df['sigma_yv'] = 1e-6 #in km/s
+        df['sigma_zv'] = 1e-6 #in km/s
+
+    # After adding sigma columns to each dataframe
+    for satellite, df in sp3_dataframes.items():
+        write_ephemeris_file(satellite, df, sat_dict)
 
 if __name__ == "__main__":
     main()
