@@ -8,7 +8,7 @@ import gzip
 import tempfile
 import os
 import glob
-from source.tools.utilities import utc_jd_date, orekit_CTS_to_EME2000
+from source.tools.utilities import utc_jd_date, SP3_to_EME2000
 #run from CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 def read_sp3_gz_file(sp3_gz_file_path):
@@ -164,13 +164,12 @@ def main():
         mjd_times = [utc_jd_date(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, mjd=True) for dt in df.index]
         df['MJD'] = mjd_times
 
-        # Prepare ITRS coordinates
+        # Prepare CTS coordinates (ITRF 2014)
         itrs_positions = df[['Position_X', 'Position_Y', 'Position_Z']].values
         itrs_velocities = df[['Velocity_X', 'Velocity_Y', 'Velocity_Z']].values
 
         # Convert to ICRS (ECI)
-        icrs_positions, icrs_velocities = orekit_CTS_to_EME2000(itrs_positions, itrs_velocities, df['MJD'])
-
+        icrs_positions, icrs_velocities = SP3_to_EME2000(itrs_positions, itrs_velocities, df['MJD'])
         # Add new columns for ECI coordinates
         df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T
         df['vel_x_eci'], df['vel_y_eci'], df['vel_z_eci'] = icrs_velocities.T

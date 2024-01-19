@@ -470,28 +470,6 @@ def keys_to_string(d):
     """
     return '\n'.join(d.keys())
 
-def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
-    # Create a Time object from the Modified Julian Date
-    time_utc = Time(mjd, format="mjd", scale='utc')
-
-    # Create ITRS coordinates with position and velocity
-    itrs_cartesian = CartesianRepresentation(itrs_pos.T * u.km)
-    itrs_velocity = CartesianDifferential(itrs_vel.T * u.km / u.s)
-    itrs_coords = ITRS(itrs_cartesian.with_differentials(itrs_velocity), obstime=time_utc)
-
-    # Transform ITRS coordinates to GCRS
-    gcrs_coords = itrs_coords.transform_to(GCRS(obstime=time_utc))
-
-    # Extract the position and velocity from GCRS coordinates
-    gcrs_pos = np.column_stack((gcrs_coords.cartesian.x.value, 
-                                gcrs_coords.cartesian.y.value, 
-                                gcrs_coords.cartesian.z.value))
-    gcrs_vel = np.column_stack((gcrs_coords.cartesian.differentials['s'].d_x.value, 
-                                gcrs_coords.cartesian.differentials['s'].d_y.value, 
-                                gcrs_coords.cartesian.differentials['s'].d_z.value))
-
-    return gcrs_pos, gcrs_vel
-
 def teme_to_eme2000(teme_pos, teme_vel, jd_times):
     # Orekit Frames
     frame_TEME = FramesFactory.getTEME()
@@ -537,7 +515,7 @@ def convert_spacex_ephem_to_eme2000(df):
 
     return df
 
-def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjds):
+def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
     frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
     frame_EME2000 = FramesFactory.getEME2000()
