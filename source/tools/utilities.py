@@ -16,7 +16,7 @@ orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
 
-from org.orekit.frames import FramesFactory
+from org.orekit.frames import FramesFactory, ITRFVersion
 from org.orekit.utils import PVCoordinates
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates, IERSConventions
@@ -494,7 +494,7 @@ def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
 
 def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
-    frame_CTS = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
+    frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
     frame_EME2000 = FramesFactory.getEME2000()
 
     # Prepare output arrays

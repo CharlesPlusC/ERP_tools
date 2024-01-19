@@ -195,7 +195,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, monopolegrav)
         monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         accelerations_t0+=monopole_gravity_eci_t0
-        print(f"mono grav: {monopole_gravity_eci_t0}")
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(120,120)
         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
@@ -203,7 +202,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravityfield)
         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
         accelerations_t0+=gravityfield_eci_t0
-        print(f"gravityfield: {gravityfield_eci_t0}")
 
     if force_model_config.get('3BP', False):
         moon = CelestialBodyFactory.getMoon()
@@ -218,8 +216,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, sun_3dbodyattraction)
         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
         accelerations_t0+=sun_eci_t0
-        print(f"moon: {moon_eci_t0}")
-        print(f"sun: {sun_eci_t0}")
 
     if force_model_config.get('SRP', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
@@ -231,7 +227,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
-        print(f"solar radiation: {solar_radiation_eci_t0}")
 
     if force_model_config.get('relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
@@ -239,7 +234,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, relativity)
         relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
         accelerations_t0+=relativity_eci_t0
-        print(f"relativity: {relativity_eci_t0}")
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -251,7 +245,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
-        print(f"knocke: {knocke_eci_t0}")
 
     ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
@@ -271,7 +264,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
-        print(f"atmospheric drag: {atmospheric_drag_eci_t0}")
 
     for i in range(len(state_ti)):
         state_ti_perturbed = state_ti.copy()
@@ -308,7 +300,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         elif i == 6:  # Cd component
             df_dy[3:6, 6] = partial_derivatives
 
-    print(f"df_dy: {df_dy}")
     # Flatten the initial STM for integration
     phi_i_flat = phi_i.flatten()
 
@@ -423,9 +414,9 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=1.5, cd=state_ti_minus1[-1], cross_section=10.0, **force_model_config)
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=1.5, cd=state_ti_minus1[-1], cross_section=10.0, **force_model_config)
             else:
-                print(f"state_ti_minus1: {state_ti_minus1}")
+                # print(f"state_ti_minus1: {state_ti_minus1}")
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=1.5, cd=2.2, cross_section=10.0, **force_model_config)
-                print(f"state_ti: {state_ti}")
+                # print(f"state_ti: {state_ti}")
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=1.5, cd=2.2, cross_section=10.0, **force_model_config)
 
             # Compute H matrix for this observation
@@ -448,12 +439,12 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             phi_ti_minus1 = phi_ti
             RMSs.append(y_i.T @ W_i @ y_i)
 
-        print(f"y_all: {y_all}")
-        print(f"W_i: {W_i}")
-        print(f"H_matrix_row: {H_matrix_row}")
+        # print(f"y_all: {y_all}")
+        # print(f"W_i: {W_i}")
+        # print(f"H_matrix_row: {H_matrix_row}")
         # sum all the RMSs
         RMSs = np.array(RMSs)
-        print(f"RMSs: {RMSs}")
+        # print(f"RMSs: {RMSs}")
         #weighted RMS is sqrt(RMS divided by m. where m is (number of observations * number of state variables))
         weighted_rms = np.sqrt(np.sum(RMSs) / (len(x_bar_0) * len (y_all)))
         print(f"Weighted RMS: {weighted_rms}")
@@ -725,12 +716,12 @@ if __name__ == "__main__":
     obs_lengths_to_test = [60]
     estimate_drag = False
     force_model_configs = [
-        {'gravtiy': True, '3BP': True},
-        {'gravtiy': True, '3BP': True, 'drag': True},
+        # {'gravtiy': True, '3BP': True},
+        # {'gravtiy': True, '3BP': True, 'drag': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True},
-        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
-        {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True,'relativity': True, 'knocke_erp': True}]
-
+        # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
+        # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True,'relativity': True, 'knocke_erp': True}]
+    ]
     covariance_matrices = []
     optimized_states = []
     for i, force_model_config in enumerate(force_model_configs):
@@ -769,12 +760,12 @@ if __name__ == "__main__":
             axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
             axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
             axs[0].set_ylabel("Position Residual (m)")
-            if estimate_drag:
-                axs[0].set_ylim(-3, 3)
-            else:
-                axs[0].set_ylim(-10, 10)
-            axs[0].legend(['x', 'y', 'z'])
-            axs[0].grid(True)
+            # if estimate_drag:
+            #     axs[0].set_ylim(-3, 3)
+            # else:
+            #     axs[0].set_ylim(-10, 10)
+            # axs[0].legend(['x', 'y', 'z'])
+            # axs[0].grid(True)
 
             # Velocity residuals plot
             axs[1].scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c="xkcd:purple")
@@ -782,12 +773,12 @@ if __name__ == "__main__":
             axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
             axs[1].set_xlabel("Observation time (UTC)")
             axs[1].set_ylabel("Velocity Residual (m/s)")
-            if estimate_drag:
-                axs[1].set_ylim(-3e-3, 3e-3)
-            else:
-                axs[1].set_ylim(-10e-10, 10e-10)
-            axs[1].legend(['xv', 'yv', 'zv'])
-            axs[1].grid(True)
+            # if estimate_drag:
+            #     axs[1].set_ylim(-3e-3, 3e-3)
+            # else:
+            #     axs[1].set_ylim(-10e-10, 10e-10)
+            # axs[1].legend(['xv', 'yv', 'zv'])
+            # axs[1].grid(True)
 
             # Shared title, rotation of x-ticks, and force model text
             plt.suptitle(f"Residuals (O-C) for final BLS iteration. \nRMS: {final_RMS:.3f}")
