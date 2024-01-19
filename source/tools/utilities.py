@@ -492,11 +492,55 @@ def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
 
     return gcrs_pos, gcrs_vel
 
+def teme_to_eme2000(teme_pos, teme_vel, jd_times):
+    # Orekit Frames
+    frame_TEME = FramesFactory.getTEME()
+    frame_EME2000 = FramesFactory.getEME2000()
+
+    # Prepare output arrays
+    eme2000_pos = np.empty_like(teme_pos)
+    eme2000_vel = np.empty_like(teme_vel)
+
+    # Iterate over each row of position, velocity, and corresponding Julian Date
+    for i in range(len(teme_pos)):
+        # Convert Julian Date to datetime and then to AbsoluteDate
+        dt = datetime(1858, 11, 17) + timedelta(days=jd_times[i] - 2400000.5)
+        absolute_date = datetime_to_absolutedate(dt)
+
+        # Convert inputs to Orekit's Vector3D and PVCoordinates
+        teme_pos_vector = Vector3D(float(teme_pos[i, 0]), float(teme_pos[i, 1]), float(teme_pos[i, 2]))
+        teme_vel_vector = Vector3D(float(teme_vel[i, 0]), float(teme_vel[i, 1]), float(teme_vel[i, 2]))
+        pv_teme = PVCoordinates(teme_pos_vector, teme_vel_vector)
+
+        # Transform Coordinates
+        teme_to_eme2000 = frame_TEME.getTransformTo(frame_EME2000, absolute_date)
+        pveci = teme_to_eme2000.transformPVCoordinates(pv_teme)
+
+        # Extract position and velocity from transformed coordinates
+        eme2000_pos[i] = [pveci.getPosition().getX(), pveci.getPosition().getY(), pveci.getPosition().getZ()]
+        eme2000_vel[i] = [pveci.getVelocity().getX(), pveci.getVelocity().getY(), pveci.getVelocity().getZ()]
+
+    return eme2000_pos, eme2000_vel
+
+def convert_spacex_ephem_to_eme2000(df):
+    # Extract position and velocity from DataFrame
+    teme_positions = df[['x', 'y', 'z']].values
+    teme_velocities = df[['xv', 'yv', 'zv']].values
+    jd_times = df['jd_time'].values
+
+    # Convert to EME2000
+    eme2000_positions, eme2000_velocities = teme_to_eme2000(teme_positions, teme_velocities, jd_times)
+
+    # Update DataFrame with new values
+    df[['x', 'y', 'z']] = eme2000_positions
+    df[['xv', 'yv', 'zv']] = eme2000_velocities
+
+    return df
+
 def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
     frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
-    frame_EME2000 = FramesFactory.getTEME()
-    # frame_EME2000 = FramesFactory.getEME2000()
+    frame_EME2000 = FramesFactory.getEME2000()
 
     # Prepare output arrays
     eme2000_pos = np.empty_like(itrs_pos)

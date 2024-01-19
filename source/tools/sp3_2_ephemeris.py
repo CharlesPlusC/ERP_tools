@@ -30,7 +30,7 @@ def read_sp3_gz_file(sp3_gz_file_path):
     for record in records:
         times.append(record.time)
         positions.append(record.position)
-        velocities.append(record.velocity if record.velocity else (None, None, None))
+        velocities.append(record.velocity)
 
     df = pd.DataFrame({
         'Time': times,
@@ -77,8 +77,6 @@ def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
     os.makedirs(sat_dir, exist_ok=True)
 
     # Define the file name
-    start_date = df.index.min().strftime("%Y%m%d%H%M%S")
-    end_date = df.index.max().strftime("%Y%m%d%H%M%S")
     start_day = df.index.min().strftime("%Y-%m-%d")
     end_day = df.index.max().strftime("%Y-%m-%d")
     norad_id = sat_dict[satellite]['norad_id']
