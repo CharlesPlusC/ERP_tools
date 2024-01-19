@@ -8,7 +8,7 @@ import gzip
 import tempfile
 import os
 import glob
-from source.tools.utilities import utc_jd_date, itrs_to_gcrs
+from source.tools.utilities import utc_jd_date, orekit_CTS_to_EME2000
 #run from CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 def read_sp3_gz_file(sp3_gz_file_path):
@@ -126,10 +126,11 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
                 converted_values = [float(val) * 1000 if i < 6 else float(val) 
                                     for i, val in enumerate(ephemeris_values)]
                 
-                sigma_converted_values = [float(val) * 1e6 for val in sigma_values]
+                sigma_converted_values = [float(val) * 1 for val in sigma_values]
 
                 # Combine all values and convert to appropriate types
                 row = [pd.to_datetime(utc)] + converted_values + sigma_converted_values
+                print("row: ", row)
                 data.append(row)
 
             # Create a DataFrame from the current file data
@@ -161,7 +162,6 @@ def main():
         # Convert the index to datetime if it's not already
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
-            print
 
         # Convert time to MJD
         mjd_times = [utc_jd_date(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, mjd=True) for dt in df.index]
@@ -172,7 +172,7 @@ def main():
         itrs_velocities = df[['Velocity_X', 'Velocity_Y', 'Velocity_Z']].values
 
         # Convert to ICRS (ECI)
-        icrs_positions, icrs_velocities = itrs_to_gcrs(itrs_positions, itrs_velocities, df['MJD'].iloc[0])
+        icrs_positions, icrs_velocities = orekit_CTS_to_EME2000(itrs_positions, itrs_velocities, df['MJD'].iloc[0])
 
         # Add new columns for ECI coordinates
         df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T

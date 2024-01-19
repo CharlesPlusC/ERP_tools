@@ -7,10 +7,10 @@ from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
 from typing import Tuple, List
 import requests
-from java.io import File
 
 import orekit
-from orekit.pyhelpers import setup_orekit_curdir
+from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
+from datetime import datetime, timedelta
 
 orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
@@ -133,8 +133,6 @@ def mjd_to_datetime(mjd):
 def calculate_distance_ecef(ecef1, ecef2):
     # Calculate Euclidean distance between two ECEF coordinates
     return np.sqrt((ecef1[0] - ecef2[0])**2 + (ecef1[1] - ecef2[1])**2 + (ecef1[2] - ecef2[2])**2)
-
-from datetime import datetime, timedelta
 
 def julian_day_to_ceres_time(jd, ceres_ref_date=datetime(2000, 3, 1)):
     #TODO: check the buisness wiht this ceres_ref_date
@@ -494,8 +492,40 @@ def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
 
     return gcrs_pos, gcrs_vel
 
+def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjd):
+    # Orekit Frames
+    frame_CTS = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
+    frame_EME2000 = FramesFactory.getEME2000()
+
+    # Prepare output arrays
+    eme2000_pos = np.empty_like(itrs_pos)
+    eme2000_vel = np.empty_like(itrs_vel)
+
+    # Convert MJD to datetime and then to AbsoluteDate
+    jd = mjd + 2400000.5
+    dt = datetime(1858, 11, 17) + timedelta(days=jd)
+    absolute_date = datetime_to_absolutedate(dt)
+
+    # Iterate over each row of position and velocity
+    for i in range(len(itrs_pos)):
+        # Convert inputs to Orekit's Vector3D and PVCoordinates
+        itrs_pos_vector = Vector3D(float(itrs_pos[i, 0]), float(itrs_pos[i, 1]), float(itrs_pos[i, 2]))
+        itrs_vel_vector = Vector3D(float(itrs_vel[i, 0]), float(itrs_vel[i, 1]), float(itrs_vel[i, 2]))
+        pv_itrs = PVCoordinates(itrs_pos_vector, itrs_vel_vector)
+
+        # Transform Coordinates
+        cts_to_eme2000 = frame_CTS.getTransformTo(frame_EME2000, absolute_date)
+        pveci = cts_to_eme2000.transformPVCoordinates(pv_itrs)
+
+        # Extract position and velocity from transformed coordinates
+        eme2000_pos[i] = [pveci.getPosition().getX(), pveci.getPosition().getY(), pveci.getPosition().getZ()]
+        eme2000_vel[i] = [pveci.getVelocity().getX(), pveci.getVelocity().getY(), pveci.getVelocity().getZ()]
+
+    return eme2000_pos, eme2000_vel
+
     # Function to download file and return a java.io.File object
 def download_file_url(url, local_filename):
+    from java.io import File
     #mianly used to download the  solfsmy and dtc files for JB2008
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
