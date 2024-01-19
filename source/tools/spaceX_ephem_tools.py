@@ -215,7 +215,7 @@ def spacex_ephem_to_dataframe(ephem_path: str) -> pd.DataFrame:
 
     # take t, x, y, z, u, v, w and put them into a dataframe
     spacex_ephem_df = pd.DataFrame({'jd_time':jd_stamps, 'x':x, 'y':y, 'z':z, 'u':u, 'v':v, 'w':w})
-    # use the function meme_2_teme() to convert the x, y, z, u, v, w values from the MEME frame to the TEME frame
+    #TODO: use the function meme_2_teme() to convert the x, y, z, u, v, w values from the MEME frame to the TEME frame
     # remove the last row from spacex_ephem_df
     spacex_ephem_df = spacex_ephem_df[:-1]
 
