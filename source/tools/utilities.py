@@ -492,7 +492,7 @@ def itrs_to_gcrs(itrs_pos, itrs_vel, mjd):
 
     return gcrs_pos, gcrs_vel
 
-def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjd):
+def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
     frame_CTS = FramesFactory.getITRF(IERSConventions.IERS_2010, True)
     frame_EME2000 = FramesFactory.getEME2000()
@@ -501,13 +501,13 @@ def orekit_CTS_to_EME2000(itrs_pos, itrs_vel, mjd):
     eme2000_pos = np.empty_like(itrs_pos)
     eme2000_vel = np.empty_like(itrs_vel)
 
-    # Convert MJD to datetime and then to AbsoluteDate
-    jd = mjd + 2400000.5
-    dt = datetime(1858, 11, 17) + timedelta(days=jd)
-    absolute_date = datetime_to_absolutedate(dt)
-
-    # Iterate over each row of position and velocity
+    # Iterate over each row of position, velocity, and corresponding MJD
     for i in range(len(itrs_pos)):
+        # Convert MJD to datetime and then to AbsoluteDate for each point
+        jd = mjds.iloc[i] + 2400000.5
+        dt = datetime(1858, 11, 17) + timedelta(days=jd)
+        absolute_date = datetime_to_absolutedate(dt)
+
         # Convert inputs to Orekit's Vector3D and PVCoordinates
         itrs_pos_vector = Vector3D(float(itrs_pos[i, 0]), float(itrs_pos[i, 1]), float(itrs_pos[i, 2]))
         itrs_vel_vector = Vector3D(float(itrs_vel[i, 0]), float(itrs_vel[i, 1]), float(itrs_vel[i, 2]))

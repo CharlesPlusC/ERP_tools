@@ -130,7 +130,6 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
 
                 # Combine all values and convert to appropriate types
                 row = [pd.to_datetime(utc)] + converted_values + sigma_converted_values
-                print("row: ", row)
                 data.append(row)
 
             # Create a DataFrame from the current file data
@@ -172,7 +171,7 @@ def main():
         itrs_velocities = df[['Velocity_X', 'Velocity_Y', 'Velocity_Z']].values
 
         # Convert to ICRS (ECI)
-        icrs_positions, icrs_velocities = orekit_CTS_to_EME2000(itrs_positions, itrs_velocities, df['MJD'].iloc[0])
+        icrs_positions, icrs_velocities = orekit_CTS_to_EME2000(itrs_positions, itrs_velocities, df['MJD'])
 
         # Add new columns for ECI coordinates
         df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T
@@ -182,12 +181,12 @@ def main():
     # for the time being we will input dummy values consistent with 5cm and 1mm/s for position and velocity respectively
     #TODO: replace this with actual values eventually
     for satellite, df in sp3_dataframes.items():
-        df['sigma_x'] = 5e-5 #in km
-        df['sigma_y'] = 5e-5 #in km
-        df['sigma_z'] = 5e-5 #in km
-        df['sigma_xv'] = 1e-6 #in km/s
-        df['sigma_yv'] = 1e-6 #in km/s
-        df['sigma_zv'] = 1e-6 #in km/s
+        df['sigma_x'] = 5e-1 #in km
+        df['sigma_y'] = 5e-1 #in km
+        df['sigma_z'] = 5e-1 #in km
+        df['sigma_xv'] = 1e-3 #in km/s
+        df['sigma_yv'] = 1e-3 #in km/s
+        df['sigma_zv'] = 1e-3 #in km/s
 
     # After adding sigma columns to each dataframe
     for satellite, df in sp3_dataframes.items():
