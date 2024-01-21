@@ -124,16 +124,6 @@ def convert_ceres_time_to_date(ceres_time, ceres_ref_date=datetime(2000, 3, 1)):
     full_date = ceres_ref_date + timedelta(days=days, hours=hours, minutes=minutes)
     return full_date.strftime('%Y-%m-%d %H:%M')
 
-# Function to convert MJD to datetime
-def mjd_to_datetime(mjd):
-    jd = mjd + 2400000.5
-    jd_reference = datetime(1858, 11, 17)
-    return jd_reference + timedelta(days=jd)
-
-def calculate_distance_ecef(ecef1, ecef2):
-    # Calculate Euclidean distance between two ECEF coordinates
-    return np.sqrt((ecef1[0] - ecef2[0])**2 + (ecef1[1] - ecef2[1])**2 + (ecef1[2] - ecef2[2])**2)
-
 def julian_day_to_ceres_time(jd, ceres_ref_date=datetime(2000, 3, 1)):
     #TODO: check the buisness wiht this ceres_ref_date
     # I think it's just the date that the CERES data starts on and then it's just used to calculate the delta time
@@ -518,7 +508,7 @@ def convert_spacex_ephem_to_eme2000(df):
 def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
     frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
-    frame_EME2000 = FramesFactory.getEME2000()
+    frame_EME2000 = FramesFactory.getTEME()
 
     # Prepare output arrays
     eme2000_pos = np.empty_like(itrs_pos)

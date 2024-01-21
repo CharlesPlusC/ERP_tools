@@ -11,6 +11,7 @@ import glob
 from source.tools.utilities import utc_jd_date, SP3_to_EME2000
 #run from CLI from root using: python source/tools/sp3_2_ephemeris.py
 
+
 def read_sp3_gz_file(sp3_gz_file_path):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.sp3')
     temp_file_path = temp_file.name
@@ -20,6 +21,10 @@ def read_sp3_gz_file(sp3_gz_file_path):
     temp_file.close()
 
     product = sp3.Product.from_file(temp_file_path)
+    
+    # Assuming the time system in the SP3 file is GPS
+    time_system = sp3.timesystem.TimeSystem.GPS
+
     satellite = product.satellites[0]
     records = satellite.records
 
@@ -28,7 +33,11 @@ def read_sp3_gz_file(sp3_gz_file_path):
     velocities = []
 
     for record in records:
-        times.append(record.time)
+        gps_time = record.time
+        print(f"record time: {gps_time}")
+        utc_time = time_system.time_to_utc(gps_time)
+        print(f"utc time: {utc_time}")
+        times.append(utc_time)
         positions.append(record.position)
         velocities.append(record.velocity)
 
@@ -143,6 +152,19 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
     df.reset_index(drop=True, inplace=True)
     return df
 
+def convert_gps_to_utc(gps_time, gps_utc_offset_seconds=18):
+    """
+    Convert GPS time to UTC by subtracting the GPS-UTC offset.
+
+    Args:
+    gps_time (datetime): The GPS time.
+    gps_utc_offset_seconds (int, optional): The current offset between GPS time and UTC in seconds. Defaults to 18.
+
+    Returns:
+    datetime: The UTC time.
+    """
+    return gps_time - pd.Timedelta(seconds=gps_utc_offset_seconds)
+
 def main():
     sat_list_path = "misc/sat_list.json"
     sp3_files_path = "external/sp3_files"
@@ -162,6 +184,7 @@ def main():
 
         # Convert time to MJD
         mjd_times = [utc_jd_date(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, mjd=True) for dt in df.index]
+        print(f"mjd_times: {mjd_times}")
         df['MJD'] = mjd_times
 
         # Prepare CTS coordinates (ITRF 2014)
