@@ -43,7 +43,7 @@ import os
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 
-SATELLITE_MASS = 250.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
+SATELLITE_MASS = 487.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
@@ -682,6 +682,8 @@ if __name__ == "__main__":
     #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
 
 ##### POD WITH GRACE ######
+    #TODO: try different density model
+
     sat_name = "GRACE-FO-A"
     grace_a_df = sp3_ephem_to_df(sat_name)
     initial_X = grace_a_df['x'].iloc[0]
@@ -697,9 +699,9 @@ if __name__ == "__main__":
     initial_sigma_YV = grace_a_df['sigma_yv'].iloc[0]
     initial_sigma_ZV = grace_a_df['sigma_zv'].iloc[0]
     #TODO: get from sat_list.json
-    cd = 2.2
+    cd = 2.4
     cr = 1.5
-    cross_section = 10.0 
+    cross_section = 3.123 
     initial_t = grace_a_df['UTC'].iloc[0]
     print(f"initial_t: {initial_t}")
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
