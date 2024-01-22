@@ -124,7 +124,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     return propagator
 
-def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=2.2, cross_section=30.0, **config_flags):
+def propagate_state(start_date, end_date, initial_state_vector, cr=1.5, cd=2.2, cross_section=10.0, **config_flags):
 
     if len(initial_state_vector) == 6:
         x, y, z, vx, vy, vz = initial_state_vector
