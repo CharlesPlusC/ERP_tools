@@ -66,7 +66,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         propagator.addForceModel(newattr)
 
         ### 120x120 gravity model 
-        gravityProvider = GravityFieldFactory.getNormalizedProvider(120, 120)#TODO: i think Vishal Ray's paper seems to suggest at least 80x80 would be good- double check
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(120, 120)
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
@@ -684,8 +684,6 @@ if __name__ == "__main__":
 ##### POD WITH GRACE ######
     sat_name = "GRACE-FO-A"
     grace_a_df = sp3_ephem_to_df(sat_name)
-    print(grace_a_df.head())
-
     initial_X = grace_a_df['x'].iloc[0]
     initial_Y = grace_a_df['y'].iloc[0]
     initial_Z = grace_a_df['z'].iloc[0]
@@ -701,7 +699,7 @@ if __name__ == "__main__":
     #TODO: get from sat_list.json
     cd = 2.2
     cr = 1.5
-    cross_section = 5.0 
+    cross_section = 10.0 
     initial_t = grace_a_df['UTC'].iloc[0]
     print(f"initial_t: {initial_t}")
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
@@ -713,8 +711,8 @@ if __name__ == "__main__":
     obs_lengths_to_test = [60]
     estimate_drag = False
     force_model_configs = [
-        # {'gravtiy': True, '3BP': True},
-        # {'gravtiy': True, '3BP': True, 'drag': True},
+        {'gravtiy': True, '3BP': True},
+        {'gravtiy': True, '3BP': True, 'drag': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True},
         # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
         # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True,'relativity': True, 'knocke_erp': True}]

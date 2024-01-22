@@ -436,40 +436,62 @@ def jd_to_utc(jd: float) -> datetime:
     utc = time.datetime
     return utc
 
-def utc_jd_date(year, month, day, hours, minutes, seconds, mjd=False):
-    try:
-        date = datetime(year, month, day, hours, minutes, seconds)
-    except ValueError as e:
-        print(f"Error in date conversion: {e}")
-        return None
+# def utc_to_mjd(year, month, day, hour, minute, second, microsecond=0):
+#     """
+#     Convert UTC date and time to Modified Julian Date with high precision.
+#     This function aims to avoid adding extra microseconds when they are not present in the original time.
+#     """
+#     # Constants
+#     MJD_START = 2400000.5
+#     SECONDS_PER_DAY = 86400
 
-    mjd_val = (date - datetime(1858, 11, 17)).total_seconds() / 86400.0
-    jd_val = mjd_val + 2400000.5
+#     # Construct UTC datetime
+#     utc_datetime = datetime(year, month, day, hour, minute, second, microsecond)
 
-    # Adjust for the fact that the JD day starts at noon (add half a day)
-    if not mjd:
-        jd_val += 0.5
+#     # Compute the Julian Date (JD)
+#     # Start by finding the whole number of days since the MJD epoch
+#     days_since_mjd_epoch = (utc_datetime - datetime(1858, 11, 17)).days
 
-    return mjd_val if mjd else jd_val
+#     # Calculate the exact time of the day in seconds (including microseconds)
+#     time_of_day_in_seconds = hour * 3600 + minute * 60 + second + microsecond / 1e6
 
-def utc_to_mjd(year, month, day, hour, minute, second, microsecond=0):
+#     # Convert the time of day to the fraction of a day
+#     day_fraction = time_of_day_in_seconds / SECONDS_PER_DAY
+
+#     # The Julian Date is the sum of the days since the MJD epoch and the day fraction
+#     julian_date = MJD_START + days_since_mjd_epoch + day_fraction
+
+#     # Subtract the MJD_START to get the MJD
+#     mjd = julian_date - MJD_START
+#     return mjd
+
+def utc_to_mjd(utc_time: datetime) -> float:
     """
-    Convert UTC date and time to Modified Julian Date with high precision.
+    Convert UTC time (datetime object) to Modified Julian Date using Astropy,
+    rounding to the nearest full second to avoid timing errors.
+
+    Parameters
+    ----------
+    utc_time : datetime
+        UTC time tag.
+
+    Returns
+    -------
+    float
+        Modified Julian Date.
     """
-    # JD for MJD start (1858-11-17)
-    MJD_START = 2400000.5
+    # Round the input datetime to the nearest full second
+    if utc_time.microsecond >= 500000:
+        rounded_utc_time = utc_time + timedelta(seconds=1)
+        rounded_utc_time = rounded_utc_time.replace(microsecond=0)
+    else:
+        rounded_utc_time = utc_time.replace(microsecond=0)
 
-    # UTC datetime
-    utc_datetime = datetime(year, month, day, hour, minute, second, microsecond)
+    # Convert the rounded datetime object to Astropy Time object
+    time = Time(rounded_utc_time, format='datetime', scale='utc', precision=9)
 
-    # Calculate Julian Date (JD) from UTC datetime
-    # The adjustment number 1721424.5 corresponds to the difference in days
-    # between the start of the Julian Period (January 1, 4713 BC) and the
-    # start of the Gregorian calendar (January 1, 1).
-    julian_date = (utc_datetime - datetime(1, 1, 1)).total_seconds() / 86400.0 + 1721425.5
-
-    # Convert to MJD
-    mjd = julian_date - MJD_START
+    # Convert to Modified Julian Date
+    mjd = time.mjd
     return mjd
 
 def std_dev_from_lower_triangular(lower_triangular_data):
@@ -545,7 +567,14 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
         # Convert MJD to Julian Date and then to UTC datetime
         mjd = mjds.iloc[i]
         jd = mjd + 2400000.5
-        dt = (datetime(1858, 11, 17) + timedelta(days=jd - 2400000.5)).replace(tzinfo=timezone.utc)
+        days_since_epoch = jd - 2400000.5
+        base_date = datetime(1858, 11, 17)
+
+        # Round the days to the nearest second before creating the timedelta
+        # NOTE: this is to avoid floating point errors when creating the timedelta
+        seconds_since_epoch = round(days_since_epoch * 86400)
+        dt = base_date + timedelta(seconds=seconds_since_epoch)
+        dt = dt.replace(tzinfo=timezone.utc)
 
         # Convert datetime to AbsoluteDate
         absolute_date = datetime_to_absolutedate(dt)

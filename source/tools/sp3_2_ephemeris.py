@@ -165,7 +165,8 @@ def main():
             df.index = pd.to_datetime(df.index)
 
         # Convert time to MJD
-        mjd_times = [utc_to_mjd(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond) for dt in df.index]
+        # Convert time to MJD
+        mjd_times = [utc_to_mjd(dt) for dt in df.index]
         df['MJD'] = mjd_times
 
         # Prepare CTS coordinates (ITRF 2014)
