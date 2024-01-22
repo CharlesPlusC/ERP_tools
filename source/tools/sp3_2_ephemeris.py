@@ -8,7 +8,7 @@ import gzip
 import tempfile
 import os
 import glob
-from source.tools.utilities import utc_jd_date, SP3_to_EME2000
+from source.tools.utilities import SP3_to_EME2000, utc_to_mjd
 #run from CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 
@@ -22,9 +22,6 @@ def read_sp3_gz_file(sp3_gz_file_path):
 
     product = sp3.Product.from_file(temp_file_path)
     
-    # Assuming the time system in the SP3 file is GPS
-    time_system = sp3.timesystem.TimeSystem.GPS
-
     satellite = product.satellites[0]
     records = satellite.records
 
@@ -33,10 +30,7 @@ def read_sp3_gz_file(sp3_gz_file_path):
     velocities = []
 
     for record in records:
-        gps_time = record.time
-        print(f"record time: {gps_time}")
-        utc_time = time_system.time_to_utc(gps_time)
-        print(f"utc time: {utc_time}")
+        utc_time = record.time
         times.append(utc_time)
         positions.append(record.position)
         velocities.append(record.velocity)
@@ -92,10 +86,14 @@ def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
     file_name = f"NORAD{norad_id}-{start_day}-{end_day}.txt"
     file_path = os.path.join(sat_dir, file_name)
 
+    print("head of df", df.head())
+    print(f"columsn of df", df.columns)
+
     # Write data to the ephemeris file
     with open(file_path, 'w') as file:
         for idx, row in df.iterrows():
-            utc = idx.strftime("%Y-%m-%d %H:%M:%S.%f")
+            # Convert index to UTC string without timezone information
+            utc = idx.tz_convert(None).strftime("%Y-%m-%d %H:%M:%S.%f")
             line1 = f"{utc} {row['pos_x_eci']} {row['pos_y_eci']} {row['pos_z_eci']} {row['vel_x_eci']} {row['vel_y_eci']} {row['vel_z_eci']}\n"
             line2 = f"{row['sigma_x']} {row['sigma_y']} {row['sigma_z']} {row['sigma_xv']} {row['sigma_yv']} {row['sigma_zv']}\n"
             file.write(line1)
@@ -136,7 +134,7 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
                 sigma_converted_values = [float(val) * 1 for val in sigma_values]
 
                 # Combine all values and convert to appropriate types
-                row = [pd.to_datetime(utc)] + converted_values + sigma_converted_values
+                row = [pd.to_datetime(utc)] + converted_values + sigma_values
                 data.append(row)
 
             # Create a DataFrame from the current file data
@@ -151,19 +149,6 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
     # Reset index
     df.reset_index(drop=True, inplace=True)
     return df
-
-def convert_gps_to_utc(gps_time, gps_utc_offset_seconds=18):
-    """
-    Convert GPS time to UTC by subtracting the GPS-UTC offset.
-
-    Args:
-    gps_time (datetime): The GPS time.
-    gps_utc_offset_seconds (int, optional): The current offset between GPS time and UTC in seconds. Defaults to 18.
-
-    Returns:
-    datetime: The UTC time.
-    """
-    return gps_time - pd.Timedelta(seconds=gps_utc_offset_seconds)
 
 def main():
     sat_list_path = "misc/sat_list.json"
@@ -183,15 +168,14 @@ def main():
             df.index = pd.to_datetime(df.index)
 
         # Convert time to MJD
-        mjd_times = [utc_jd_date(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, mjd=True) for dt in df.index]
-        print(f"mjd_times: {mjd_times}")
+        mjd_times = [utc_to_mjd(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond) for dt in df.index]
         df['MJD'] = mjd_times
 
         # Prepare CTS coordinates (ITRF 2014)
         itrs_positions = df[['Position_X', 'Position_Y', 'Position_Z']].values
         itrs_velocities = df[['Velocity_X', 'Velocity_Y', 'Velocity_Z']].values
 
-        # Convert to ICRS (ECI)
+        # Convert to EME2000
         icrs_positions, icrs_velocities = SP3_to_EME2000(itrs_positions, itrs_velocities, df['MJD'])
         # Add new columns for ECI coordinates
         df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T
@@ -210,6 +194,8 @@ def main():
 
     # After adding sigma columns to each dataframe
     for satellite, df in sp3_dataframes.items():
+        #print head of dataframe
+        print("head of df", df.head())
         write_ephemeris_file(satellite, df, sat_dict)
 
 if __name__ == "__main__":

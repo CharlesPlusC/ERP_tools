@@ -439,7 +439,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             phi_ti_minus1 = phi_ti
             RMSs.append(y_i.T @ W_i @ y_i)
 
-        # print(f"y_all: {y_all}")
+        print(f"y_all: {y_all}")
         # print(f"W_i: {W_i}")
         # print(f"H_matrix_row: {H_matrix_row}")
         # sum all the RMSs

@@ -1,7 +1,7 @@
 from astropy.coordinates import EarthLocation
 import astropy.units as u
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pyproj import Transformer
 from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
@@ -444,7 +444,30 @@ def utc_jd_date(year, month, day, hours, minutes, seconds, mjd=False):
         return None
 
     mjd_val = (date - datetime(1858, 11, 17)).total_seconds() / 86400.0
-    return mjd_val if mjd else mjd_val + 2400000.5
+    jd_val = mjd_val + 2400000.5
+
+    # Adjust for the fact that the JD day starts at noon (add half a day)
+    if not mjd:
+        jd_val += 0.5
+
+    return mjd_val if mjd else jd_val
+
+def utc_to_mjd(year, month, day, hour, minute, second, microsecond=0):
+    """
+    Convert UTC date and time to Modified Julian Date with high precision.
+    """
+    # JD for MJD start (1858-11-17)
+    MJD_START = 2400000.5
+
+    # UTC datetime
+    utc_datetime = datetime(year, month, day, hour, minute, second, microsecond)
+
+    # Julian Date conversion
+    julian_date = utc_datetime.toordinal() + 1721424.5 + (hour - 12) / 24.0 + minute / 1440.0 + (second + microsecond / 1e6) / 86400.0
+
+    # Convert to MJD
+    mjd = julian_date - MJD_START
+    return mjd
 
 def std_dev_from_lower_triangular(lower_triangular_data):
     cov_matrix = np.zeros((6, 6))
@@ -507,8 +530,8 @@ def convert_spacex_ephem_to_eme2000(df):
 
 def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
-    frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
-    frame_EME2000 = FramesFactory.getTEME()
+    frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, True)
+    frame_EME2000 = FramesFactory.getEME2000()
 
     # Prepare output arrays
     eme2000_pos = np.empty_like(itrs_pos)
@@ -516,14 +539,17 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
 
     # Iterate over each row of position, velocity, and corresponding MJD
     for i in range(len(itrs_pos)):
-        # Convert MJD to datetime and then to AbsoluteDate for each point
-        jd = mjds.iloc[i] + 2400000.5
-        dt = datetime(1858, 11, 17) + timedelta(days=jd)
+        # Convert MJD to Julian Date and then to UTC datetime
+        mjd = mjds.iloc[i]
+        jd = mjd + 2400000.5
+        dt = (datetime(1858, 11, 17) + timedelta(days=jd - 2400000.5)).replace(tzinfo=timezone.utc)
+
+        # Convert datetime to AbsoluteDate
         absolute_date = datetime_to_absolutedate(dt)
 
-        # Convert inputs to Orekit's Vector3D and PVCoordinates
-        itrs_pos_vector = Vector3D(float(itrs_pos[i, 0]), float(itrs_pos[i, 1]), float(itrs_pos[i, 2]))
-        itrs_vel_vector = Vector3D(float(itrs_vel[i, 0]), float(itrs_vel[i, 1]), float(itrs_vel[i, 2]))
+        # Convert inputs to Orekit's Vector3D and PVCoordinates (and convert from km to m)
+        itrs_pos_vector = Vector3D(float(itrs_pos[i, 0] * 1000), float(itrs_pos[i, 1] * 1000), float(itrs_pos[i, 2] * 1000))
+        itrs_vel_vector = Vector3D(float(itrs_vel[i, 0] * 1000), float(itrs_vel[i, 1] * 1000), float(itrs_vel[i, 2] * 1000))
         pv_itrs = PVCoordinates(itrs_pos_vector, itrs_vel_vector)
 
         # Transform Coordinates
@@ -533,6 +559,10 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
         # Extract position and velocity from transformed coordinates
         eme2000_pos[i] = [pveci.getPosition().getX(), pveci.getPosition().getY(), pveci.getPosition().getZ()]
         eme2000_vel[i] = [pveci.getVelocity().getX(), pveci.getVelocity().getY(), pveci.getVelocity().getZ()]
+
+        # Convert back from m to km 
+        eme2000_pos[i] = eme2000_pos[i] / 1000
+        eme2000_vel[i] = eme2000_vel[i] / 1000
 
     return eme2000_pos, eme2000_vel
 
