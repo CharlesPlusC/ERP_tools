@@ -439,7 +439,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             phi_ti_minus1 = phi_ti
             RMSs.append(y_i.T @ W_i @ y_i)
 
-        print(f"y_all: {y_all}")
+        # print(f"y_all: {y_all}")
         # print(f"W_i: {W_i}")
         # print(f"H_matrix_row: {H_matrix_row}")
         # sum all the RMSs
@@ -728,7 +728,6 @@ if __name__ == "__main__":
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            print("observations df: ", observations_df.head())
             optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
             #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
             #save the optimized states, covariance matrices, residuals, RMSs

@@ -86,9 +86,6 @@ def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
     file_name = f"NORAD{norad_id}-{start_day}-{end_day}.txt"
     file_path = os.path.join(sat_dir, file_name)
 
-    print("head of df", df.head())
-    print(f"columsn of df", df.columns)
-
     # Write data to the ephemeris file
     with open(file_path, 'w') as file:
         for idx, row in df.iterrows():
@@ -195,7 +192,6 @@ def main():
     # After adding sigma columns to each dataframe
     for satellite, df in sp3_dataframes.items():
         #print head of dataframe
-        print("head of df", df.head())
         write_ephemeris_file(satellite, df, sat_dict)
 
 if __name__ == "__main__":

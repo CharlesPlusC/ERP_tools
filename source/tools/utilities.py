@@ -462,8 +462,11 @@ def utc_to_mjd(year, month, day, hour, minute, second, microsecond=0):
     # UTC datetime
     utc_datetime = datetime(year, month, day, hour, minute, second, microsecond)
 
-    # Julian Date conversion
-    julian_date = utc_datetime.toordinal() + 1721424.5 + (hour - 12) / 24.0 + minute / 1440.0 + (second + microsecond / 1e6) / 86400.0
+    # Calculate Julian Date (JD) from UTC datetime
+    # The adjustment number 1721424.5 corresponds to the difference in days
+    # between the start of the Julian Period (January 1, 4713 BC) and the
+    # start of the Gregorian calendar (January 1, 1).
+    julian_date = (utc_datetime - datetime(1, 1, 1)).total_seconds() / 86400.0 + 1721425.5
 
     # Convert to MJD
     mjd = julian_date - MJD_START
@@ -530,7 +533,7 @@ def convert_spacex_ephem_to_eme2000(df):
 
 def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
     # Orekit Frames
-    frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, True)
+    frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
     frame_EME2000 = FramesFactory.getEME2000()
 
     # Prepare output arrays
