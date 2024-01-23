@@ -542,7 +542,7 @@ def convert_spacex_ephem_to_eme2000(df):
     # Extract position and velocity from DataFrame
     teme_positions = df[['x', 'y', 'z']].values
     teme_velocities = df[['xv', 'yv', 'zv']].values
-    jd_times = df['jd_time'].values
+    jd_times = df['JD'].values
 
     # Convert to EME2000
     eme2000_positions, eme2000_velocities = teme_to_eme2000(teme_positions, teme_velocities, jd_times)

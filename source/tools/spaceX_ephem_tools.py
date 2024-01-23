@@ -101,7 +101,9 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     spacex_ephem_df['hours'] = (spacex_ephem_df['JD'] - spacex_ephem_df['JD'][0]) * 24.0 # hours since first timestamp
     spacex_ephem_df['UTC'] = spacex_ephem_df['JD'].apply(jd_to_utc)
     # TODO: I am gaining 3 milisecond per minute in the UTC time. Why?
-    spacex_ephem_df = convert_spacex_ephem_to_eme2000(spacex_ephem_df)
+    print(f"first 5 UTC times: {spacex_ephem_df['UTC'].head()}")
+    print(f"first five JD times: {spacex_ephem_df['JD'].head()}")
+    # spacex_ephem_df = convert_spacex_ephem_to_eme2000(spacex_ephem_df)
     
     return spacex_ephem_df
 
