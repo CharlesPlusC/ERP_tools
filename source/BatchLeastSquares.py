@@ -128,10 +128,12 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
 def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, **config_flags):
 
-    if len(initial_state_vector) == 6:
-        x, y, z, vx, vy, vz = initial_state_vector
-    elif len(initial_state_vector) == 7:
-        x, y, z, vx, vy, vz, cd = initial_state_vector
+    x, y, z, vx, vy, vz = initial_state_vector
+
+    print(f"initial state: {initial_state_vector}")
+    print(f"cr: {cr}")
+    print(f"cd: {cd}")
+    print(f"cross_section: {cross_section}")
 
     frame = FramesFactory.getEME2000() # j2000 frame by default
     # Propagation using the configured propagator
@@ -164,33 +166,19 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-def stm_derivative(t, phi_flat, df_dy):
-    """
-    Computes the derivative of the flattened state transition matrix (STM).
+def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, estimate_drag=False, **force_model_config):
 
-    Parameters:
-    - t: Time (not used in this function as the ODE is time-invariant, but required by solve_ivp)
-    - phi_flat: Flattened state transition matrix (STM)
-    - df_dy: Jacobian of the system dynamics (partial derivatives matrix)
+    df_dy = np.zeros((6, 6))  # Initialize matrix of partial derivatives
+    if estimate_drag:
+        df_dy = np.pad(df_dy, ((0, 1), (0, 1)), 'constant', constant_values=0)
 
-    Returns:
-    - Flattened derivative of the STM
-    """
-    n = int(np.sqrt(len(phi_flat)))
-    phi = phi_flat.reshape((n, n))
-    phi_dot = df_dy @ phi
-    return phi_dot.flatten()
-
-def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_config):
-    df_dy = np.zeros((len(state_ti),len(state_ti)))  # Initialize matrix of partial derivatives
     state_vector_data = (state_ti[0], state_ti[1], state_ti[2], state_ti[3], state_ti[4], state_ti[5])  # x, y, z, xv, yv, zv
 
     epochDate = datetime_to_absolutedate(t0)
     accelerations_t0 = np.zeros(3)
     force_models = []
 
-    if force_model_config.get('gravtiy', False):
-        
+    if force_model_config.get('gravity', False):
         MU = Constants.WGS84_EARTH_MU
         monopolegrav = NewtonianAttraction(MU)
         force_models.append(monopolegrav)
@@ -253,7 +241,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
     ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-        
+
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
@@ -273,57 +261,49 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         accelerations_t0+=atmospheric_drag_eci_t0
 
     perturbation = 0.1
-    for i in range(len(state_ti)):
-        perturbed_accelerations = np.zeros(3)  
+    variables_to_perturb = 6 + (1 if estimate_drag else 0)
+
+    for i in range(variables_to_perturb):
+        perturbed_accelerations = np.zeros(3)
         state_ti_perturbed = state_ti.copy()
-        state_ti_perturbed[i] += perturbation
+        
+        if i < 6:
+            state_ti_perturbed[i] += perturbation
+        elif i == 6:
+            # Perturb drag coefficient and re-instantiate drag model and atmosphere
+            cd_perturbed = cd + 1e-4
+            # Re-instantiate required objects for drag force model
+            wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
+            sun = CelestialBodyFactory.getSun()
+            msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+            atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+            isotropicDrag = IsotropicDrag(float(cross_section), float(cd_perturbed))
+            dragForce = DragForce(atmosphere, isotropicDrag)
+            force_models[-1] = dragForce  # Update the drag force model
+
         for force_model in force_models:
-            if i < 6:  # Use perturbed state vector
-                acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
-            elif i == 6:
-                # Recreate drag force model with perturbed Cd
-                wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-                sun = CelestialBodyFactory.getSun()
-
-                msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-                # atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
-                atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
-
-                # jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
-                #                                     dtcfile_data_source)
-                # utc = TimeScalesFactory.getUTC()
-                # atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
-
-                perturbed_isotropicDrag = IsotropicDrag(float(cross_section), float(state_ti_perturbed[-1]))                
-                perturbed_dragForce = DragForce(atmosphere, perturbed_isotropicDrag)
-                force_models[-1] = perturbed_dragForce # Replace the last force model with the perturbed drag force model
-                acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
-            if isinstance(acc_perturbed, np.ndarray): #TODO: hacky fix for the stupid output of extract_acceleration
+            acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
+            if isinstance(acc_perturbed, np.ndarray): #deal with stupid output of extract_acceleration
                 acc_perturbed_values = acc_perturbed
             else:
                 acc_perturbed_values = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
             perturbed_accelerations += acc_perturbed_values
+
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / perturbation
 
-        # Assign partial derivatives to the appropriate submatrix
-        if i < 3:  # Position components 
+        # Assign partial derivatives
+        if i < 3:  # Position components
             df_dy[3:6, i] = partial_derivatives
-        elif i < 6:  # Velocity components 
+        elif i < 6:  # Velocity components
+            df_dy[i-3, i] = 1  # Identity matrix in top-right 3x3 submatrix for velocity
             df_dy[3:6, i] = partial_derivatives
-            df_dy[i - 3, i] = 1  # Identity matrix in top-right 3x3 submatrix
-        elif i == 6:  # Cd component
-            df_dy[3:6, 6] = partial_derivatives
-        
-    # Flatten the initial STM for integration
-    phi_i_flat = phi_i.flatten()
+        elif i == 6 and estimate_drag:
+            df_dy[3:6, 6] = partial_derivatives  # Assign partial derivatives to the last column for drag coefficient
 
     # Set up time span for integration
+    phi_dot = df_dy @ phi_i
     dt_seconds = float(dt.total_seconds())
-    t_span = [0, dt_seconds]
-
-    # Use solve_ivp to integrate the STM
-    sol = solve_ivp(stm_derivative, t_span, phi_i_flat, args=(df_dy,), method='RK45')
-    phi_t1 = sol.y[:, -1].reshape(phi_i.shape)
+    phi_t1 = phi_i + phi_dot * dt_seconds # simple Euler integration
 
     return phi_t1
 
@@ -360,15 +340,16 @@ def calculate_cross_correlation_matrix(covariance_matrices):
 
     return correlation_matrices
 
-def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate_drag=False, max_patience=1):
+def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1):
 
     t0 = observations_df['UTC'].iloc[0]
+    print(f"a priori estimate: {a_priori_estimate}")
     x_bar_0 = np.array(a_priori_estimate[1:7])  # x, y, z, u, v, w
     state_covs = a_priori_estimate[7:13]
     cd = a_priori_estimate[-3]
     cr = a_priori_estimate[-2]
     cross_section = a_priori_estimate[-1]
-    if estimate_drag==True:
+    if estimate_drag:
         x_bar_0 = np.append(x_bar_0, cd)
 
     state_covs = np.diag(state_covs)
@@ -401,6 +382,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
         y_all = np.empty((0, len(x_bar_0)))
         ti_minus1 = t0
         state_ti_minus1 = x_bar_0 
+        print(f"state_ti_minus1: {state_ti_minus1}")
         RMSs = []
         for _, row in observations_df.iterrows():
             ti = row['UTC']
@@ -408,7 +390,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
             #add Cd from the last iteration to the observed state
             if estimate_drag==True:
-                observed_state = np.append(observed_state, x_bar_0[-1])
+                observed_state = np.append(observed_state, x_bar_0[-1]) #add drag coefficient to the observed state
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
                 cd_covariance = 1  # TODO: is this even allowed? just setting a high value for now
                                      # TODO: do i want to reduce the covariance of Cd after each iteration?
@@ -416,24 +398,27 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 obs_covariance[-1, -1] = cd_covariance
             else:
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
-            obs_covariance = np.array(obs_covariance, dtype=float) #convert to numpy array
-            W_i = np.linalg.inv(obs_covariance)  # Weight matrix is the inverse of observation covariances
+            obs_covariance = np.array(obs_covariance, dtype=float)
+            W_i = np.linalg.inv(obs_covariance)
             
             # Propagate state and STM
             dt = ti - ti_minus1
-            if estimate_drag==True:
+            if estimate_drag:
+                print(f"state_ti_minus1: {state_ti_minus1}")
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section, **force_model_config)
-                phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section, **force_model_config)
+                phi_ti = propagate_STM(state_ti_minus1[:6], ti, dt, phi_ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,estimate_drag=True, **force_model_config)
             else:
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
 
             # Compute H matrix and residuals for this observation
+            print(f"phi_ti: {phi_ti}")
             H_matrix_row = d_rho_d_state @ phi_ti
             H_matrix = np.vstack([H_matrix, H_matrix_row])
-            if estimate_drag==True:
-                state_ti = np.append(state_ti, state_ti_minus1[-1]) #add Cd to state_ti
+            if estimate_drag:
+                state_ti = np.append(state_ti, state_ti_minus1[-1])
             y_i = observed_state - rho_i(state_ti, 'state')
+            print(f"y_i: {y_i}")
             y_i = np.array(y_i, dtype=float)
             y_all = np.vstack([y_all, y_i])
 
@@ -467,6 +452,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 no_times_diff_increased = 0
             weighted_rms_last = weighted_rms
             print(f"old state: {x_bar_0}")
+            print(f"correction: {xhat}")
             x_bar_0 += xhat  # Update nominal trajectory
             print(f"newly estimated state: {x_bar_0}")
 
@@ -503,7 +489,6 @@ if __name__ == "__main__":
     initial_t = spacex_ephem_df['UTC'].iloc[0]
     #remove 1 year from the utc time to get the initial time
     # initial_t = initial_t - datetime.timedelta(days=365)
-    print(f"initial_t: {initial_t}")
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
                                   cd, cr, cross_section])
@@ -515,11 +500,11 @@ if __name__ == "__main__":
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     #remove 365 days from all the UTC times
     # observations_df_full['UTC'] = observations_df_full['UTC'].apply(lambda x: x - datetime.timedelta(days=365))
-    obs_lengths_to_test = [20]
-    estimate_drag = False
+    obs_lengths_to_test = [25]
+    estimate_drag = True
     force_model_configs = [
-        {'gravtiy': True},
-        {'gravtiy': True, '3BP': True},
+        # {'gravtiy': True},
+        # {'gravtiy': True, '3BP': True},
         {'gravtiy': True, '3BP': True, 'drag': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True}]
         # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
@@ -554,9 +539,6 @@ if __name__ == "__main__":
             final_RMS = RMSs[min_RMS_index]
             residuals_final = residuals[min_RMS_index]
             # Creating a large figure for combined plots
-                # Creating a figure for combined plots
-            # Creating a figure for combined plots
-            # Creating a figure for combined plots
             fig = plt.figure(figsize=(12, 9))
             sns.set(style="whitegrid")
             gs = GridSpec(4, 4, figure=fig)
@@ -592,6 +574,7 @@ if __name__ == "__main__":
 
             sns.histplot(residuals_final[:,3:6], bins=20, ax=ax4, palette=["xkcd:purple", "xkcd:orange", "xkcd:yellow"], legend=False)
             ax4.set_xlabel("Velocity Residual (m/s)")
+            ax4.set_ylabel("Frequency")
             ax4.legend(['u', 'v', 'w'])
 
             # Table for force model configuration, initial state, and final estimated state
@@ -600,10 +583,10 @@ if __name__ == "__main__":
                                 ['Initial State', str(a_priori_estimate)],
                                 ['Final Estimated State', str(optimized_state)],
                                 ['Weighted RMS', f'{final_RMS:.3f}']]
-            table = plt.table(cellText=force_model_data, colWidths=[0.25 for _ in force_model_data[0]], loc='center', cellLoc='left')
+            table = plt.table(cellText=force_model_data, colWidths=[0.5 for _ in force_model_data[0]], loc='center', cellLoc='left')
             ax5.axis('off')
             table.auto_set_font_size(False)
-            table.set_fontsize(10)
+            table.set_fontsize(14)
             table.scale(1, 1.5)
 
             # Adjust layout
