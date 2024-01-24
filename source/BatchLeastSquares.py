@@ -42,6 +42,8 @@ import datetime
 import os
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
+from matplotlib.gridspec import GridSpec
+
 
 SATELLITE_MASS = 487.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
 INTEGRATOR_MIN_STEP = 0.001
@@ -196,7 +198,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         accelerations_t0+=monopole_gravity_eci_t0
 
-        gravityProvider = GravityFieldFactory.getNormalizedProvider(64,64)
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(120,120)
         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         force_models.append(gravityfield)
         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravityfield)
@@ -312,8 +314,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, **force_model_
         elif i == 6:  # Cd component
             df_dy[3:6, 6] = partial_derivatives
         
-        # print(f"df_dy:\n {df_dy}")
-
     # Flatten the initial STM for integration
     phi_i_flat = phi_i.flatten()
 
@@ -360,8 +360,7 @@ def calculate_cross_correlation_matrix(covariance_matrices):
 
     return correlation_matrices
 
-def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate_drag=False):
-
+def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate_drag=False, max_patience=1):
 
     t0 = observations_df['UTC'].iloc[0]
     x_bar_0 = np.array(a_priori_estimate[1:7])  # x, y, z, u, v, w
@@ -372,13 +371,9 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
     if estimate_drag==True:
         x_bar_0 = np.append(x_bar_0, cd)
 
-    #make covs a diagonal matrix
     state_covs = np.diag(state_covs)
-    print(f"state_covs: {state_covs}")
     phi_ti_minus1 = np.identity(len(x_bar_0))  # n*n identity matrix for n state variables
-    print(f"phi_ti_minus1: {phi_ti_minus1}")
     P_0 = np.array(state_covs, dtype=float)  # Covariance matrix from a priori estimate
-    print(f"P_0: {P_0}")
     if estimate_drag:
         P_0 = np.pad(P_0, ((0, 1), (0, 1)), 'constant', constant_values=0)
         # Assign a non-zero variance to the drag coefficient to avoid non-invertible matrix
@@ -386,9 +381,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
         P_0[-1, -1] = initial_cd_variance
 
     d_rho_d_state = np.eye(len(x_bar_0))  # Identity matrix: assume perfect state measurements
-    print(f"d_rho_d_state: {d_rho_d_state}")
     H_matrix = np.empty((0, len(x_bar_0)))
-    print(f"H_matrix: {H_matrix}")
     converged = False
     iteration = 1
     max_iterations = 10
@@ -403,15 +396,15 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
 
     while not converged and iteration < max_iterations:
         print(f"Iteration: {iteration}")
-        N = np.zeros(len(x_bar_0))  # reset N to zero
-        lamda = np.linalg.inv(P_0)  # reset lambda to P_0
-        y_all = np.empty((0, len(x_bar_0)))  # Initialize residuals array
+        N = np.zeros(len(x_bar_0))
+        lamda = np.linalg.inv(P_0)
+        y_all = np.empty((0, len(x_bar_0)))
         ti_minus1 = t0
         state_ti_minus1 = x_bar_0 
         RMSs = []
-        for obs, row in observations_df.iterrows():
+        for _, row in observations_df.iterrows():
             ti = row['UTC']
-            print(f"Observation {obs+1} of {len(observations_df)}")
+            # print(f"Observation {obs+1} of {len(observations_df)}")
             observed_state = row[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
             #add Cd from the last iteration to the observed state
             if estimate_drag==True:
@@ -423,7 +416,6 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 obs_covariance[-1, -1] = cd_covariance
             else:
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
-
             obs_covariance = np.array(obs_covariance, dtype=float) #convert to numpy array
             W_i = np.linalg.inv(obs_covariance)  # Weight matrix is the inverse of observation covariances
             
@@ -434,12 +426,11 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section, **force_model_config)
             else:
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
-                # print(f"state_ti: {state_ti}")
                 phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
 
-            # Compute H matrix for this observation
+            # Compute H matrix and residuals for this observation
             H_matrix_row = d_rho_d_state @ phi_ti
-            H_matrix = np.vstack([H_matrix, H_matrix_row]) # Append row to H matrix
+            H_matrix = np.vstack([H_matrix, H_matrix_row])
             if estimate_drag==True:
                 state_ti = np.append(state_ti, state_ti_minus1[-1]) #add Cd to state_ti
             y_i = observed_state - rho_i(state_ti, 'state')
@@ -456,33 +447,24 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None, estimate
             phi_ti_minus1 = phi_ti
             RMSs.append(y_i.T @ W_i @ y_i)
 
-        # print(f"y_all: {y_all}")
-        # print(f"W_i: {W_i}")
-        # print(f"H_matrix_row: {H_matrix_row}")
-        # sum all the RMSs
         RMSs = np.array(RMSs)
-        # print(f"RMSs: {RMSs}")
-        #weighted RMS is sqrt(RMS divided by m. where m is (number of observations * number of state variables))
         weighted_rms = np.sqrt(np.sum(RMSs) / (len(x_bar_0) * len (y_all)))
-        print(f"Weighted RMS: {weighted_rms}")
+        print(f"RMS: {weighted_rms}")
         # Solve normal equations
         xhat = np.linalg.inv(lamda) @ N
-        print(f"Estimated state correction: {xhat}")
         # Check for convergence
         if abs(weighted_rms - weighted_rms_last) < convergence_threshold:
             print("Converged!")
             converged = True
-
         else:
             if weighted_rms > weighted_rms_last:
                 no_times_diff_increased += 1
                 print(f"RMS increased {no_times_diff_increased} times in a row.")
-                if no_times_diff_increased >= 1:
+                if no_times_diff_increased >= max_patience:
                     print("Stopping iteration.")
                     break
-                #TODO: make it so that it takes the run with the best RMS if it doesn't converge ?
             else:
-                no_times_diff_increased = 0 #reset the counter
+                no_times_diff_increased = 0
             weighted_rms_last = weighted_rms
             print(f"old state: {x_bar_0}")
             x_bar_0 += xhat  # Update nominal trajectory
@@ -533,13 +515,11 @@ if __name__ == "__main__":
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     #remove 365 days from all the UTC times
     # observations_df_full['UTC'] = observations_df_full['UTC'].apply(lambda x: x - datetime.timedelta(days=365))
-    obs_lengths_to_test = [36]
+    obs_lengths_to_test = [20]
     estimate_drag = False
-    #TODO: if estimate drag is false assert that the a priori estimate doesn't have a Cd value (only length 13)
-
     force_model_configs = [
-        # {'gravtiy': True},
-        # {'gravtiy': True, '3BP': True}
+        {'gravtiy': True},
+        {'gravtiy': True, '3BP': True},
         {'gravtiy': True, '3BP': True, 'drag': True},
         {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True}]
         # {'gravtiy': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
@@ -554,9 +534,11 @@ if __name__ == "__main__":
         
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=estimate_drag)
+            optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag)
             #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
             #save the optimized states, covariance matrices, residuals, RMSs
+
+            # Save data and find the index of the minimum RMS
             date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             folder_path = "output/OD_BLS/Tapley/saved_runs"
             output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
@@ -566,146 +548,219 @@ if __name__ == "__main__":
             np.save(f"{output_folder}/residuals.npy", residuals)
             np.save(f"{output_folder}/RMSs.npy", RMSs)
 
-            #find the index of the minimum RMS
             min_RMS_index = np.argmin(RMSs)
             optimized_state = optimized_states[min_RMS_index]
             covariance_matrix = cov_mats[min_RMS_index]
             final_RMS = RMSs[min_RMS_index]
             residuals_final = residuals[min_RMS_index]
-            covariance_matrices.append(covariance_matrix)
+            # Creating a large figure for combined plots
+                # Creating a figure for combined plots
+            # Creating a figure for combined plots
+            # Creating a figure for combined plots
+            fig = plt.figure(figsize=(12, 9))
+            sns.set(style="whitegrid")
+            gs = GridSpec(4, 4, figure=fig)
 
-            # Create two subplots: one for position, one for velocity
-            fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+            # Scatter plots for position and velocity residuals
+            ax1 = fig.add_subplot(gs[0, :])
+            ax2 = fig.add_subplot(gs[1, :])
 
             # Position residuals plot
-            axs[0].scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c="xkcd:blue")
-            axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
-            axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
-            axs[0].set_ylabel("Position Residual (m)")
-            if estimate_drag:
-                axs[0].set_ylim(-3, 3)
-            else:
-                axs[0].set_ylim(-10, 10)
-            axs[0].legend(['x', 'y', 'z'])
-            axs[0].grid(True)
+            sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,0], ax=ax1, color="xkcd:blue", s=10, label='x')
+            sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,1], ax=ax1, color="xkcd:green", s=10, label='y')
+            sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,2], ax=ax1, color="xkcd:red", s=10, label='z')
+            ax1.set_ylabel("Position Residual (m)")
+            ax1.set_xlabel("Observation time (UTC)")
+            ax1.legend()
 
             # Velocity residuals plot
-            axs[1].scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c="xkcd:purple")
-            axs[1].scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c="xkcd:orange")
-            axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
-            axs[1].set_xlabel("Observation time (UTC)")
-            axs[1].set_ylabel("Velocity Residual (m/s)")
-            if estimate_drag:
-                axs[1].set_ylim(-3e-3, 3e-3)
-            else:
-                axs[1].set_ylim(-10e-10, 10e-10)
-            axs[1].legend(['xv', 'yv', 'zv'])
-            axs[1].grid(True)
+            sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,3], ax=ax2, color="xkcd:purple", s=10, label='u')
+            sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,4], ax=ax2, color="xkcd:orange", s=10, label='v')
+            sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,5], ax=ax2, color="xkcd:yellow", s=10, label='w')
+            ax2.set_ylabel("Velocity Residual (m/s)")
+            ax2.set_xlabel("Observation time (UTC)")
+            ax2.legend()
 
-            # Shared title, rotation of x-ticks, and force model text
-            plt.suptitle(f"Residuals (O-C) for final BLS iteration. \nRMS: {final_RMS:.3f}")
-            #
-            plt.xticks(rotation=45)
-            force_model_keys_str = keys_to_string(force_model_config)
-            wrapped_text = textwrap.fill(force_model_keys_str, 20)
-            axs[1].text(0.8, -0.2, f"Force model:\n{wrapped_text}", 
-                        transform=axs[1].transAxes,
-                        fontsize=10, 
-                        verticalalignment='bottom',
-                        bbox=dict(facecolor='white', alpha=0.3))
+            # Histograms for position and velocity residuals
+            ax3 = fig.add_subplot(gs[2, :2])
+            ax4 = fig.add_subplot(gs[2, 2:])
 
-            # Save the figure
-            save_to = f"output/OD_BLS/Tapley/estimation_experiment/new_fmodel_{i}_#pts_{len(observations_df)}.png"
-            if estimate_drag:
-                save_to = f"output/OD_BLS/Tapley/estimation_experiment/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
-            plt.tight_layout()
-            plt.savefig(save_to)
+            sns.histplot(residuals_final[:,0:3], bins=20, ax=ax3, palette=["xkcd:blue", "xkcd:green", "xkcd:red"], legend=False)
+            ax3.set_xlabel("Position Residual (m)")
+            ax3.set_ylabel("Frequency")
+            ax3.legend(['x', 'y', 'z'])
 
-            #plot histograms of residuals
-            plt.figure()
-            plt.hist(residuals_final[:,0], bins=20, label='x', color="xkcd:blue")
-            plt.hist(residuals_final[:,1], bins=20, label='y', color="xkcd:green")
-            plt.hist(residuals_final[:,2], bins=20, label='z', color="xkcd:red")
-            plt.hist(residuals_final[:,3], bins=20, label='xv', color="xkcd:purple")
-            plt.hist(residuals_final[:,4], bins=20, label='yv', color="xkcd:orange")
-            plt.hist(residuals_final[:,5], bins=20, label='zv', color="xkcd:yellow")
-            plt.title("Residuals (O-C) for final BLS iteration")
-            plt.xlabel("Residual (m)")
-            plt.ylabel("Frequency")
-            force_model_keys_str = keys_to_string(force_model_config)
-            wrapped_text = textwrap.fill(force_model_keys_str, 20)
-            plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
-                    transform=plt.gca().transAxes,
-                    fontsize=10, 
-                    verticalalignment='bottom',
-                    bbox=dict(facecolor='white', alpha=0.5))
-            plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-            plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/hist_force_model_{i}_#pts_{len(observations_df)}.png")
+            sns.histplot(residuals_final[:,3:6], bins=20, ax=ax4, palette=["xkcd:purple", "xkcd:orange", "xkcd:yellow"], legend=False)
+            ax4.set_xlabel("Velocity Residual (m/s)")
+            ax4.legend(['u', 'v', 'w'])
 
-            #ECI covariance matrix
-            if estimate_drag:
-                labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
-            else:
-                labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
-            log_norm = SymLogNorm(linthresh=1e-10, vmin=covariance_matrix.min(), vmax=covariance_matrix.max())
-            plt.figure(figsize=(8, 7))
-            sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
-            plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-            save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}.png"
-            if estimate_drag:
-                save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
-            plt.savefig(save_to)
+            # Table for force model configuration, initial state, and final estimated state
+            ax5 = fig.add_subplot(gs[3, :])
+            force_model_data = [['Force Model Config', str(force_model_config)],
+                                ['Initial State', str(a_priori_estimate)],
+                                ['Final Estimated State', str(optimized_state)],
+                                ['Weighted RMS', f'{final_RMS:.3f}']]
+            table = plt.table(cellText=force_model_data, colWidths=[0.25 for _ in force_model_data[0]], loc='center', cellLoc='left')
+            ax5.axis('off')
+            table.auto_set_font_size(False)
+            table.set_fontsize(10)
+            table.scale(1, 1.5)
+
+            # Adjust layout
+            plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.3)
+
+            # Save the combined plot
+            plt.savefig(f"output/OD_BLS/Tapley/combined_plot_fmodel_{i}_#pts_{len(observations_df)}.png")
+            plt.close()
+
+    #         date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    #         folder_path = "output/OD_BLS/Tapley/saved_runs"
+    #         output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
+    #         os.makedirs(output_folder)
+    #         np.save(f"{output_folder}/optimized_states.npy", optimized_states)
+    #         np.save(f"{output_folder}/cov_mats.npy", cov_mats)
+    #         np.save(f"{output_folder}/residuals.npy", residuals)
+    #         np.save(f"{output_folder}/RMSs.npy", RMSs)
+
+    #         #find the index of the minimum RMS
+    #         min_RMS_index = np.argmin(RMSs)
+    #         optimized_state = optimized_states[min_RMS_index]
+    #         covariance_matrix = cov_mats[min_RMS_index]
+    #         final_RMS = RMSs[min_RMS_index]
+    #         residuals_final = residuals[min_RMS_index]
+    #         covariance_matrices.append(covariance_matrix)
+
+    #         # Create two subplots: one for position, one for velocity
+    #         fig, axs = plt.subplots(2, 1, figsize=(8, 6))
+
+    #         # Position residuals plot
+    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c="xkcd:blue")
+    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
+    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
+    #         axs[0].set_ylabel("Position Residual (m)")
+    #         # if estimate_drag:
+    #         #     axs[0].set_ylim(-3, 3)
+    #         # else:
+    #         #     axs[0].set_ylim(-10, 10)
+    #         axs[0].legend(['x', 'y', 'z'])
+    #         axs[0].grid(True)
+
+    #         # Velocity residuals plot
+    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c="xkcd:purple")
+    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c="xkcd:orange")
+    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
+    #         axs[1].set_xlabel("Observation time (UTC)")
+    #         axs[1].set_ylabel("Velocity Residual (m/s)")
+    #         # if estimate_drag:
+    #         #     axs[1].set_ylim(-3e-3, 3e-3)
+    #         # else:
+    #         #     axs[1].set_ylim(-10e-10, 10e-10)
+    #         axs[1].legend(['xv', 'yv', 'zv'])
+    #         axs[1].grid(True)
+
+    #         # Shared title, rotation of x-ticks, and force model text
+    #         plt.suptitle(f"Residuals (O-C) for final BLS iteration. \nRMS: {final_RMS:.3f}")
+    #         #
+    #         plt.xticks(rotation=45)
+    #         force_model_keys_str = keys_to_string(force_model_config)
+    #         wrapped_text = textwrap.fill(force_model_keys_str, 20)
+    #         axs[1].text(0.8, -0.2, f"Force model:\n{wrapped_text}", 
+    #                     transform=axs[1].transAxes,
+    #                     fontsize=10, 
+    #                     verticalalignment='bottom',
+    #                     bbox=dict(facecolor='white', alpha=0.3))
+
+    #         # Save the figure
+    #         save_to = f"output/OD_BLS/Tapley/estimation_experiment/new_fmodel_{i}_#pts_{len(observations_df)}.png"
+    #         if estimate_drag:
+    #             save_to = f"output/OD_BLS/Tapley/estimation_experiment/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
+    #         plt.tight_layout()
+    #         plt.savefig(save_to)
+
+    #         #plot histograms of residuals
+    #         plt.figure()
+    #         plt.hist(residuals_final[:,0], bins=20, label='x', color="xkcd:blue")
+    #         plt.hist(residuals_final[:,1], bins=20, label='y', color="xkcd:green")
+    #         plt.hist(residuals_final[:,2], bins=20, label='z', color="xkcd:red")
+    #         plt.hist(residuals_final[:,3], bins=20, label='xv', color="xkcd:purple")
+    #         plt.hist(residuals_final[:,4], bins=20, label='yv', color="xkcd:orange")
+    #         plt.hist(residuals_final[:,5], bins=20, label='zv', color="xkcd:yellow")
+    #         plt.title("Residuals (O-C) for final BLS iteration")
+    #         plt.xlabel("Residual (m)")
+    #         plt.ylabel("Frequency")
+    #         force_model_keys_str = keys_to_string(force_model_config)
+    #         wrapped_text = textwrap.fill(force_model_keys_str, 20)
+    #         plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
+    #                 transform=plt.gca().transAxes,
+    #                 fontsize=10, 
+    #                 verticalalignment='bottom',
+    #                 bbox=dict(facecolor='white', alpha=0.5))
+    #         plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
+    #         plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/hist_force_model_{i}_#pts_{len(observations_df)}.png")
+
+    #         #ECI covariance matrix
+    #         if estimate_drag:
+    #             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
+    #         else:
+    #             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+    #         log_norm = SymLogNorm(linthresh=1e-10, vmin=covariance_matrix.min(), vmax=covariance_matrix.max())
+    #         plt.figure(figsize=(8, 6))
+    #         sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
+    #         plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
+    #         save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}.png"
+    #         if estimate_drag:
+    #             save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
+    #         plt.savefig(save_to)
     
-    relative_differences = []
-    for j in range(1, len(covariance_matrices)):
-        difference_matrix = covariance_matrices[j] - covariance_matrices[j-1]
-        if estimate_drag:
-            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
-        else:
-            labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
-        # Plotting the difference as a heatmap
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(difference_matrix, annot=True, fmt=".3e",xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
-        plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
-        plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/diff_covmat_run_{j}_vs_{j-1}.png')
+    # relative_differences = []
+    # for j in range(1, len(covariance_matrices)):
+    #     difference_matrix = covariance_matrices[j] - covariance_matrices[j-1]
+    #     if estimate_drag:
+    #         labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
+    #     else:
+    #         labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
+    #     # Plotting the difference as a heatmap
+    #     plt.figure(figsize=(10, 8))
+    #     sns.heatmap(difference_matrix, annot=True, fmt=".3e",xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
+    #     plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
+    #     plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/diff_covmat_run_{j}_vs_{j-1}.png')
 
-    correlation_matrices =  calculate_cross_correlation_matrix(covariance_matrices)
-    for j in range(len(correlation_matrices)):
-        # Plotting the correlation matrix as a heatmap
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(correlation_matrices[j], annot=True, fmt=".3f", cmap="coolwarm", center=0)
-        plt.title(f'Correlation Matrix: Run {j}')
-        plt.xlabel('Components')
-        plt.ylabel('Components')
-        plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/corr_covmat_run_{j}.png')
+    # correlation_matrices =  calculate_cross_correlation_matrix(covariance_matrices)
+    # for j in range(len(correlation_matrices)):
+    #     # Plotting the correlation matrix as a heatmap
+    #     plt.figure(figsize=(10, 8))
+    #     sns.heatmap(correlation_matrices[j], annot=True, fmt=".3f", cmap="coolwarm", center=0)
+    #     plt.title(f'Correlation Matrix: Run {j}')
+    #     plt.xlabel('Components')
+    #     plt.ylabel('Components')
+    #     plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/corr_covmat_run_{j}.png')
 
-    # Plot a bar chart of the final Cd values
-    if estimate_drag:
-        plt.figure()
-        bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
+    # # Plot a bar chart of the final Cd values
+    # if estimate_drag:
+    #     plt.figure()
+    #     bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
 
-        # Adding labels on each bar
-        for bar in bars:
-            yval = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
+    #     # Adding labels on each bar
+    #     for bar in bars:
+    #         yval = bar.get_height()
+    #         plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
 
-        plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
-        plt.title("Cd values estimated by BLS under different force models")
-        plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+    #     plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
+    #     plt.title("Cd values estimated by BLS under different force models")
+    #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
 
-        #plot a linegraph of the Cd values at each iteration
-        plt.figure()
-        for optimized_state in optimized_states:
-            plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
-        plt.xlabel("Iteration")
-        plt.ylabel("Cd")
-        plt.title("Cd values at each iteration")
-        plt.legend()
-        plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+    #     #plot a linegraph of the Cd values at each iteration
+    #     plt.figure()
+    #     for optimized_state in optimized_states:
+    #         plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
+    #     plt.xlabel("Iteration")
+    #     plt.ylabel("Cd")
+    #     plt.title("Cd values at each iteration")
+    #     plt.legend()
+    #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
 
 ##### POD WITH GRACE ######
     #TODO: try different density model
-
     # sat_name = "GRACE-FO-A"
     # grace_a_df = sp3_ephem_to_df(sat_name)
     # initial_X = grace_a_df['x'].iloc[0]
@@ -898,3 +953,7 @@ if __name__ == "__main__":
     #     plt.title("Cd values at each iteration")
     #     plt.legend()
     #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}-Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
+        
+#TODO: make it easier to switch atmospheric density models
+#TODO: consider using a dictionary to pass the state vector to avoid all this awkward slicing of arrays that is more error prone
+#TODO: pass satellite mass as a part of the state vector

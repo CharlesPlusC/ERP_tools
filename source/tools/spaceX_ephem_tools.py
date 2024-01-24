@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from astropy.time import Time
 from typing import Tuple
-from tools.utilities import convert_spacex_ephem_to_eme2000,yyyy_mm_dd_hh_mm_ss_to_jd, doy_to_dom_month, jd_to_utc, std_dev_from_lower_triangular
+from tools.utilities import yyyy_mm_dd_hh_mm_ss_to_jd, doy_to_dom_month, jd_to_utc, std_dev_from_lower_triangular
 
 def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     """
@@ -101,9 +101,6 @@ def spacex_ephem_to_df_w_cov(ephem_path: str) -> pd.DataFrame:
     spacex_ephem_df['hours'] = (spacex_ephem_df['JD'] - spacex_ephem_df['JD'][0]) * 24.0 # hours since first timestamp
     spacex_ephem_df['UTC'] = spacex_ephem_df['JD'].apply(jd_to_utc)
     # TODO: I am gaining 3 milisecond per minute in the UTC time. Why?
-    print(f"first 5 UTC times: {spacex_ephem_df['UTC'].head()}")
-    print(f"first five JD times: {spacex_ephem_df['JD'].head()}")
-    # spacex_ephem_df = convert_spacex_ephem_to_eme2000(spacex_ephem_df)
     
     return spacex_ephem_df
 
