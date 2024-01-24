@@ -51,7 +51,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
         ### 64x64 gravity model
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
-        gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
+        gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
     # Moon and Sun perturbations
@@ -65,7 +65,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Solar radiation pressure
     if config_flags.get('enable_solar_radiation', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         cross_section = float(cross_section)
         cr = float(cr)
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
@@ -74,7 +74,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Atmospheric drag
     if config_flags.get('enable_atmospheric_drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
@@ -247,7 +247,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
         accelerations_t0+=gravity_eci_t0
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(64, 64)
-        gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, True), gravityProvider)
+        gravity_force_model = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         force_models.append(gravity_force_model)
         gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravity_force_model)
         gravity_eci_t0 = np.array([gravity_eci_t0[0].getX(), gravity_eci_t0[0].getY(), gravity_eci_t0[0].getZ()])
@@ -268,7 +268,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
         accelerations_t0+=sun_eci_t0
 
     if force_model_config.get('enable_solar_radiation', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         cross_section = float(10.0) #TODO: get from state vector
         cr = float(1.5) #TODO: get from state vector
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
@@ -279,7 +279,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, **force_model_config):
         accelerations_t0+=solar_radiation_eci_t0
 
     if force_model_config.get('enable_atmospheric_drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
@@ -330,10 +330,8 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
 
     phi_ti_minus1 = np.identity(6)  # 6x6 identity matrix for 6 state variables
     P_0 = np.array(state_covs, dtype=float)  # Covariance matrix from a priori estimate
-
     d_rho_d_state = np.eye(6)  # Identity matrix for perfect state measurements
     H_matrix = np.empty((0, 6))  # 6 columns for 6 state variables
-
     converged = False
     iteration = 1
     max_iterations = 10  # Set a max number of iterations
@@ -360,7 +358,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
 
             # Propagate state and STM
             dt = ti - ti_minus1
-            state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=2, cd=1.8, cross_section=10.0, **force_model_config)
+            state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector =state_ti_minus1, cr=1.5, cd=2.2, cross_section=20.0, **force_model_config)
             phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, **force_model_config)
 
             # Compute H matrix for this observation
@@ -419,8 +417,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
 if __name__ == "__main__":
     spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
 
-    # # Select the 2000th to 2200th rows of the SpaceX ephemeris
-    spacex_ephem_df = spacex_ephem_df_full.iloc[2000:2200]
+    spacex_ephem_df = spacex_ephem_df_full
 
     # Initialize state vector from the first point in the SpaceX ephemeris
     # TODO: Can perturb this initial state vector to test convergence later
@@ -437,8 +434,8 @@ if __name__ == "__main__":
     initial_sigma_YV = spacex_ephem_df['sigma_yv'].iloc[0]
     initial_sigma_ZV = spacex_ephem_df['sigma_zv'].iloc[0]
     cd = 2.2
-    cr = 2
-    cross_section = 10.0
+    cr = 1.5
+    cross_section = 20.0
     initial_t = spacex_ephem_df['UTC'].iloc[0]
     a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
@@ -449,13 +446,13 @@ if __name__ == "__main__":
     
     observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
-    obs_lengths_to_test = [35]
+    obs_lengths_to_test = [36]
 
     force_model_configs = [
         {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False}]
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
     covariance_matrices = []
 
