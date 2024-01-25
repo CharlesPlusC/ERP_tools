@@ -28,6 +28,7 @@ from org.orekit.utils import Constants
 
 from tools.utilities import yyyy_mm_dd_hh_mm_ss_to_jd, jd_to_utc, extract_acceleration
 from tools.spaceX_ephem_tools import  parse_spacex_datetime_stamps
+from tools.sp3_2_ephemeris import sp3_ephem_to_df
 
 import pandas as pd
 import numpy as np
@@ -415,44 +416,41 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate=None):
     return x_bar_0, np.linalg.inv(lamda), all_residuals, weighted_rms
 
 if __name__ == "__main__":
-    spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
-
-    spacex_ephem_df = spacex_ephem_df_full
-
-    # Initialize state vector from the first point in the SpaceX ephemeris
-    # TODO: Can perturb this initial state vector to test convergence later
-    initial_X = spacex_ephem_df['x'].iloc[0]
-    initial_Y = spacex_ephem_df['y'].iloc[0]
-    initial_Z = spacex_ephem_df['z'].iloc[0]
-    initial_VX = spacex_ephem_df['xv'].iloc[0]
-    initial_VY = spacex_ephem_df['yv'].iloc[0]
-    initial_VZ = spacex_ephem_df['zv'].iloc[0]
-    initial_sigma_X = spacex_ephem_df['sigma_x'].iloc[0]
-    initial_sigma_Y = spacex_ephem_df['sigma_y'].iloc[0]
-    initial_sigma_Z = spacex_ephem_df['sigma_z'].iloc[0]
-    initial_sigma_XV = spacex_ephem_df['sigma_xv'].iloc[0]
-    initial_sigma_YV = spacex_ephem_df['sigma_yv'].iloc[0]
-    initial_sigma_ZV = spacex_ephem_df['sigma_zv'].iloc[0]
-    cd = 2.2
+    sat_name = "GRACE-FO-A"
+    grace_a_df = sp3_ephem_to_df(sat_name)
+    #return only every 5th row
+    grace_a_df = grace_a_df.iloc[::5, :]
+    initial_X = grace_a_df['x'].iloc[0]
+    initial_Y = grace_a_df['y'].iloc[0]
+    initial_Z = grace_a_df['z'].iloc[0]
+    initial_VX = grace_a_df['xv'].iloc[0]
+    initial_VY = grace_a_df['yv'].iloc[0]
+    initial_VZ = grace_a_df['zv'].iloc[0]
+    initial_sigma_X = grace_a_df['sigma_x'].iloc[0]
+    initial_sigma_Y = grace_a_df['sigma_y'].iloc[0]
+    initial_sigma_Z = grace_a_df['sigma_z'].iloc[0]
+    initial_sigma_XV = grace_a_df['sigma_xv'].iloc[0]
+    initial_sigma_YV = grace_a_df['sigma_yv'].iloc[0]
+    initial_sigma_ZV = grace_a_df['sigma_zv'].iloc[0]
+    cd = 2.4
     cr = 1.5
-    cross_section = 20.0
-    initial_t = spacex_ephem_df['UTC'].iloc[0]
-    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
+    cross_section = 3.123 
+    initial_t = grace_a_df['UTC'].iloc[0]
+    print(f"initial_t: {initial_t}")
+    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
-                                    cr, cd, cross_section])
-    #cast all the values except the first one to floats
-    a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]])
+                                  cd, cr , cross_section])
+    a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]]) #cast to float for compatibility with Orekit functions
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
     
-    observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    # obs_lengths_to_test = [10, 20, 35, 50, 75, 100, 120]
+    observations_df_full = grace_a_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
     obs_lengths_to_test = [36]
 
     force_model_configs = [
-        {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
-        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False}]
+        # {'enable_gravity': True, 'enable_third_body': False, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
+        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': False, 'enable_atmospheric_drag': False},
         # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': False},
-        # {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
+        {'enable_gravity': True, 'enable_third_body': True, 'enable_solar_radiation': True, 'enable_atmospheric_drag': True}]
 
     covariance_matrices = []
 
