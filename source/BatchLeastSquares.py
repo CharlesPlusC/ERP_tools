@@ -60,10 +60,10 @@ solfsmy_data_source = DataSource(solfsmy_file)
 dtcfile_data_source = DataSource(dtcfile_file)
 
 #load CERES dataset, combine longwave and shortwave, extract the associated times in UTC format
-ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
-data = nc.Dataset(ceres_dataset_path)
-ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
-combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
+# ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
+# data = nc.Dataset(ceres_dataset_path)
+# ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+# combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
 def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
 
@@ -93,32 +93,32 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
 
-    if config_flags.get("boxwing_srp", False):
+    # if config_flags.get("boxwing_srp", False):
 
-        x_length = float(5)
-        y_length = float(2)
-        z_length = float(2)
-        solar_array_area = float(10)
-        solar_array_axis = Vector3D(float(0), float(1), float(0))  # Y-axis unit vector in spacecraft body frame
-        drag_coeff = float(2.2)
-        lift_ratio = float(0.0)
-        absorption_coeff = float(0.7)
-        reflection_coeff = float(0.2)
-        sun = CelestialBodyFactory.getSun()
-        rotation_rate = float(0.0)
-        box_and_solar_array = BoxAndSolarArraySpacecraft(x_length, 
-                                                        y_length, 
-                                                        z_length, 
-                                                        sun, 
-                                                        solar_array_area, 
-                                                        solar_array_axis,
-                                                        drag_coeff, 
-                                                        absorption_coeff,
-                                                        rotation_rate, 
-                                                        reflection_coeff)
+    #     x_length = float(5)
+    #     y_length = float(2)
+    #     z_length = float(2)
+    #     solar_array_area = float(10)
+    #     solar_array_axis = Vector3D(float(0), float(1), float(0))  # Y-axis unit vector in spacecraft body frame
+    #     drag_coeff = float(2.2)
+    #     lift_ratio = float(0.0)
+    #     absorption_coeff = float(0.7)
+    #     reflection_coeff = float(0.2)
+    #     sun = CelestialBodyFactory.getSun()
+    #     rotation_rate = float(0.0)
+    #     box_and_solar_array = BoxAndSolarArraySpacecraft(x_length, 
+    #                                                     y_length, 
+    #                                                     z_length, 
+    #                                                     sun, 
+    #                                                     solar_array_area, 
+    #                                                     solar_array_axis,
+    #                                                     drag_coeff, 
+    #                                                     absorption_coeff,
+    #                                                     rotation_rate, 
+    #                                                     reflection_coeff)
 
 
-        solar_radiation_pressure = SolarRadiationPressure(sun, wgs84Ellipsoid, box_and_solar_array)
+    #     solar_radiation_pressure = SolarRadiationPressure(sun, wgs84Ellipsoid, box_and_solar_array)
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -141,9 +141,9 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
-    if config_flags.get('ceres_erp', False):
-        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
-        propagator.addForceModel(ceres_erp_force_model)
+    # if config_flags.get('ceres_erp', False):
+    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+    #     propagator.addForceModel(ceres_erp_force_model)
 
     return propagator
 
@@ -243,12 +243,12 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
 
-    if force_model_config.get('ceres_erp', False):
-        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
-        force_models.append(ceres_erp_force_model)
-        ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
-        ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
-        accelerations_t0+=ceres_erp_eci_t0
+    # if force_model_config.get('ceres_erp', False):
+    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+    #     force_models.append(ceres_erp_force_model)
+    #     ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
+    #     ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
+    #     accelerations_t0+=ceres_erp_eci_t0
 
     ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
@@ -330,12 +330,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
     cr = a_priori_estimate[-3]
     cross_section = a_priori_estimate[-2]
     mass = a_priori_estimate[-1]
-    print(f"Initial state: {(x_bar_0)}")
-    print(f"Initial state covariances: {(state_covs)}")
-    print(f"Initial Cd: {cd}")
-    print(f" Cr: {cr}")
-    print(f" cross section: {cross_section}")
-    print(f" mass: {mass}")
+
     if estimate_drag:
         print(f"Estimating drag coefficient. Initial value: {cd}")
         x_bar_0 = np.append(x_bar_0, cd)
@@ -450,7 +445,7 @@ def format_array(arr, precision=3):
     return np.array2string(arr, precision=precision, separator=', ', suppress_small=True)
 
 if __name__ == "__main__":
-    sat_names_to_test = ["TerraSAR-X","TanDEM-X", "GRACE-FO-A", "GRACE-FO-B"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         # sat_name = "STARLINK-47633"
@@ -484,11 +479,12 @@ if __name__ == "__main__":
         obs_lengths_to_test = [35, 70, 105, 140]
         estimate_drag = False
         force_model_configs = [
-            # {'gravity': True},
-            # {'gravity': True, '3BP': True},
-            # {'gravity': True, '3BP': True, 'drag': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'boxwing_srp': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'ceres_erp': True},
+            {'gravity': True},
+            {'gravity': True, '3BP': True},
+            {'gravity': True, '3BP': True, 'drag': True},
+            # {'gravity': True, '3BP': True, 'drag': True, 'boxwing_srp': True},
+            # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'ceres_erp': True},
+            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
             {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True}]
 
         covariance_matrices = []
@@ -497,11 +493,11 @@ if __name__ == "__main__":
             if not force_model_config.get('drag', False):
                 estimate_drag = False
                 print(f"Force model doesn't have drag. Setting estimate_drag to {estimate_drag}.")
-            if force_model_config.get('boxwing_srp', False) or force_model_config.get('boxwing_drag', False):
-                boxwing_info = get_boxwing_config(sat_name)
-                print(f"boxwing force model requested. Using boxwing info\n: {boxwing_info}")
-            else:
-                boxwing_info = None
+            # if force_model_config.get('boxwing_srp', False) or force_model_config.get('boxwing_drag', False):
+            #     boxwing_info = get_boxwing_config(sat_name)
+            #     print(f"boxwing force model requested. Using boxwing info\n: {boxwing_info}")
+            # else:
+            #     boxwing_info = None
 
             for obs_length in obs_lengths_to_test:
                 observations_df = observations_df_full.iloc[:obs_length]
