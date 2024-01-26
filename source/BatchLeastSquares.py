@@ -18,6 +18,7 @@ from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity, NewtonianAttraction
+from org.orekit.forces import BoxAndSolarArraySpacecraft
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
 from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
@@ -28,7 +29,7 @@ from org.orekit.models.earth.atmosphere import JB2008
 from org.orekit.data import DataSource
 from org.orekit.time import TimeScalesFactory   
 
-from tools.utilities import extract_acceleration, keys_to_string, download_file_url, calculate_cross_correlation_matrix, get_satellite_info
+from tools.utilities import extract_acceleration, keys_to_string, download_file_url,get_boxwing_config, calculate_cross_correlation_matrix, get_satellite_info
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
@@ -44,7 +45,6 @@ import netCDF4 as nc
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 from matplotlib.gridspec import GridSpec
-
 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
@@ -65,7 +65,7 @@ data = nc.Dataset(ceres_dataset_path)
 ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
 combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
-def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
+def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
 
     if config_flags.get('gravity', False):
         MU = Constants.WGS84_EARTH_MU
@@ -92,6 +92,33 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
         earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
+
+    if config_flags.get("boxwing_srp", False):
+
+        x_length = float(5)
+        y_length = float(2)
+        z_length = float(2)
+        solar_array_area = float(10)
+        solar_array_axis = Vector3D(float(0), float(1), float(0))  # Y-axis unit vector in spacecraft body frame
+        drag_coeff = float(2.2)
+        lift_ratio = float(0.0)
+        absorption_coeff = float(0.7)
+        reflection_coeff = float(0.2)
+        sun = CelestialBodyFactory.getSun()
+        rotation_rate = float(0.0)
+        box_and_solar_array = BoxAndSolarArraySpacecraft(x_length, 
+                                                        y_length, 
+                                                        z_length, 
+                                                        sun, 
+                                                        solar_array_area, 
+                                                        solar_array_axis,
+                                                        drag_coeff, 
+                                                        absorption_coeff,
+                                                        rotation_rate, 
+                                                        reflection_coeff)
+
+
+        solar_radiation_pressure = SolarRadiationPressure(sun, wgs84Ellipsoid, box_and_solar_array)
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -292,7 +319,9 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
 
     return phi_t1
 
-def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1):
+def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=None):
+
+    print(f"boxwing config in ODBLS: {box_wing_config}")
 
     t0 = observations_df['UTC'].iloc[0]
     x_bar_0 = np.array(a_priori_estimate[1:7])  # x, y, z, u, v, w
@@ -421,7 +450,7 @@ def format_array(arr, precision=3):
     return np.array2string(arr, precision=precision, separator=', ', suppress_small=True)
 
 if __name__ == "__main__":
-    sat_names_to_test = ["TanDEM-X", "TerraSAR-X", "GRACE-FO-A", "GRACE-FO-B"]
+    sat_names_to_test = ["TerraSAR-X","TanDEM-X", "GRACE-FO-A", "GRACE-FO-B"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         # sat_name = "STARLINK-47633"
@@ -455,10 +484,10 @@ if __name__ == "__main__":
         obs_lengths_to_test = [35, 70, 105, 140]
         estimate_drag = False
         force_model_configs = [
-            {'gravity': True},
-            {'gravity': True, '3BP': True},
-            {'gravity': True, '3BP': True, 'drag': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+            # {'gravity': True},
+            # {'gravity': True, '3BP': True},
+            # {'gravity': True, '3BP': True, 'drag': True},
+            {'gravity': True, '3BP': True, 'drag': True, 'boxwing_srp': True},
             {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'ceres_erp': True},
             {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True}]
 
@@ -468,10 +497,15 @@ if __name__ == "__main__":
             if not force_model_config.get('drag', False):
                 estimate_drag = False
                 print(f"Force model doesn't have drag. Setting estimate_drag to {estimate_drag}.")
+            if force_model_config.get('boxwing_srp', False) or force_model_config.get('boxwing_drag', False):
+                boxwing_info = get_boxwing_config(sat_name)
+                print(f"boxwing force model requested. Using boxwing info\n: {boxwing_info}")
+            else:
+                boxwing_info = None
 
             for obs_length in obs_lengths_to_test:
                 observations_df = observations_df_full.iloc[:obs_length]
-                optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1)
+                optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=boxwing_info)
                 #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
                 #save the optimized states, covariance matrices, residuals, RMSs
 

@@ -1,0 +1,18 @@
+{
+    "TerraSAR-X": {
+        "norad_id": 31698,
+        "sp3-c_code": "L13",
+        "mass": 1230.0,
+        "x_length": 5.0,
+        "y_length": 2.0,
+        "z_length": 2.0,
+        "solar_array_area": 10.0,
+        "solar_array_axis": [0.0, 1.0, 0.0],
+        "drag_coeff": 2.2,
+        "cd": 2.2,
+        "c_lift": 0.0,
+        "c_absorption": 0.7,
+        "c_reflection": 0.2,
+        "solar_array_rotation_rate": 0.0
+    }
+}

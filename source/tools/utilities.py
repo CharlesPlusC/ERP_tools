@@ -579,3 +579,13 @@ def get_satellite_info(satellite_name, file_path='misc/sat_list.json'):
         return {k: info[k] for k in ['mass', 'cross_section', 'cd', 'cr']}
     else:
         return "Satellite not found in the list."
+    
+def get_boxwing_config(satellite_name, file_path='misc/boxwing_configs.json'):
+    with open(file_path, 'r') as file:
+        boxwing_data = json.load(file)
+
+    if satellite_name in boxwing_data:
+        info = boxwing_data[satellite_name]
+        return {k: info[k] for k in ['mass', 'x_length', 'y_length', 'z_length', "solar_array_area", "solar_array_axis", "cd", "c_lift", "c_absorption", "c_reflection"]}
+    else:
+        return "Satellite not found in the list."
