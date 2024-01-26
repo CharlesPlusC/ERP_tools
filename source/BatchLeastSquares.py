@@ -11,7 +11,7 @@ from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.frames import FramesFactory
 from org.orekit.utils import IERSConventions, PVCoordinates
 from org.orekit.models.earth import ReferenceEllipsoid
-from org.orekit.bodies import CelestialBodyFactory
+from org.orekit.bodies import CelestialBodyFactory, OneAxisEllipsoid
 from org.orekit.orbits import CartesianOrbit
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
@@ -30,7 +30,7 @@ from org.orekit.models.earth.atmosphere import JB2008
 from org.orekit.data import DataSource
 from org.orekit.time import TimeScalesFactory   
 
-from tools.utilities import extract_acceleration, keys_to_string, download_file_url
+from tools.utilities import extract_acceleration, keys_to_string, download_file_url, calculate_cross_correlation_matrix, get_satellite_info
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 
@@ -45,19 +45,18 @@ from matplotlib.colors import SymLogNorm
 from matplotlib.gridspec import GridSpec
 
 
-SATELLITE_MASS = 487.0 #TBC (v1s are 250kg , and v2mini are 800kg or something?)
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 15.0
 POSITION_TOLERANCE = 1e-3 # 1 mm
 
 # Download SOLFSMY and DTCFILE files for JB2008 model
-# solfsmy_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
-# dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
+solfsmy_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
+dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
 
-# # Create DataSource instances
-# solfsmy_data_source = DataSource(solfsmy_file)
-# dtcfile_data_source = DataSource(dtcfile_file)
+# Create DataSource instances
+solfsmy_data_source = DataSource(solfsmy_file)
+dtcfile_data_source = DataSource(dtcfile_file)
 
 def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
@@ -82,16 +81,10 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     # Solar radiation pressure
     if config_flags.get('SRP', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-        cross_section = float(cross_section)
-        cr = float(cr)
-        isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
-        solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
+        isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
-
-    if force_model_config.get('relativity', False):
-        relativity = Relativity(Constants.WGS84_EARTH_MU)
-        propagator.addForceModel(relativity)
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -105,17 +98,11 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
 
-        # jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
-        #                                     dtcfile_data_source)
+        jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
+                                            dtcfile_data_source)
 
-        # utc = TimeScalesFactory.getUTC()
-        # atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
-
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
-
+        utc = TimeScalesFactory.getUTC()
+        atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
@@ -126,7 +113,7 @@ def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     return propagator
 
-def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, **config_flags):
+def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass, **config_flags):
 
     x, y, z, vx, vy, vz = initial_state_vector
 
@@ -141,7 +128,7 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
     tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, initial_orbit, initial_orbit.getType())
     integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
     integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
-    initialState = SpacecraftState(initial_orbit, SATELLITE_MASS)
+    initialState = SpacecraftState(initial_orbit, float(mass))
     propagator = NumericalPropagator(integrator)
     propagator.setOrbitType(OrbitType.CARTESIAN)
     propagator.setInitialState(initialState)
@@ -156,12 +143,12 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
     return position + velocity
 
 def rho_i(measured_state, measurement_type='state'):
-# maps a state vector to a measurement vector
+    # maps a state vector to a measurement vector
     if measurement_type == 'state':
         return measured_state
     #TODO: implement other measurement types
 
-def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, estimate_drag=False, **force_model_config):
+def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_drag=False, **force_model_config):
 
     df_dy_size = 7 if estimate_drag else 6
     df_dy = np.zeros((df_dy_size, df_dy_size))
@@ -175,14 +162,14 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, estimate_drag=
         MU = Constants.WGS84_EARTH_MU
         monopolegrav = NewtonianAttraction(MU)
         force_models.append(monopolegrav)
-        monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, monopolegrav)
+        monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, monopolegrav)
         monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         accelerations_t0+=monopole_gravity_eci_t0
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(120,120)
         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         force_models.append(gravityfield)
-        gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, gravityfield)
+        gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, gravityfield)
         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
         accelerations_t0+=gravityfield_eci_t0
 
@@ -194,62 +181,46 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, estimate_drag=
         sun_3dbodyattraction = ThirdBodyAttraction(sun)
         force_models.append(sun_3dbodyattraction)
 
-        moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, moon_3dbodyattraction)
+        moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, moon_3dbodyattraction)
         moon_eci_t0 = np.array([moon_eci_t0[0].getX(), moon_eci_t0[0].getY(), moon_eci_t0[0].getZ()])
         accelerations_t0+=moon_eci_t0
 
-        sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, sun_3dbodyattraction)
+        sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, sun_3dbodyattraction)
         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
         accelerations_t0+=sun_eci_t0
 
     if force_model_config.get('SRP', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-        cross_section = float(cross_section) 
-        cr = float(cr) 
-        isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(cross_section, cr)
-        solarRadiationPressure = SolarRadiationPressure(sun, wgs84Ellipsoid, isotropicRadiationSingleCoeff)
+        isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
         force_models.append(solarRadiationPressure)
-        solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, solarRadiationPressure)
+        solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
-
-    if force_model_config.get('relativity', False):
-        relativity = Relativity(Constants.WGS84_EARTH_MU)
-        force_models.append(relativity)
-        relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, relativity)
-        relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
-        accelerations_t0+=relativity_eci_t0
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
         spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         onedeg_in_rad = np.radians(1.0)
-        angularResolution = float(onedeg_in_rad) 
+        angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
         knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
         force_models.append(knockeModel)
-        knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, knockeModel)
+        knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
 
     ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
-
-        # jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
-        #                                     dtcfile_data_source)
-        # utc = TimeScalesFactory.getUTC()
-        # atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
+        jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
+                                            dtcfile_data_source)
+        utc = TimeScalesFactory.getUTC()
+        atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
 
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
-        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, SATELLITE_MASS, dragForce)
+        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
@@ -268,15 +239,16 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, estimate_drag=
             cd_perturbed = cd + cd_perturbation
             # Re-instantiate required objects for drag force model
             wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-            sun = CelestialBodyFactory.getSun()
-            msafe = MarshallSolarActivityFutureEstimation(MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES, MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-            atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+            
+            jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source, dtcfile_data_source)
+            utc = TimeScalesFactory.getUTC()
+            atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
             isotropicDrag = IsotropicDrag(float(cross_section), float(cd_perturbed))
             dragForce = DragForce(atmosphere, isotropicDrag)
             force_models[-1] = dragForce  # Update the drag force model
 
         for force_model in force_models:
-            acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, SATELLITE_MASS, force_model)
+            acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, mass, force_model)
             if isinstance(acc_perturbed, np.ndarray): #deal with stupid output of extract_acceleration
                 acc_perturbed_values = acc_perturbed
             else:
@@ -295,57 +267,34 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section, estimate_drag=
             df_dy[3:6, 6] = partial_derivatives  # Drag coefficient partials
 
     # Propagate State Transition Matrix (STM)
-    phi_dot = df_dy @ phi_i
     dt_seconds = float(dt.total_seconds())
-    phi_t1 = phi_i + (phi_dot * dt_seconds)  # Euler integration
-    # Adjust for constant drag coefficient
-    if estimate_drag:
-        phi_t1[6, 6] = 1.0
+    # Define time span and initial condition
+    t_span = [0, dt_seconds]  # Start and end times
+    initial_condition = phi_i.flatten()  # Flatten if phi_i
+    # Solve the differential equation
+    result = solve_ivp(lambda t, y: (df_dy @ y.reshape(phi_i.shape)).flatten(), t_span, initial_condition, method='RK45')
+    # Extract the final state and reshape back to original shape
+    phi_t1 = result.y[:, -1].reshape(phi_i.shape)
 
     return phi_t1
-
-def calculate_cross_correlation_matrix(covariance_matrices):
-    """
-    Calculate cross-correlation matrices for a list of covariance matrices.
-
-    Args:
-    covariance_matrices (list of np.array): List of covariance matrices.
-
-    Returns:
-    List of np.array: List of cross-correlation matrices corresponding to each covariance matrix.
-    """
-    correlation_matrices = []
-    for cov_matrix in covariance_matrices:
-        # Ensure the matrix is a numpy array
-        cov_matrix = np.array(cov_matrix)
-
-        # Diagonal elements (variances)
-        variances = np.diag(cov_matrix)
-
-        # Standard deviations (sqrt of variances)
-        std_devs = np.sqrt(variances)
-
-        # Initialize correlation matrix
-        corr_matrix = np.zeros_like(cov_matrix)
-
-        # Calculate correlation matrix
-        for i in range(len(cov_matrix)):
-            for j in range(len(cov_matrix)):
-                corr_matrix[i, j] = cov_matrix[i, j] / (std_devs[i] * std_devs[j])
-
-        correlation_matrices.append(corr_matrix)
-
-    return correlation_matrices
 
 def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1):
 
     t0 = observations_df['UTC'].iloc[0]
     x_bar_0 = np.array(a_priori_estimate[1:7])  # x, y, z, u, v, w
     state_covs = a_priori_estimate[7:13]
-    cd = a_priori_estimate[-3]
-    cr = a_priori_estimate[-2]
-    cross_section = a_priori_estimate[-1]
+    cd = a_priori_estimate[-4]
+    cr = a_priori_estimate[-3]
+    cross_section = a_priori_estimate[-2]
+    mass = a_priori_estimate[-1]
+    print(f"Initial state: {(x_bar_0)}")
+    print(f"Initial state covariances: {(state_covs)}")
+    print(f"Initial Cd: {cd}")
+    print(f" Cr: {cr}")
+    print(f" cross section: {cross_section}")
+    print(f" mass: {mass}")
     if estimate_drag:
+        print(f"Estimating drag coefficient. Initial value: {cd}")
         x_bar_0 = np.append(x_bar_0, cd)
 
     state_covs = np.diag(state_covs)
@@ -362,7 +311,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
     H_matrix = np.empty((0, len(x_bar_0)))
     converged = False
     iteration = 1
-    max_iterations = 2
+    max_iterations = 5
     weighted_rms_last = np.inf 
     convergence_threshold = 0.001 
     no_times_diff_increased = 0
@@ -398,24 +347,18 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
             # Propagate state and STM
             dt = ti - ti_minus1
             if estimate_drag:
-                state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section, **force_model_config)
-                phi_ti = propagate_STM(state_ti_minus1[:6], ti, dt, phi_ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,estimate_drag=True, **force_model_config)
+                state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,mass=mass, **force_model_config)
+                phi_ti = propagate_STM(state_ti_minus1[:6], ti, dt, phi_ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,mass=mass,estimate_drag=True, **force_model_config)
             else:
-                print(f"state before propagation: {state_ti_minus1}")
-                state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
-                print(f"state after propagation: {state_ti}")
-                phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section, **force_model_config)
+                state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass, **force_model_config)
+                phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass, **force_model_config)
 
             # Compute H matrix and residuals for this observation
-            print(f"phi_ti: \n {phi_ti}")
             H_matrix_row = d_rho_d_state @ phi_ti
             H_matrix = np.vstack([H_matrix, H_matrix_row])
             if estimate_drag:
                 state_ti = np.append(state_ti, state_ti_minus1[-1])
-            print(f"state_ti: {state_ti}")
-            print(f"observed_state: {observed_state}")
             y_i = observed_state - rho_i(state_ti, 'state')
-            print(f"y_i: {y_i}")
             y_i = np.array(y_i, dtype=float)
             y_all = np.vstack([y_all, y_i])
 
@@ -425,9 +368,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
 
             # Update for next iteration
             ti_minus1 = ti
-            print(f"state_ti_minus1 before end of iteration: {state_ti_minus1}")
             state_ti_minus1 = np.array(state_ti)
-            print(f"state_ti_minus1 after end of iteration: {state_ti_minus1}")
             phi_ti_minus1 = phi_ti
             RMSs.append(y_i.T @ W_i @ y_i)
 
@@ -450,10 +391,8 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
             else:
                 no_times_diff_increased = 0
             weighted_rms_last = weighted_rms
-            print(f"old state: {x_bar_0}")
-            print(f"correction: {xhat}")
             x_bar_0 += xhat  # Update nominal trajectory
-            print(f"newly estimated state: {x_bar_0}")
+            print("updated x_bar_0: ", x_bar_0)
 
         all_residuals.append(y_all)
         all_rms.append(weighted_rms)
@@ -468,55 +407,56 @@ def format_array(arr, precision=3):
     return np.array2string(arr, precision=precision, separator=', ', suppress_small=True)
 
 if __name__ == "__main__":
-    sat_name = "GRACE-FO-A"
-    grace_a_df = sp3_ephem_to_df(sat_name)
-    #return only every 5th row
-    # grace_a_df = grace_a_df.iloc[::5, :]
-    initial_X = grace_a_df['x'].iloc[0]
-    initial_Y = grace_a_df['y'].iloc[0]
-    initial_Z = grace_a_df['z'].iloc[0]
-    initial_VX = grace_a_df['xv'].iloc[0]
-    initial_VY = grace_a_df['yv'].iloc[0]
-    initial_VZ = grace_a_df['zv'].iloc[0]
-    initial_sigma_X = grace_a_df['sigma_x'].iloc[0]
-    initial_sigma_Y = grace_a_df['sigma_y'].iloc[0]
-    initial_sigma_Z = grace_a_df['sigma_z'].iloc[0]
-    initial_sigma_XV = grace_a_df['sigma_xv'].iloc[0]
-    initial_sigma_YV = grace_a_df['sigma_yv'].iloc[0]
-    initial_sigma_ZV = grace_a_df['sigma_zv'].iloc[0]
-    cd = 2.4
-    cr = 1.5
-    cross_section = 3.123 
-    initial_t = grace_a_df['UTC'].iloc[0]
-    print(f"initial_t: {initial_t}")
-    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ, cd,
+    sat_name = "TanDEM-X"
+    ephemeris_df = sp3_ephem_to_df(sat_name)
+    # sat_name = "STARLINK-47633"
+    # ephemeris_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_47633_STARLINK-2009_0291157_Operational_1359287880_UNCLASSIFIED.txt')
+    sat_info = get_satellite_info(sat_name)
+    cd = sat_info['cd']
+    cr = sat_info['cr']
+    cross_section = sat_info['cross_section']
+    mass = sat_info['mass']
+    ephemeris_df = ephemeris_df.iloc[::5, :]#return only every 5th row
+    initial_X = ephemeris_df['x'].iloc[0]
+    initial_Y = ephemeris_df['y'].iloc[0]
+    initial_Z = ephemeris_df['z'].iloc[0]
+    initial_VX = ephemeris_df['xv'].iloc[0]
+    initial_VY = ephemeris_df['yv'].iloc[0]
+    initial_VZ = ephemeris_df['zv'].iloc[0]
+    initial_sigma_X = ephemeris_df['sigma_x'].iloc[0]
+    initial_sigma_Y = ephemeris_df['sigma_y'].iloc[0]
+    initial_sigma_Z = ephemeris_df['sigma_z'].iloc[0]
+    initial_sigma_XV = ephemeris_df['sigma_xv'].iloc[0]
+    initial_sigma_YV = ephemeris_df['sigma_yv'].iloc[0]
+    initial_sigma_ZV = ephemeris_df['sigma_zv'].iloc[0]
+
+    initial_t = ephemeris_df['UTC'].iloc[0]
+    a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
                                   initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
-                                  cd, cr , cross_section])
+                                  cd, cr , cross_section, mass])
     a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]]) #cast to float for compatibility with Orekit functions
     a_priori_estimate = np.array([initial_t, *a_priori_estimate])
     
-    observations_df_full = grace_a_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    obs_lengths_to_test = [2]
+    observations_df_full = ephemeris_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+    obs_lengths_to_test = [70]
     estimate_drag = False
     force_model_configs = [
         {'gravity': True},
-        # {'gravity': True, '3BP': True}
-        # {'gravity': True, '3BP': True, 'drag': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True,'relativity': True, 'knocke_erp': True}
-        ]
+        {'gravity': True, '3BP': True},
+        {'gravity': True, '3BP': True, 'drag': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True}]
 
     covariance_matrices = []
     optimized_states = []
     for i, force_model_config in enumerate(force_model_configs):
         if not force_model_config.get('drag', False):
             estimate_drag = False
-            print("Force model doesn't have drag. Setting estimate_drag to False.")
-        
+            print(f"Force model doesn't have drag. Setting estimate_drag to {estimate_drag}.")
+
         for obs_length in obs_lengths_to_test:
             observations_df = observations_df_full.iloc[:obs_length]
-            optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=2)
+            optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1)
             #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
             #save the optimized states, covariance matrices, residuals, RMSs
 
@@ -575,25 +515,33 @@ if __name__ == "__main__":
             ax4.legend(['u', 'v', 'w'])
 
             # Format initial and optimized states with 3 significant figures
+            # apriori2sf = np.round(a_priori_estimate[1:-3], 3)
+            # optimized_state_2sf = np.round(optimized_state, 3)
             formatted_initial_state = format_array(a_priori_estimate)
             formatted_optimized_state = format_array(optimized_state)
             # Table for force model configuration, initial state, and final estimated state
             ax5 = fig.add_subplot(gs[3, :])
             force_model_data = [['Force Model Config', str(force_model_config)],
                                 ['Initial State', formatted_initial_state],
-                                ['Final Estimated State', formatted_optimized_state],
-                                ['Weighted RMS', f'{final_RMS:.3f}']]
+                                ['Final Estimated State', formatted_optimized_state]]
             table = plt.table(cellText=force_model_data, colWidths=[0.5 for _ in force_model_data[0]], loc='center', cellLoc='left')
             ax5.axis('off')
             table.auto_set_font_size(False)
             table.set_fontsize(10)
             table.scale(1.0, 1.7)
 
+            #Overall title with spacecraft name
+            plt.suptitle(f"Residuals (O-C) for best BLS iteration. \nRMS: {final_RMS:.3f} \n{sat_name}", y=0.95, fontsize=16)
+
             # Adjust layout
             plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.3)
 
             # Save the combined plot
-            plt.savefig(f"output/OD_BLS/Tapley/combined_plot_fmodel_{i}_#pts_{len(observations_df)}.png")
+            #make a folder for the spacecraft if it doesn't exist
+            sat_name_folder = f"output/OD_BLS/Tapley/combined_plots/{sat_name}"
+            if not os.path.exists(sat_name_folder):
+                os.makedirs(sat_name_folder)
+            plt.savefig(f"sat_name_folder/fmodel_{i}_#pts_{len(observations_df)}.png")
             plt.close()
 
     #         date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -745,40 +693,3 @@ if __name__ == "__main__":
 #TODO: make it easier to switch atmospheric density models
 #TODO: consider using a dictionary to pass the state vector to avoid all this awkward slicing of arrays that is more error prone
 #TODO: pass satellite mass as a part of the state vector
-            
-
-
-######spacex_ephem_df_full = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_57632_STARLINK-30309_3530645_Operational_1387262760_UNCLASSIFIED.txt')
-
-    # #return only every 5th row of the dataframe
-    # spacex_ephem_df = spacex_ephem_df_full.iloc[::5, :]
-
-    # # Initialize state vector from the first point in the SpaceX ephemeris
-    # # TODO: Can perturb this initial state vector to test convergence later
-    # initial_X = spacex_ephem_df['x'].iloc[0]
-    # initial_Y = spacex_ephem_df['y'].iloc[0]
-    # initial_Z = spacex_ephem_df['z'].iloc[0]
-    # initial_VX = spacex_ephem_df['xv'].iloc[0]
-    # initial_VY = spacex_ephem_df['yv'].iloc[0]
-    # initial_VZ = spacex_ephem_df['zv'].iloc[0]
-    # initial_sigma_X = spacex_ephem_df['sigma_x'].iloc[0]
-    # initial_sigma_Y = spacex_ephem_df['sigma_y'].iloc[0]
-    # initial_sigma_Z = spacex_ephem_df['sigma_z'].iloc[0]
-    # initial_sigma_XV = spacex_ephem_df['sigma_xv'].iloc[0]
-    # initial_sigma_YV = spacex_ephem_df['sigma_yv'].iloc[0]
-    # initial_sigma_ZV = spacex_ephem_df['sigma_zv'].iloc[0]
-    # cd = 2.2
-    # cr = 1.5
-    # cross_section = 20.0 # from https://lilibots.blogspot.com/2020/04/starlink-satellite-dimension-estimates.html
-    # initial_t = spacex_ephem_df['UTC'].iloc[0]
-    # #remove 1 year from the utc time to get the initial time
-    # # initial_t = initial_t - datetime.timedelta(days=365)
-    # a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
-    #                               initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
-    #                               cd, cr, cross_section])
-
-    # #cast all the values except the first one to floats
-    # a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]])
-    # a_priori_estimate = np.array([initial_t, *a_priori_estimate])
-    
-    # observations_df_full = spacex_ephem_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]

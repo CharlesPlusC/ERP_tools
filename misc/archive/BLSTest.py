@@ -73,7 +73,6 @@ def propagate_state_using_propagator(propagator, start_date, end_date, initial_s
     
     if len(initial_state_vector) == 7:
         print("using extended state vector")
-        #TODO: need something more elegant than this again, but for n
         x, y, z, vx, vy, vz, cd = initial_state_vector 
         # Extract cd from the state vector 
         cd = initial_state_vector[-1]  # Assuming cd is the last element in the state vector

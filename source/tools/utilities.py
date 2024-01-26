@@ -7,6 +7,7 @@ from astropy.time import Time
 from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDifferential
 from typing import Tuple, List
 import requests
+import json
 
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
@@ -282,7 +283,7 @@ def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, force
         pvCoordinates = PVCoordinates(position, velocity)
 
         orbit = CartesianOrbit(pvCoordinates, FramesFactory.getEME2000(), current_date, Constants.WGS84_EARTH_MU)
-        state = SpacecraftState(orbit, SATELLITE_MASS)
+        state = SpacecraftState(orbit, float(SATELLITE_MASS))
 
         parameters = ForceModel.cast_(forceModel).getParameters()
         acc = forceModel.acceleration(state, parameters)
@@ -535,3 +536,46 @@ def download_file_url(url, local_filename):
             for chunk in r.iter_content(chunk_size=8192):
                 f.write(chunk)
     return File(local_filename)
+
+def calculate_cross_correlation_matrix(covariance_matrices):
+    """
+    Calculate cross-correlation matrices for a list of covariance matrices.
+
+    Args:
+    covariance_matrices (list of np.array): List of covariance matrices.
+
+    Returns:
+    List of np.array: List of cross-correlation matrices corresponding to each covariance matrix.
+    """
+    correlation_matrices = []
+    for cov_matrix in covariance_matrices:
+        # Ensure the matrix is a numpy array
+        cov_matrix = np.array(cov_matrix)
+
+        # Diagonal elements (variances)
+        variances = np.diag(cov_matrix)
+
+        # Standard deviations (sqrt of variances)
+        std_devs = np.sqrt(variances)
+
+        # Initialize correlation matrix
+        corr_matrix = np.zeros_like(cov_matrix)
+
+        # Calculate correlation matrix
+        for i in range(len(cov_matrix)):
+            for j in range(len(cov_matrix)):
+                corr_matrix[i, j] = cov_matrix[i, j] / (std_devs[i] * std_devs[j])
+
+        correlation_matrices.append(corr_matrix)
+
+    return correlation_matrices
+
+def get_satellite_info(satellite_name, file_path='misc/sat_list.json'):
+    with open(file_path, 'r') as file:
+        sat_data = json.load(file)
+
+    if satellite_name in sat_data:
+        info = sat_data[satellite_name]
+        return {k: info[k] for k in ['mass', 'cross_section', 'cd', 'cr']}
+    else:
+        return "Satellite not found in the list."
