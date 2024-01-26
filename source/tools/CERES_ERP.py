@@ -17,7 +17,7 @@ from tools.utilities import hcl_acc_from_sc_state, find_nearest_index, lla_to_ec
 from source.tools.ceres_data_processing import calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 import numpy as np
 
-def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist):
+def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist, sc_mass, sc_area):
     # Earth radius in meters
     R = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
     # Latitude and longitude arrays
@@ -56,13 +56,13 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     # Summing all force vectors
     total_radiation_force_vector = np.sum(radiation_force_vectors[fov_mask], axis=0)
     # Satellite area in square meters
-    satellite_area = 10.0
+    satellite_area = sc_area
 
     # Total force due to radiation pressure (not including reflection for now)
     total_force = total_radiation_force_vector * satellite_area
 
     # Satellite mass in kilograms
-    satellite_mass = 500.0
+    satellite_mass = sc_mass
 
     # Calculate acceleration
     acceleration_vector = total_force / satellite_mass
@@ -80,7 +80,7 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     return np.array(acceleration_vector), scalar_acc, angle_degrees
 
 class CERES_ERP_ForceModel(PythonForceModel):
-    def __init__(self, ceres_times, combined_radiation_data):
+    def __init__(self, ceres_times, combined_radiation_data, sc_mass, sc_area):
         super().__init__()
         self.scalar_acc_data = []
         self.erp_angle_data = []
@@ -88,6 +88,8 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.ceres_times = ceres_times
         self.combined_radiation_data = combined_radiation_data
         self.rtn_accs = []
+        self.sc_mass = sc_mass
+        self.sc_area = sc_area
 
     def acceleration(self, spacecraftState, doubleArray):
         pos = spacecraftState.getPVCoordinates().getPosition()
@@ -107,7 +109,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
         longitude_deg = np.rad2deg(longitude)
         ceres_time = julian_day_to_ceres_time(jd_time)
         ceres_indices = find_nearest_index(self.ceres_times, ceres_time)
-        erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, self.combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist)
+        erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, self.combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist, self.sc_mass, self.sc_area)
 
         eci = FramesFactory.getEME2000()
         transform = ecef.getTransformTo(eci, spacecraftState.getDate())

@@ -31,6 +31,8 @@ from org.orekit.time import TimeScalesFactory
 from tools.utilities import extract_acceleration, keys_to_string, download_file_url, calculate_cross_correlation_matrix, get_satellite_info
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
+from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
+from tools.CERES_ERP import CERES_ERP_ForceModel
 
 import pandas as pd
 import numpy as np
@@ -38,6 +40,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import datetime
 import os
+import netCDF4 as nc
 from scipy.integrate import solve_ivp
 from matplotlib.colors import SymLogNorm
 from matplotlib.gridspec import GridSpec
@@ -56,7 +59,13 @@ dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices
 solfsmy_data_source = DataSource(solfsmy_file)
 dtcfile_data_source = DataSource(dtcfile_file)
 
-def configure_force_models(propagator,cr, cross_section,cd, times=None, **config_flags):
+#load CERES dataset, combine longwave and shortwave, extract the associated times in UTC format
+ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
+data = nc.Dataset(ceres_dataset_path)
+ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
+
+def configure_force_models(propagator,cr, cross_section,cd, **config_flags):
 
     if config_flags.get('gravity', False):
         MU = Constants.WGS84_EARTH_MU
@@ -105,9 +114,9 @@ def configure_force_models(propagator,cr, cross_section,cd, times=None, **config
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
-    # TODO: CERES ERP force model
-    # if enable_ceres:
-    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data) # pass the time and radiation data to the force model
+    if config_flags.get('ceres_erp', False):
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+        propagator.addForceModel(ceres_erp_force_model)
 
     return propagator
 
@@ -206,6 +215,13 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
+
+    if force_model_config.get('ceres_erp', False):
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+        force_models.append(ceres_erp_force_model)
+        ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
+        ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
+        accelerations_t0+=ceres_erp_eci_t0
 
     ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
@@ -443,6 +459,7 @@ if __name__ == "__main__":
             {'gravity': True, '3BP': True},
             {'gravity': True, '3BP': True, 'drag': True},
             {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'ceres_erp': True},
             {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True}]
 
         covariance_matrices = []
