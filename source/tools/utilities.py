@@ -525,7 +525,6 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
 
     return eme2000_pos, eme2000_vel
 
-
     # Function to download file and return a java.io.File object
 def download_file_url(url, local_filename):
     from java.io import File

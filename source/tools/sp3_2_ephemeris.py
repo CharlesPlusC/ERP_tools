@@ -127,8 +127,6 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
                 converted_values = [float(val) * 1000 if i < 6 else float(val) 
                                     for i, val in enumerate(ephemeris_values)]
                 
-                sigma_converted_values = [float(val) * 1 for val in sigma_values]
-
                 # Combine all values and convert to appropriate types
                 row = [pd.to_datetime(utc)] + converted_values + sigma_values
                 data.append(row)
@@ -196,3 +194,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    #NOTE: set up to run a different set of Orbits (change back to the experimental set of orbits)

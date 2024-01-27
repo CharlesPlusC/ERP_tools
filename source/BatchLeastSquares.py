@@ -497,7 +497,7 @@ if __name__ == "__main__":
             #     boxwing_info = get_boxwing_config(sat_name)
             #     print(f"boxwing force model requested. Using boxwing info\n: {boxwing_info}")
             # else:
-            #     boxwing_info = None
+                boxwing_info = None
 
             for obs_length in obs_lengths_to_test:
                 observations_df = observations_df_full.iloc[:obs_length]

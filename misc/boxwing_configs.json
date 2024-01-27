@@ -8,7 +8,6 @@
         "z_length": 2.0,
         "solar_array_area": 10.0,
         "solar_array_axis": [0.0, 1.0, 0.0],
-        "drag_coeff": 2.2,
         "cd": 2.2,
         "c_lift": 0.0,
         "c_absorption": 0.7,
