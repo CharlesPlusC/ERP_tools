@@ -12,6 +12,8 @@ import cartopy.crs as ccrs
 from itertools import islice
 from .ceres_data_processing import latlon_to_fov_coordinates, calculate_satellite_fov, is_within_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 from .utilities import convert_ceres_time_to_date, lla_to_ecef
+import seaborn as sns
+from matplotlib.gridspec import GridSpec
 
 def plot_fov_radiation_mesh(variable_name, time_index, radiation_data, lat, lon, sat_lat, sat_lon, horizon_dist, output_path, ceres_times):
     # Create a mask for the FoV
@@ -53,16 +55,10 @@ def compute_radiance_at_sc(variable_name, time_index, radiation_data, lat, lon, 
     R = 6371  # Earth's radius in km
 
     # Mesh grid creation
-    print("lat:", lat)
-    print("shape of lat:", np.shape(lat))
     lon2d, lat2d = np.meshgrid(lon, lat)
-    print("shape of lon2d:", np.shape(lon2d))
-    print("shape of lat2d:", np.shape(lat2d))
-    print("lon2d:", lon2d)
 
     #FOV calculations
     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
-    print("shape of fov_mask:", np.shape(fov_mask))
     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[time_index, :, :])
     cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
     cosine_factors_2d = np.zeros_like(radiation_data_fov)
@@ -381,3 +377,70 @@ def plot_kepels_evolution(keplerian_element_data, sat_name):
     timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     plt.savefig(f'output/ERP_prop/{sat_name}_{timenow}_ERP_Kepels.png')
     # plt.show()
+
+def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, i, arc_num, estimate_drag, format_array):
+    fig = plt.figure(figsize=(12, 9))
+    sns.set(style="whitegrid")
+    gs = GridSpec(4, 4, figure=fig)
+
+    # Scatter plots for position and velocity residuals
+    ax1 = fig.add_subplot(gs[0, :])
+    ax2 = fig.add_subplot(gs[1, :])
+
+    # Position residuals plot
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,0], ax=ax1, color="xkcd:blue", s=10, label='x')
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,1], ax=ax1, color="xkcd:green", s=10, label='y')
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,2], ax=ax1, color="xkcd:red", s=10, label='z')
+    ax1.set_ylabel("Position Residual (m)")
+    ax1.set_xlabel("Observation time (UTC)")
+    ax1.legend()
+
+    # Velocity residuals plot
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,3], ax=ax2, color="xkcd:purple", s=10, label='u')
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,4], ax=ax2, color="xkcd:orange", s=10, label='v')
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,5], ax=ax2, color="xkcd:yellow", s=10, label='w')
+    ax2.set_ylabel("Velocity Residual (m/s)")
+    ax2.set_xlabel("Observation time (UTC)")
+    ax2.legend()
+
+    # Histograms for position and velocity residuals
+    ax3 = fig.add_subplot(gs[2, :2])
+    ax4 = fig.add_subplot(gs[2, 2:])
+
+    sns.histplot(residuals_final[:,0:3], bins=20, ax=ax3, palette=["xkcd:blue", "xkcd:green", "xkcd:red"], legend=False)
+    ax3.set_xlabel("Position Residual (m)")
+    ax3.set_ylabel("Frequency")
+    ax3.legend(['x', 'y', 'z'])
+
+    sns.histplot(residuals_final[:,3:6], bins=20, ax=ax4, palette=["xkcd:purple", "xkcd:orange", "xkcd:yellow"], legend=False)
+    ax4.set_xlabel("Velocity Residual (m/s)")
+    ax4.set_ylabel("Frequency")
+    ax4.legend(['u', 'v', 'w'])
+
+    # Table for force model configuration, initial state, and final estimated state
+    ax5 = fig.add_subplot(gs[3, :])
+    formatted_initial_state = format_array(a_priori_estimate)
+    formatted_optimized_state = format_array(optimized_state)
+    force_model_data = [['Force Model Config', str(force_model_config)],
+                        ['Initial State', formatted_initial_state],
+                        ['Final Estimated State', formatted_optimized_state]]
+    table = plt.table(cellText=force_model_data, colWidths=[0.5 for _ in force_model_data[0]], loc='center', cellLoc='left')
+    ax5.axis('off')
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.0, 1.7)
+
+    plt.suptitle(f"Residuals (O-C) for best BLS iteration. \nRMS: {final_RMS:.3f} \n{sat_name}", y=0.95, fontsize=16)
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.3)
+
+    # Save the combined plot
+    sat_name_folder = f"output/OD_BLS/Tapley/combined_plots/{sat_name}"
+    if not os.path.exists(sat_name_folder):
+        os.makedirs(sat_name_folder)
+    obs_length_folder = f"{sat_name_folder}/{len(observations_df)}"
+    if not os.path.exists(obs_length_folder):
+        os.makedirs(obs_length_folder)
+    save_path = f"{obs_length_folder}/arcnum{arc_num}_fmodel_{i}_estdrag_{estimate_drag}.png"
+    plt.savefig(save_path)
+    print(f"saving to {save_path}")
+    plt.close()

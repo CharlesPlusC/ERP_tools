@@ -34,6 +34,7 @@ from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
 from tools.CERES_ERP import CERES_ERP_ForceModel
+from tools.plotting import combined_residuals_plot
 
 import pandas as pd
 import numpy as np
@@ -77,7 +78,6 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
-    # Moon and Sun perturbations
     if config_flags.get('3BP', False):
         moon = CelestialBodyFactory.getMoon()
         sun = CelestialBodyFactory.getSun()
@@ -86,39 +86,11 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         propagator.addForceModel(moon_3dbodyattraction)
         propagator.addForceModel(sun_3dbodyattraction)
 
-    # Solar radiation pressure
     if config_flags.get('SRP', False):
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, True))
         solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
-
-    # if config_flags.get("boxwing_srp", False):
-
-    #     x_length = float(5)
-    #     y_length = float(2)
-    #     z_length = float(2)
-    #     solar_array_area = float(10)
-    #     solar_array_axis = Vector3D(float(0), float(1), float(0))  # Y-axis unit vector in spacecraft body frame
-    #     drag_coeff = float(2.2)
-    #     lift_ratio = float(0.0)
-    #     absorption_coeff = float(0.7)
-    #     reflection_coeff = float(0.2)
-    #     sun = CelestialBodyFactory.getSun()
-    #     rotation_rate = float(0.0)
-    #     box_and_solar_array = BoxAndSolarArraySpacecraft(x_length, 
-    #                                                     y_length, 
-    #                                                     z_length, 
-    #                                                     sun, 
-    #                                                     solar_array_area, 
-    #                                                     solar_array_axis,
-    #                                                     drag_coeff, 
-    #                                                     absorption_coeff,
-    #                                                     rotation_rate, 
-    #                                                     reflection_coeff)
-
-
-    #     solar_radiation_pressure = SolarRadiationPressure(sun, wgs84Ellipsoid, box_and_solar_array)
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -133,10 +105,9 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         propagator.addForceModel(relativity)
 
     if config_flags.get('ceres_erp', False):
-        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
         propagator.addForceModel(ceres_erp_force_model)
 
-    # Atmospheric drag
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
 
@@ -251,7 +222,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         accelerations_t0+=knocke_eci_t0
 
     if force_model_config.get('ceres_erp', False):
-        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr) # pass the time and radiation data to the force model
         force_models.append(ceres_erp_force_model)
         ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
         ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
@@ -325,12 +296,9 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
 
     # Propagate State Transition Matrix (STM)
     dt_seconds = float(dt.total_seconds())
-    # Define time span and initial condition
-    t_span = [0, dt_seconds]  # Start and end times
-    initial_condition = phi_i.flatten()  # Flatten if phi_i
-    # Solve the differential equation
+    t_span = [0, dt_seconds]
+    initial_condition = phi_i.flatten()
     result = solve_ivp(lambda t, y: (df_dy @ y.reshape(phi_i.shape)).flatten(), t_span, initial_condition, method='RK45')
-    # Extract the final state and reshape back to original shape
     phi_t1 = result.y[:, -1].reshape(phi_i.shape)
 
     return phi_t1
@@ -462,66 +430,49 @@ def format_array(arr, precision=3):
 
 if __name__ == "__main__":
     sat_names_to_test = ["TanDEM-X", "TerraSAR-X","GRACE-FO-A", "GRACE-FO-B"]
+    num_arcs = 2
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        # sat_name = "STARLINK-47633"
-        # ephemeris_df = spacex_ephem_to_df_w_cov('external/ephems/starlink/MEME_47633_STARLINK-2009_0291157_Operational_1359287880_UNCLASSIFIED.txt')
         sat_info = get_satellite_info(sat_name)
         cd = sat_info['cd']
         cr = sat_info['cr']
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
-        ephemeris_df = ephemeris_df.iloc[::2, :]#return only every 5th row
-        initial_X = ephemeris_df['x'].iloc[0]
-        initial_Y = ephemeris_df['y'].iloc[0]
-        initial_Z = ephemeris_df['z'].iloc[0]
-        initial_VX = ephemeris_df['xv'].iloc[0]
-        initial_VY = ephemeris_df['yv'].iloc[0]
-        initial_VZ = ephemeris_df['zv'].iloc[0]
-        initial_sigma_X = ephemeris_df['sigma_x'].iloc[0]
-        initial_sigma_Y = ephemeris_df['sigma_y'].iloc[0]
-        initial_sigma_Z = ephemeris_df['sigma_z'].iloc[0]
-        initial_sigma_XV = ephemeris_df['sigma_xv'].iloc[0]
-        initial_sigma_YV = ephemeris_df['sigma_yv'].iloc[0]
-        initial_sigma_ZV = ephemeris_df['sigma_zv'].iloc[0]
-        initial_t = ephemeris_df['UTC'].iloc[0]
-        a_priori_estimate = np.array([initial_t, initial_X, initial_Y, initial_Z, initial_VX, initial_VY, initial_VZ,
-                                    initial_sigma_X, initial_sigma_Y, initial_sigma_Z, initial_sigma_XV, initial_sigma_YV, initial_sigma_ZV,
-                                    cd, cr , cross_section, mass])
-        a_priori_estimate = np.array([float(i) for i in a_priori_estimate[1:]]) #cast to float for compatibility with Orekit functions
-        a_priori_estimate = np.array([initial_t, *a_priori_estimate])
-        
-        observations_df_full = ephemeris_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-        obs_lengths_to_test = [35, 70]
-        estimate_drag = False
-        force_model_configs = [
-            # {'gravity': True},
-            # {'gravity': True, '3BP': True},
-            # {'gravity': True, '3BP': True, 'drag': True},
-            # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-            # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'ceres_erp': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
+        ephemeris_df = ephemeris_df.iloc[::2, :]  
 
-        covariance_matrices = []
-        optimized_states = []
-        for i, force_model_config in enumerate(force_model_configs):
-            if not force_model_config.get('drag', False):
-                estimate_drag = False
-                print(f"Force model doesn't have drag. Setting estimate_drag to {estimate_drag}.")
-            # if force_model_config.get('boxwing_srp', False) or force_model_config.get('boxwing_drag', False):
-            #     boxwing_info = get_boxwing_config(sat_name)
-            #     print(f"boxwing force model requested. Using boxwing info\n: {boxwing_info}")
-            # else:
-            boxwing_info = None
+        arc_length = 30
+        for arc in range(num_arcs):
+            start_index = arc * arc_length
+            end_index = start_index + arc_length
+            arc_df = ephemeris_df.iloc[start_index:end_index]
 
-            for obs_length in obs_lengths_to_test:
-                observations_df = observations_df_full.iloc[:obs_length]
+            initial_values = arc_df.iloc[0][['x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+            initial_t = arc_df.iloc[0]['UTC']  # Handle Timestamp separately
+
+            # Convert other values to float and concatenate
+            initial_vals = np.array(initial_values.tolist() + [cd, cr, cross_section, mass], dtype=float)
+
+            # Now initial_t is separate and initial_vals contains the rest of the values
+            a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
+
+            observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+            estimate_drag = False
+            force_model_configs = [
+                {'gravity': True},
+                {'gravity': True, '3BP': True},
+                {'gravity': True, '3BP': True, 'drag': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
+                # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'ceres_erp': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
+
+            for i, force_model_config in enumerate(force_model_configs):
+                if not force_model_config.get('drag', False):
+                    estimate_drag = False
+
+                boxwing_info = None
+
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=boxwing_info)
-                #save each run as a set of .npy files in its own folder with the datetimestamp and the force model config, number of observations, whether drag was estimated in the title
-                #save the optimized states, covariance matrices, residuals, RMSs
-
-                # Save data and find the index of the minimum RMS
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
                 output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
@@ -530,232 +481,7 @@ if __name__ == "__main__":
                 np.save(f"{output_folder}/cov_mats.npy", cov_mats)
                 np.save(f"{output_folder}/residuals.npy", residuals)
                 np.save(f"{output_folder}/RMSs.npy", RMSs)
-
                 min_RMS_index = np.argmin(RMSs)
                 optimized_state = optimized_states[min_RMS_index]
-                covariance_matrix = cov_mats[min_RMS_index]
-                final_RMS = RMSs[min_RMS_index]
                 residuals_final = residuals[min_RMS_index]
-                # Creating a large figure for combined plots
-                fig = plt.figure(figsize=(12, 9))
-                sns.set(style="whitegrid")
-                gs = GridSpec(4, 4, figure=fig)
-
-                # Scatter plots for position and velocity residuals
-                ax1 = fig.add_subplot(gs[0, :])
-                ax2 = fig.add_subplot(gs[1, :])
-
-                # Position residuals plot
-                sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,0], ax=ax1, color="xkcd:blue", s=10, label='x')
-                sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,1], ax=ax1, color="xkcd:green", s=10, label='y')
-                sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,2], ax=ax1, color="xkcd:red", s=10, label='z')
-                ax1.set_ylabel("Position Residual (m)")
-                ax1.set_xlabel("Observation time (UTC)")
-                ax1.legend()
-
-                # Velocity residuals plot
-                sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,3], ax=ax2, color="xkcd:purple", s=10, label='u')
-                sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,4], ax=ax2, color="xkcd:orange", s=10, label='v')
-                sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,5], ax=ax2, color="xkcd:yellow", s=10, label='w')
-                ax2.set_ylabel("Velocity Residual (m/s)")
-                ax2.set_xlabel("Observation time (UTC)")
-                ax2.legend()
-
-                # Histograms for position and velocity residuals
-                ax3 = fig.add_subplot(gs[2, :2])
-                ax4 = fig.add_subplot(gs[2, 2:])
-
-                sns.histplot(residuals_final[:,0:3], bins=20, ax=ax3, palette=["xkcd:blue", "xkcd:green", "xkcd:red"], legend=False)
-                ax3.set_xlabel("Position Residual (m)")
-                ax3.set_ylabel("Frequency")
-                ax3.legend(['x', 'y', 'z'])
-
-                sns.histplot(residuals_final[:,3:6], bins=20, ax=ax4, palette=["xkcd:purple", "xkcd:orange", "xkcd:yellow"], legend=False)
-                ax4.set_xlabel("Velocity Residual (m/s)")
-                ax4.set_ylabel("Frequency")
-                ax4.legend(['u', 'v', 'w'])
-
-                # Format initial and optimized states with 3 significant figures
-                # apriori2sf = np.round(a_priori_estimate[1:-3], 3)
-                # optimized_state_2sf = np.round(optimized_state, 3)
-                formatted_initial_state = format_array(a_priori_estimate)
-                formatted_optimized_state = format_array(optimized_state)
-                # Table for force model configuration, initial state, and final estimated state
-                ax5 = fig.add_subplot(gs[3, :])
-                force_model_data = [['Force Model Config', str(force_model_config)],
-                                    ['Initial State', formatted_initial_state],
-                                    ['Final Estimated State', formatted_optimized_state]]
-                table = plt.table(cellText=force_model_data, colWidths=[0.5 for _ in force_model_data[0]], loc='center', cellLoc='left')
-                ax5.axis('off')
-                table.auto_set_font_size(False)
-                table.set_fontsize(10)
-                table.scale(1.0, 1.7)
-
-                #Overall title with spacecraft name
-                plt.suptitle(f"Residuals (O-C) for best BLS iteration. \nRMS: {final_RMS:.3f} \n{sat_name}", y=0.95, fontsize=16)
-
-                # Adjust layout
-                plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.3)
-
-                # Save the combined plot
-                #make a folder for the spacecraft if it doesn't exist
-                sat_name_folder = f"output/OD_BLS/Tapley/combined_plots/{sat_name}"
-                if not os.path.exists(sat_name_folder):
-                    os.makedirs(sat_name_folder)
-                #now make a folder for the number of observations if it doesn't exist
-                obs_length_folder = f"{sat_name_folder}/{len(observations_df)}"
-                if not os.path.exists(obs_length_folder):
-                    os.makedirs(obs_length_folder)
-                print(f"saving to {obs_length_folder}/fmodel_{i}_estdrag_{estimate_drag}.png")
-                plt.savefig(f"{obs_length_folder}/fmodel_{i}_estdrag_{estimate_drag}.png")
-                plt.close()
-
-    #         date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    #         folder_path = "output/OD_BLS/Tapley/saved_runs"
-    #         output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
-    #         os.makedirs(output_folder)
-    #         np.save(f"{output_folder}/optimized_states.npy", optimized_states)
-    #         np.save(f"{output_folder}/cov_mats.npy", cov_mats)
-    #         np.save(f"{output_folder}/residuals.npy", residuals)
-    #         np.save(f"{output_folder}/RMSs.npy", RMSs)
-
-    #         #find the index of the minimum RMS
-    #         min_RMS_index = np.argmin(RMSs)
-    #         optimized_state = optimized_states[min_RMS_index]
-    #         covariance_matrix = cov_mats[min_RMS_index]
-    #         final_RMS = RMSs[min_RMS_index]
-    #         residuals_final = residuals[min_RMS_index]
-    #         covariance_matrices.append(covariance_matrix)
-
-    #         # Create two subplots: one for position, one for velocity
-    #         fig, axs = plt.subplots(2, 1, figsize=(8, 6))
-
-    #         # Position residuals plot
-    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,0], s=3, label='x', c="xkcd:blue")
-    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,1], s=3, label='y', c="xkcd:green")
-    #         axs[0].scatter(observations_df['UTC'], residuals_final[:,2], s=3, label='z', c="xkcd:red")
-    #         axs[0].set_ylabel("Position Residual (m)")
-    #         # if estimate_drag:
-    #         #     axs[0].set_ylim(-3, 3)
-    #         # else:
-    #         #     axs[0].set_ylim(-10, 10)
-    #         axs[0].legend(['x', 'y', 'z'])
-    #         axs[0].grid(True)
-
-    #         # Velocity residuals plot
-    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,3], s=3, label='xv', c="xkcd:purple")
-    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,4], s=3, label='yv', c="xkcd:orange")
-    #         axs[1].scatter(observations_df['UTC'], residuals_final[:,5], s=3, label='zv', c="xkcd:yellow")
-    #         axs[1].set_xlabel("Observation time (UTC)")
-    #         axs[1].set_ylabel("Velocity Residual (m/s)")
-    #         # if estimate_drag:
-    #         #     axs[1].set_ylim(-3e-3, 3e-3)
-    #         # else:
-    #         #     axs[1].set_ylim(-10e-10, 10e-10)
-    #         axs[1].legend(['xv', 'yv', 'zv'])
-    #         axs[1].grid(True)
-
-    #         # Shared title, rotation of x-ticks, and force model text
-    #         plt.suptitle(f"Residuals (O-C) for final BLS iteration. \nRMS: {final_RMS:.3f}")
-    #         #
-    #         plt.xticks(rotation=45)
-    #         force_model_keys_str = keys_to_string(force_model_config)
-    #         wrapped_text = textwrap.fill(force_model_keys_str, 20)
-    #         axs[1].text(0.8, -0.2, f"Force model:\n{wrapped_text}", 
-    #                     transform=axs[1].transAxes,
-    #                     fontsize=10, 
-    #                     verticalalignment='bottom',
-    #                     bbox=dict(facecolor='white', alpha=0.3))
-
-    #         # Save the figure
-    #         save_to = f"output/OD_BLS/Tapley/estimation_experiment/new_fmodel_{i}_#pts_{len(observations_df)}.png"
-    #         if estimate_drag:
-    #             save_to = f"output/OD_BLS/Tapley/estimation_experiment/estim_drag_fmodel_{i}_#pts_{len(observations_df)}_.png"
-    #         plt.tight_layout()
-    #         plt.savefig(save_to)
-
-    #         #plot histograms of residuals
-    #         plt.figure()
-    #         plt.hist(residuals_final[:,0], bins=20, label='x', color="xkcd:blue")
-    #         plt.hist(residuals_final[:,1], bins=20, label='y', color="xkcd:green")
-    #         plt.hist(residuals_final[:,2], bins=20, label='z', color="xkcd:red")
-    #         plt.hist(residuals_final[:,3], bins=20, label='xv', color="xkcd:purple")
-    #         plt.hist(residuals_final[:,4], bins=20, label='yv', color="xkcd:orange")
-    #         plt.hist(residuals_final[:,5], bins=20, label='zv', color="xkcd:yellow")
-    #         plt.title("Residuals (O-C) for final BLS iteration")
-    #         plt.xlabel("Residual (m)")
-    #         plt.ylabel("Frequency")
-    #         force_model_keys_str = keys_to_string(force_model_config)
-    #         wrapped_text = textwrap.fill(force_model_keys_str, 20)
-    #         plt.text(0.8, 0.2, f"Force model:\n{wrapped_text}", 
-    #                 transform=plt.gca().transAxes,
-    #                 fontsize=10, 
-    #                 verticalalignment='bottom',
-    #                 bbox=dict(facecolor='white', alpha=0.5))
-    #         plt.legend(['x', 'y', 'z', 'xv', 'yv', 'zv'])
-    #         plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/hist_force_model_{i}_#pts_{len(observations_df)}.png")
-
-    #         #ECI covariance matrix
-    #         if estimate_drag:
-    #             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
-    #         else:
-    #             labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
-    #         log_norm = SymLogNorm(linthresh=1e-10, vmin=covariance_matrix.min(), vmax=covariance_matrix.max())
-    #         plt.figure(figsize=(8, 6))
-    #         sns.heatmap(covariance_matrix, annot=True, fmt=".3e", xticklabels=labels, yticklabels=labels, cmap="viridis", norm=log_norm)
-    #         plt.title(f"No. obs:{len(observations_df)}, force model:{i}")
-    #         save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}.png"
-    #         if estimate_drag:
-    #             save_to = f"output/OD_BLS/Tapley/estimation_experiment/covMat_#pts_{len(observations_df)}_config{i}_estim_drag.png"
-    #         plt.savefig(save_to)
-    
-    # relative_differences = []
-    # for j in range(1, len(covariance_matrices)):
-    #     difference_matrix = covariance_matrices[j] - covariance_matrices[j-1]
-    #     if estimate_drag:
-    #         labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel', 'Cd']
-    #     else:
-    #         labels = ['x_pos', 'y_pos', 'z_pos', 'x_vel', 'y_vel', 'z_vel']
-    #     # Plotting the difference as a heatmap
-    #     plt.figure(figsize=(10, 8))
-    #     sns.heatmap(difference_matrix, annot=True, fmt=".3e",xticklabels=labels, yticklabels=labels, cmap="coolwarm", center=0)
-    #     plt.title(f'Difference in Covariance Matrix: Run {j} vs Run {j-1}')
-    #     plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/diff_covmat_run_{j}_vs_{j-1}.png')
-
-    # correlation_matrices =  calculate_cross_correlation_matrix(covariance_matrices)
-    # for j in range(len(correlation_matrices)):
-    #     # Plotting the correlation matrix as a heatmap
-    #     plt.figure(figsize=(10, 8))
-    #     sns.heatmap(correlation_matrices[j], annot=True, fmt=".3f", cmap="coolwarm", center=0)
-    #     plt.title(f'Correlation Matrix: Run {j}')
-    #     plt.xlabel('Components')
-    #     plt.ylabel('Components')
-    #     plt.savefig(f'output/OD_BLS/Tapley/estimation_experiment/corr_covmat_run_{j}.png')
-
-    # # Plot a bar chart of the final Cd values
-    # if estimate_drag:
-    #     plt.figure()
-    #     bars = plt.bar(np.arange(len(optimized_states)), [i[-1] for i in optimized_states])
-
-    #     # Adding labels on each bar
-    #     for bar in bars:
-    #         yval = bar.get_height()
-    #         plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.3f}', va='bottom', ha='center')
-
-    #     plt.xticks(np.arange(len(optimized_states)), [f"Run {i}" for i in range(len(optimized_states))])
-    #     plt.title("Cd values estimated by BLS under different force models")
-    #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
-
-    #     #plot a linegraph of the Cd values at each iteration
-    #     plt.figure()
-    #     for optimized_state in optimized_states:
-    #         plt.plot(np.arange(len(optimized_state)), optimized_state[-1], label=f"Run {i}")
-    #     plt.xlabel("Iteration")
-    #     plt.ylabel("Cd")
-    #     plt.title("Cd values at each iteration")
-    #     plt.legend()
-    #     plt.savefig(f"output/OD_BLS/Tapley/estimation_experiment/Cd_values_iter_#fmodels_{len(optimized_states)}_#pts_{len(observations_df)}.png")
-
-#TODO: make it easier to switch atmospheric density models
-#TODO: consider using a dictionary to pass the state vector to avoid all this awkward slicing of arrays that is more error prone
-#TODO: pass satellite mass as a part of the state vector
+                combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc, estimate_drag, format_array)

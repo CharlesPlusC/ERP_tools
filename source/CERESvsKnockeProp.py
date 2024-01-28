@@ -73,7 +73,7 @@ def main(TLE, sat_name):
     # 2460065.5000000
     # jd_end = jd_start + 1/24
     # dt = 60  # Seconds
-    # tle_time = TLE_time(TLE) ##The TLE I have is not actually in the daterange of the CERES dataset I downloaded so not using this now
+    # tle_time = TLE_time(TLE) 
     utc_start = jd_to_utc(jd_start)
 
     # Load data

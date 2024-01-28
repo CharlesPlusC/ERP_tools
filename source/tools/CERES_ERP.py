@@ -12,29 +12,28 @@ from orekit import JArray_double
 from java.util import Collections
 from java.util.stream import Stream
 
-
 from tools.utilities import hcl_acc_from_sc_state, find_nearest_index, lla_to_ecef, julian_day_to_ceres_time
 from source.tools.ceres_data_processing import calculate_satellite_fov, is_within_fov_vectorized, sat_normal_surface_angle_vectorized
 import numpy as np
 
-def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist, sc_mass, sc_area):
-    # Earth radius in meters
+def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_alt, horizon_dist, sc_mass, sc_area, cr):
+    # Earth radius in meters and other constants
     R = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+    speed_of_light = 299792458  # Speed of light in m/s
+
     # Latitude and longitude arrays
-    lat = np.arange(-89.5, 90.5, 1)  # 1-degree step from -89.5 to 89.5
-    lon = np.arange(-179.5, 180.5, 1)  # 1-degree step from -179.5 to 179.5
+    lat = np.arange(-89.5, 90.5, 1)
+    lon = np.arange(-179.5, 180.5, 1)
 
     # Mesh grid creation
     lon2d, lat2d = np.meshgrid(lon, lat)
 
-    # FOV calculations
+    # FOV calculations and adjusted radiation data
     fov_mask = is_within_fov_vectorized(sat_lat, sat_lon, horizon_dist, lat2d, lon2d)
     radiation_data_fov = np.ma.masked_where(~fov_mask, radiation_data[ceres_time_index, :, :])
     cos_thetas = sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, lat2d[fov_mask], lon2d[fov_mask])
     cosine_factors_2d = np.zeros_like(radiation_data_fov)
     cosine_factors_2d[fov_mask] = cos_thetas
-
-    # Adjusting radiation data
     adjusted_radiation_data = radiation_data_fov * cosine_factors_2d
 
     # Satellite position and distance calculations
@@ -48,39 +47,37 @@ def compute_erp_at_sc(ceres_time_index, radiation_data, sat_lat, sat_lon, sat_al
     delta_lat = np.abs(lat[1] - lat[0])
     delta_lon = np.abs(lon[1] - lon[0])
     area_pixel = R**2 * np.radians(delta_lat) * np.radians(delta_lon) * np.cos(np.radians(lat2d))  # Convert to m^2
-    P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2) # map of power flux in W/m^2 for each pixel
+    P_rad = adjusted_radiation_data * area_pixel / (np.pi * distances**2)  # Power flux in W/m^2
 
-    #need to convert the vector_diff to eci frame
-    unit_vectors = vector_diff / distances[..., np.newaxis] * 1000 # Convert to unit vectors in meters
-    radiation_force_vectors = unit_vectors * P_rad[..., np.newaxis] / (299792458)  # Convert to Newtons
+    # Unit vectors in meters
+    unit_vectors = vector_diff / distances[..., np.newaxis] * 1000
+
+    # Calculate radiation force vectors
+    absorbed_radiation_force_vectors = unit_vectors * P_rad[..., np.newaxis] / speed_of_light * (1 - cr)  # Absorbed component
+    reflected_radiation_force_vectors = unit_vectors * P_rad[..., np.newaxis] / speed_of_light * cr  # Reflected component
+
     # Summing all force vectors
-    total_radiation_force_vector = np.sum(radiation_force_vectors[fov_mask], axis=0)
-    # Satellite area in square meters
-    satellite_area = sc_area
+    total_absorbed_force_vector = np.sum(absorbed_radiation_force_vectors[fov_mask], axis=0)
+    total_reflected_force_vector = np.sum(reflected_radiation_force_vectors[fov_mask], axis=0)
 
-    # Total force due to radiation pressure (not including reflection for now)
-    total_force = total_radiation_force_vector * satellite_area
-
-    # Satellite mass in kilograms
-    satellite_mass = sc_mass
+    # Total force due to radiation pressure
+    total_force = (total_absorbed_force_vector + total_reflected_force_vector) * sc_area
 
     # Calculate acceleration
-    acceleration_vector = total_force / satellite_mass
+    acceleration_vector = total_force / sc_mass
 
+    # Other calculations (remaining unchanged)
     scalar_acc = np.linalg.norm(acceleration_vector)
-    print(f"CERES ERP ACC_n:{scalar_acc}m/s^2")
-
-    down_vector = - sat_ecef / np.linalg.norm(sat_ecef)  # Normalize the satellite's position vector to get the down vector
-    total_radiation_vector_normalized = total_radiation_force_vector / np.linalg.norm(total_radiation_force_vector)  # Normalize the total radiation vector
-
-    cos_theta = np.dot(total_radiation_vector_normalized, down_vector)  # Cosine of the angle
-    angle_radians = np.arccos(cos_theta)  # Angle in radians
-    angle_degrees = np.rad2deg(angle_radians)  # Convert to degrees
+    down_vector = -sat_ecef / np.linalg.norm(sat_ecef)
+    total_radiation_vector_normalized = total_force / np.linalg.norm(total_force)
+    cos_theta = np.dot(total_radiation_vector_normalized, down_vector)
+    angle_radians = np.arccos(cos_theta)
+    angle_degrees = np.rad2deg(angle_radians)
 
     return np.array(acceleration_vector), scalar_acc, angle_degrees
 
 class CERES_ERP_ForceModel(PythonForceModel):
-    def __init__(self, ceres_times, combined_radiation_data, sc_mass, sc_area):
+    def __init__(self, ceres_times, combined_radiation_data, sc_mass, sc_area, cr):
         super().__init__()
         self.scalar_acc_data = []
         self.erp_angle_data = []
@@ -88,9 +85,9 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.ceres_times = ceres_times
         self.combined_radiation_data = combined_radiation_data
         self.rtn_accs = []
-        self.eci_accs = []
         self.sc_mass = sc_mass
         self.sc_area = sc_area
+        self.cr = cr
 
     def acceleration(self, spacecraftState, doubleArray):
         pos = spacecraftState.getPVCoordinates().getPosition()
@@ -110,7 +107,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
         longitude_deg = np.rad2deg(longitude)
         ceres_time = julian_day_to_ceres_time(jd_time)
         ceres_indices = find_nearest_index(self.ceres_times, ceres_time)
-        erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, self.combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist, self.sc_mass, self.sc_area)
+        erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, self.combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist, self.sc_mass, self.sc_area, self.cr)
 
         eci = FramesFactory.getEME2000()
         transform = ecef.getTransformTo(eci, spacecraftState.getDate())
@@ -142,7 +139,6 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.scalar_acc_data.append(scalar_acc)
         self.erp_angle_data.append(erp_angle)
         self.time_data.append(jd_time)
-        self.eci_accs.append(erp_vec_eci)
 
         orekit_erp_vec = Vector3D(erp_vec_eci.getX(), erp_vec_eci.getY(), erp_vec_eci.getZ())
         
