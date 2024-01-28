@@ -59,11 +59,11 @@ dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices
 solfsmy_data_source = DataSource(solfsmy_file)
 dtcfile_data_source = DataSource(dtcfile_file)
 
-#load CERES dataset, combine longwave and shortwave, extract the associated times in UTC format
-# ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
-# data = nc.Dataset(ceres_dataset_path)
-# ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
-# combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
+# load CERES dataset, combine longwave and shortwave, extract the associated times in UTC format
+ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
+data = nc.Dataset(ceres_dataset_path)
+ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
 def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
 
@@ -128,6 +128,14 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
         propagator.addForceModel(knockeModel)
 
+    if force_model_config.get('relativity', False):
+        relativity = Relativity(Constants.WGS84_EARTH_MU)
+        propagator.addForceModel(relativity)
+
+    if config_flags.get('ceres_erp', False):
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+        propagator.addForceModel(ceres_erp_force_model)
+
     # Atmospheric drag
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
@@ -141,9 +149,6 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
-    # if config_flags.get('ceres_erp', False):
-    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
-    #     propagator.addForceModel(ceres_erp_force_model)
 
     return propagator
 
@@ -231,6 +236,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
+        print(f"solar radiation: {solar_radiation_eci_t0}")
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -241,14 +247,24 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         force_models.append(knockeModel)
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
+        print(f"knocke erp: {knocke_eci_t0}")
         accelerations_t0+=knocke_eci_t0
 
-    # if force_model_config.get('ceres_erp', False):
-    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
-    #     force_models.append(ceres_erp_force_model)
-    #     ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
-    #     ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
-    #     accelerations_t0+=ceres_erp_eci_t0
+    if force_model_config.get('ceres_erp', False):
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section) # pass the time and radiation data to the force model
+        force_models.append(ceres_erp_force_model)
+        ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
+        ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
+        print(f"ceres erp: {ceres_erp_eci_t0}")
+        accelerations_t0+=ceres_erp_eci_t0
+
+    if force_model_config.get('relativity', False):
+        relativity = Relativity(Constants.WGS84_EARTH_MU)
+        force_models.append(relativity)
+        relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, relativity)
+        relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
+        print(f"relativity: {relativity_eci_t0}")
+        accelerations_t0+=relativity_eci_t0
 
     ###NOTE: this force model has to stay last in the if-loop (see below)
     if force_model_config.get('drag', False):
@@ -445,7 +461,7 @@ def format_array(arr, precision=3):
     return np.array2string(arr, precision=precision, separator=', ', suppress_small=True)
 
 if __name__ == "__main__":
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
+    sat_names_to_test = ["TanDEM-X", "TerraSAR-X","GRACE-FO-A", "GRACE-FO-B"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         # sat_name = "STARLINK-47633"
@@ -455,7 +471,7 @@ if __name__ == "__main__":
         cr = sat_info['cr']
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
-        ephemeris_df = ephemeris_df.iloc[::5, :]#return only every 5th row
+        ephemeris_df = ephemeris_df.iloc[::2, :]#return only every 5th row
         initial_X = ephemeris_df['x'].iloc[0]
         initial_Y = ephemeris_df['y'].iloc[0]
         initial_Z = ephemeris_df['z'].iloc[0]
@@ -476,16 +492,16 @@ if __name__ == "__main__":
         a_priori_estimate = np.array([initial_t, *a_priori_estimate])
         
         observations_df_full = ephemeris_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-        obs_lengths_to_test = [35, 70, 105, 140]
+        obs_lengths_to_test = [35, 70]
         estimate_drag = False
         force_model_configs = [
-            {'gravity': True},
-            {'gravity': True, '3BP': True},
-            {'gravity': True, '3BP': True, 'drag': True},
-            # {'gravity': True, '3BP': True, 'drag': True, 'boxwing_srp': True},
-            # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'ceres_erp': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'knocke_erp': True}]
+            # {'gravity': True},
+            # {'gravity': True, '3BP': True},
+            # {'gravity': True, '3BP': True, 'drag': True},
+            # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+            # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
+            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'ceres_erp': True},
+            {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
 
         covariance_matrices = []
         optimized_states = []
@@ -497,7 +513,7 @@ if __name__ == "__main__":
             #     boxwing_info = get_boxwing_config(sat_name)
             #     print(f"boxwing force model requested. Using boxwing info\n: {boxwing_info}")
             # else:
-                boxwing_info = None
+            boxwing_info = None
 
             for obs_length in obs_lengths_to_test:
                 observations_df = observations_df_full.iloc[:obs_length]
@@ -590,6 +606,7 @@ if __name__ == "__main__":
                 obs_length_folder = f"{sat_name_folder}/{len(observations_df)}"
                 if not os.path.exists(obs_length_folder):
                     os.makedirs(obs_length_folder)
+                print(f"saving to {obs_length_folder}/fmodel_{i}_estdrag_{estimate_drag}.png")
                 plt.savefig(f"{obs_length_folder}/fmodel_{i}_estdrag_{estimate_drag}.png")
                 plt.close()
 

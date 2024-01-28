@@ -88,6 +88,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.ceres_times = ceres_times
         self.combined_radiation_data = combined_radiation_data
         self.rtn_accs = []
+        self.eci_accs = []
         self.sc_mass = sc_mass
         self.sc_area = sc_area
 
@@ -141,6 +142,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
         self.scalar_acc_data.append(scalar_acc)
         self.erp_angle_data.append(erp_angle)
         self.time_data.append(jd_time)
+        self.eci_accs.append(erp_vec_eci)
 
         orekit_erp_vec = Vector3D(erp_vec_eci.getX(), erp_vec_eci.getY(), erp_vec_eci.getZ())
         
@@ -157,3 +159,7 @@ class CERES_ERP_ForceModel(PythonForceModel):
 
     def getEventDetectors(self):
         return Stream.empty()
+    
+    def getParameters(self):
+        blanklist = JArray_double(0)
+        return blanklist

@@ -33,7 +33,7 @@ PROPAGATION_TIME = 3600.0 * 24.0 * 7.0
 INTEGRATOR_MIN_STEP = 0.01
 INTEGRATOR_MAX_STEP = 120.0
 INTEGRATOR_INIT_STEP = 30.0
-POSITION_TOLERANCE = 1e-3
+POSITION_TOLERANCE = 1
 
 def calculate_position_differences(end_state1, end_state2):
     position1 = end_state1.getPVCoordinates().getPosition()
@@ -69,6 +69,8 @@ def main(TLE, sat_name):
     # CERES SYN1Deg Dataset path and TLE data
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
     jd_start = 2460069.5000000
+
+    # 2460065.5000000
     # jd_end = jd_start + 1/24
     # dt = 60  # Seconds
     # tle_time = TLE_time(TLE) ##The TLE I have is not actually in the daterange of the CERES dataset I downloaded so not using this now
@@ -253,7 +255,7 @@ def main(TLE, sat_name):
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_keplerian_element_data.npy', keplerian_element_data)
     np.save(f'output/ERP_prop/saved_runs/{timenow}_{sat_name}_state_vector_data.npy', state_vector_data)
 
-    plt.figure(figsize=(12, 12))
+    plt.figure(figsize=(8, 8))
 
     # Plot RTN components for CERES ERP
     plt.subplot(4, 1, 1)
