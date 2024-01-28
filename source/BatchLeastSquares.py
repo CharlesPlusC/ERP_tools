@@ -206,7 +206,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
-        print(f"solar radiation: {solar_radiation_eci_t0}")
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -217,7 +216,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         force_models.append(knockeModel)
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
-        print(f"knocke erp: {knocke_eci_t0}")
         accelerations_t0+=knocke_eci_t0
 
     if force_model_config.get('ceres_erp', False):
@@ -225,7 +223,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         force_models.append(ceres_erp_force_model)
         ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
         ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
-        print(f"ceres erp: {ceres_erp_eci_t0}")
         accelerations_t0+=ceres_erp_eci_t0
 
     if force_model_config.get('relativity', False):
@@ -233,7 +230,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         force_models.append(relativity)
         relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, relativity)
         relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
-        print(f"relativity: {relativity_eci_t0}")
         accelerations_t0+=relativity_eci_t0
 
     ###NOTE: this force model has to stay last in the if-loop (see below)
@@ -427,9 +423,25 @@ def format_array(arr, precision=3):
     """Format numpy array elements to strings with specified precision."""
     return np.array2string(arr, precision=precision, separator=', ', suppress_small=True)
 
+def generate_config_name(config_dict, arc_number):
+    config_keys = '+'.join(key for key, value in config_dict.items() if value)
+    return f"arc{arc_number}_{config_keys}"
+
 if __name__ == "__main__":
-    sat_names_to_test = ["TanDEM-X", "TerraSAR-X","GRACE-FO-A", "GRACE-FO-B"]
-    num_arcs = 2
+    # sat_names_to_test = ["TanDEM-X"]
+    sat_names_to_test = ["TanDEM-X", "TerraSAR-X", "GRACE-FO-A", "GRACE-FO-B"]
+    num_arcs = 3
+    arc_length = 30 # in minutes
+    prop_length = 60 * 60 * 48 # 48 hour
+    force_model_configs = [
+                # {'gravity': True},
+                # {'gravity': True, '3BP': True},
+                {'gravity': True, '3BP': True, 'drag': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
+                # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'ceres_erp': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
+
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         sat_info = get_satellite_info(sat_name)
@@ -437,41 +449,36 @@ if __name__ == "__main__":
         cr = sat_info['cr']
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
-        ephemeris_df = ephemeris_df.iloc[::2, :]  
+        ephemeris_df = ephemeris_df.iloc[::2, :]
 
-        arc_length = 15
+        time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
+        arc_step = int(arc_length / time_step)  # Convert arc_length to number of rows
+
+        rms_results = {}  # Dictionary to store RMS values for each configuration
+
         for arc in range(num_arcs):
-            start_index = arc * arc_length
-            end_index = start_index + arc_length
+            start_index = arc * arc_step
+            end_index = start_index + arc_step
             arc_df = ephemeris_df.iloc[start_index:end_index]
 
             initial_values = arc_df.iloc[0][['x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-            initial_t = arc_df.iloc[0]['UTC']  # Handle Timestamp separately
-            final_t = arc_df.iloc[-1]['UTC']
-            # Convert other values to float and concatenate
+            initial_t = arc_df.iloc[0]['UTC']
+            final_prop_t = initial_t + datetime.timedelta(seconds=prop_length)
+            prop_observations_df = ephemeris_df[(ephemeris_df['UTC'] >= initial_t) & (ephemeris_df['UTC'] <= final_prop_t)]
             initial_vals = np.array(initial_values.tolist() + [cd, cr, cross_section, mass], dtype=float)
 
             # Now initial_t is separate and initial_vals contains the rest of the values
             a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
 
             observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
+            #make a dataframe of observations from ephemeris_df that goes from initial_t to final_prop_t
             estimate_drag = False
-            force_model_configs = [
-                {'gravity': True},
-                {'gravity': True, '3BP': True},
-                {'gravity': True, '3BP': True, 'drag': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
-                # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'ceres_erp': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
 
             for i, force_model_config in enumerate(force_model_configs):
                 if not force_model_config.get('drag', False):
                     estimate_drag = False
 
-                boxwing_info = None
-
-                optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=boxwing_info)
+                optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=None)
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
                 output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
@@ -483,14 +490,15 @@ if __name__ == "__main__":
                 min_RMS_index = np.argmin(RMSs)
                 optimized_state = optimized_states[min_RMS_index]
                 residuals_final = residuals[min_RMS_index]
-                combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc, estimate_drag, format_array)
+                # Assume combined_residuals_plot and other necessary functions are defined here
 
-                #now start propagating the optimized state
+                combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc, estimate_drag, lambda arr: str(arr))
+                # Propagation and RMS calculation logic
                 optimized_state_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(optimized_state[0]), float(optimized_state[1]), float(optimized_state[2])),
-                                                Vector3D(float(optimized_state[3]), float(optimized_state[4]), float(optimized_state[5]))),
-                                                FramesFactory.getEME2000(),
-                                                datetime_to_absolutedate(initial_t),
-                                                Constants.WGS84_EARTH_MU)
+                                                                    Vector3D(float(optimized_state[3]), float(optimized_state[4]), float(optimized_state[5]))),
+                                                       FramesFactory.getEME2000(),
+                                                       datetime_to_absolutedate(initial_t),
+                                                       Constants.WGS84_EARTH_MU)
                 
                 tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, optimized_state_orbit, optimized_state_orbit.getType())
                 integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
@@ -500,26 +508,56 @@ if __name__ == "__main__":
                 optimized_state_propagator.setOrbitType(OrbitType.CARTESIAN)
                 optimized_state_propagator.setInitialState(initialState)
 
-                #now add all the force models
-                optimized_state_propagator = configure_force_models(optimized_state_propagator,cr,cross_section, cd,**force_model_config)
+                # Add all the force models
+                optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd, **force_model_config)
                 ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()  # Get the ephemeris generator
-                end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_t))
+                end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t))
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
 
-                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_t), INTEGRATOR_INIT_STEP)
+                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t), INTEGRATOR_INIT_STEP)
                 state_vector_data = (times, state_vectors)
 
-                #print the times and state vectors
-                print(f"Times: {times}")
-                print(f"State vectors: {state_vectors}")
+                observation_state_vectors = prop_observations_df[['x', 'y', 'z']].values
+                observation_times = pd.to_datetime(prop_observations_df['UTC'].values)
 
-                #print the corresponding times and state vectors from the observations
-                print(f"Observation times: {observations_df['UTC'].values}")
-                print(f"Observation state vectors: {observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values}")
-                
-                # print the 3D position difference between the optimized state and the observations
-                print(f"Optimized state: {optimized_state[1:7]}")
-                print(f"Observation state: {observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values[0]}")
-                print(f"Position difference: {optimized_state[1:4] - observations_df[['x', 'y', 'z']].values[0]}")
-                print(f"Velocity difference: {optimized_state[4:7] - observations_df[['xv', 'yv', 'zv']].values[0]}")
+                # Calculate RMS and store it
+                rms_values = []
+                for state_vector, observation_state_vector in zip(state_vectors, observation_state_vectors):
+                    rms = np.sqrt(np.mean(np.square(state_vector[:3] - observation_state_vector)))
+                    rms_values.append(rms)
 
+                # Store RMS values in the dictionary
+                config_name = generate_config_name(force_model_config, arc + 1)
+                rms_results[config_name] = rms_results.get(config_name, []) + [rms_values]
+
+        # Setting seaborn style
+        sns.set_style("whitegrid")
+        # Define a color palette
+        palette = sns.color_palette("husl", len(rms_results))
+        # Plotting RMS values for this spacecraft
+        plt.figure(figsize=(10, 6))
+        for i, (config_name, rms_values_list) in enumerate(rms_results.items()):
+            for rms_values in rms_values_list:
+                color = palette[i]
+                plt.plot(observation_times, rms_values, marker='o', label=config_name, color=color)
+                final_rms = rms_values[-1]
+
+                # Adjust the text position slightly for each line to avoid overlap
+                text_y_position = final_rms * (1 + 0.05 * i)
+                plt.text(observation_times[-1], text_y_position, f"{final_rms:.2e}", color=color, verticalalignment='bottom')
+
+        plt.xlabel('Time')
+        plt.ylabel('RMS (m)')
+        plt.title(f'Difference from SP3 orbit for {sat_name}')
+        plt.legend()
+        plt.grid(True)
+        plt.yscale('log')  # Logarithmic scale for y-axis
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        # Save the plot in the specified directory
+        output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        plt.savefig(f"{output_dir}/{sat_name}_RMS_plot.png")
+        plt.close()  # Close the plot to avoid displaying it inline
