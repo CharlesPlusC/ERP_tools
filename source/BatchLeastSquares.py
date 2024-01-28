@@ -29,7 +29,7 @@ from org.orekit.models.earth.atmosphere import JB2008
 from org.orekit.data import DataSource
 from org.orekit.time import TimeScalesFactory   
 
-from tools.utilities import extract_acceleration, keys_to_string, download_file_url,get_boxwing_config, calculate_cross_correlation_matrix, get_satellite_info
+from tools.utilities import extract_acceleration, keys_to_string, download_file_url,get_boxwing_config, calculate_cross_correlation_matrix, get_satellite_info, pos_vel_from_orekit_ephem, keplerian_elements_from_orekit_ephem
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
@@ -49,8 +49,8 @@ from matplotlib.gridspec import GridSpec
 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
-INTEGRATOR_INIT_STEP = 15.0
-POSITION_TOLERANCE = 1e-3 # 1 mm
+INTEGRATOR_INIT_STEP = 60.0
+POSITION_TOLERANCE = 1e-2 # 1 cm
 
 # Download SOLFSMY and DTCFILE files for JB2008 model
 solfsmy_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
@@ -119,7 +119,6 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
-
 
     return propagator
 
@@ -440,7 +439,7 @@ if __name__ == "__main__":
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]  
 
-        arc_length = 30
+        arc_length = 15
         for arc in range(num_arcs):
             start_index = arc * arc_length
             end_index = start_index + arc_length
@@ -448,7 +447,7 @@ if __name__ == "__main__":
 
             initial_values = arc_df.iloc[0][['x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
             initial_t = arc_df.iloc[0]['UTC']  # Handle Timestamp separately
-
+            final_t = arc_df.iloc[-1]['UTC']
             # Convert other values to float and concatenate
             initial_vals = np.array(initial_values.tolist() + [cd, cr, cross_section, mass], dtype=float)
 
@@ -485,3 +484,42 @@ if __name__ == "__main__":
                 optimized_state = optimized_states[min_RMS_index]
                 residuals_final = residuals[min_RMS_index]
                 combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc, estimate_drag, format_array)
+
+                #now start propagating the optimized state
+                optimized_state_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(optimized_state[0]), float(optimized_state[1]), float(optimized_state[2])),
+                                                Vector3D(float(optimized_state[3]), float(optimized_state[4]), float(optimized_state[5]))),
+                                                FramesFactory.getEME2000(),
+                                                datetime_to_absolutedate(initial_t),
+                                                Constants.WGS84_EARTH_MU)
+                
+                tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, optimized_state_orbit, optimized_state_orbit.getType())
+                integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
+                integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
+                initialState = SpacecraftState(optimized_state_orbit, mass)
+                optimized_state_propagator = NumericalPropagator(integrator)
+                optimized_state_propagator.setOrbitType(OrbitType.CARTESIAN)
+                optimized_state_propagator.setInitialState(initialState)
+
+                #now add all the force models
+                optimized_state_propagator = configure_force_models(optimized_state_propagator,cr,cross_section, cd,**force_model_config)
+                ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()  # Get the ephemeris generator
+                end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_t))
+                ephemeris = ephemGen_optimized.getGeneratedEphemeris()
+
+                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_t), INTEGRATOR_INIT_STEP)
+                state_vector_data = (times, state_vectors)
+
+                #print the times and state vectors
+                print(f"Times: {times}")
+                print(f"State vectors: {state_vectors}")
+
+                #print the corresponding times and state vectors from the observations
+                print(f"Observation times: {observations_df['UTC'].values}")
+                print(f"Observation state vectors: {observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values}")
+                
+                # print the 3D position difference between the optimized state and the observations
+                print(f"Optimized state: {optimized_state[1:7]}")
+                print(f"Observation state: {observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values[0]}")
+                print(f"Position difference: {optimized_state[1:4] - observations_df[['x', 'y', 'z']].values[0]}")
+                print(f"Velocity difference: {optimized_state[4:7] - observations_df[['xv', 'yv', 'zv']].values[0]}")
+
