@@ -30,7 +30,7 @@ from org.orekit.models.earth.atmosphere import JB2008
 from org.orekit.data import DataSource
 from org.orekit.time import TimeScalesFactory   
 
-from tools.utilities import build_boxwing, HCL_diff, extract_acceleration, keys_to_string, download_file_url,get_boxwing_config, calculate_cross_correlation_matrix, get_satellite_info, pos_vel_from_orekit_ephem, keplerian_elements_from_orekit_ephem
+from tools.utilities import build_boxwing, HCL_diff, extract_acceleration, keys_to_string, download_file_url,build_boxwing, calculate_cross_correlation_matrix, get_satellite_info, pos_vel_from_orekit_ephem, keplerian_elements_from_orekit_ephem
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 # from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
@@ -120,13 +120,10 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
-        if boxwing:
-            radiation_sensitive = boxwing
-        else:
-            radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         onedeg_in_rad = np.radians(1.0)
         angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
-        knockeModel = KnockeRediffusedForceModel(sun, radiation_sensitive, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
+        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
         propagator.addForceModel(knockeModel)
 
     if force_model_config.get('relativity', False):
@@ -275,11 +272,11 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         accelerations_t0+=solar_radiation_eci_t0
 
     if force_model_config.get('knocke_erp', False):
-        if boxwing:
-            radiation_sensitive = boxwing
-        else:
-            radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
-        knockeModel = KnockeRediffusedForceModel(CelestialBodyFactory.getSun(), radiation_sensitive, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, np.radians(1.0))
+        sun = CelestialBodyFactory.getSun()
+        spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        onedeg_in_rad = np.radians(1.0)
+        angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
+        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
         force_models.append(knockeModel)
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
@@ -336,8 +333,11 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
             jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source, dtcfile_data_source)
             utc = TimeScalesFactory.getUTC()
             atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
-            isotropicDrag = IsotropicDrag(float(cross_section), float(cd_perturbed))
-            dragForce = DragForce(atmosphere, isotropicDrag)
+            if boxwing:
+                drag_sensitive = boxwing
+            else:
+                drag_sensitive = IsotropicDrag(float(cross_section), float(cd_perturbed))
+            dragForce = DragForce(atmosphere, drag_sensitive)
             force_models[-1] = dragForce  # Update the drag force model
 
         for force_model in force_models:
@@ -495,9 +495,9 @@ if __name__ == "__main__":
     # sat_names_to_test = ["TanDEM-X", "TerraSAR-X"]
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
     num_arcs = 1
-    arc_length = 90
-    prop_length = 60 * 60 * 24
-    estimate_drag = True
+    arc_length = 60
+    prop_length = 60 * 60 * 3
+    estimate_drag = False
     boxwing = False
     force_model_configs = [
                 # {'gravity': True},
@@ -505,8 +505,8 @@ if __name__ == "__main__":
                 {'gravity': True, '3BP': True, 'drag': True},
                 {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
                 {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True,'ocean_tides': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True,'ocean_tides': True, 'knocke_erp': True, 'relativity': True}]
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True}]
+                # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True,'ocean_tides': True, 'knocke_erp': True, 'relativity': True}]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -544,8 +544,8 @@ if __name__ == "__main__":
             observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
 
             for i, force_model_config in enumerate(force_model_configs):
-                if force_model_config.get('drag', False):
-                    estimate_drag = True
+                if not force_model_config.get('drag', False):
+                    estimate_drag = False
 
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing_model)
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -586,7 +586,7 @@ if __name__ == "__main__":
                 # Add all the force models
                 print(f"propagating with force model config: {force_model_config}")
                 print(f"using estimated drag coeff: {cd}")
-                optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd, **force_model_config)
+                optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd,boxwing, **force_model_config)
                 ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()  # Get the ephemeris generator
                 end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t))
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
@@ -605,7 +605,12 @@ if __name__ == "__main__":
                     rms_values.append(rms)
                 rms_results[config_name] = rms_results.get(config_name, []) + [rms_values]
                 
-                h_diffs, c_diffs, l_diffs = HCL_diff(state_vector_data, observation_state_vectors)
+                print(f"shape of state vectros: {np.shape(state_vectors)}")
+                print(f"shape of observation state vectors: {np.shape(observation_state_vectors)}")
+                h_diffs, c_diffs, l_diffs = HCL_diff(state_vectors, observation_state_vectors)
+                print(f"max H diff: {np.max(h_diffs)}")
+                print(f"max C diff: {np.max(c_diffs)}")
+                print(f"max L diff: {np.max(l_diffs)}")
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
                 hcl_differences['L'][config_name] = hcl_differences['L'].get(config_name, []) + [l_diffs]
@@ -614,13 +619,27 @@ if __name__ == "__main__":
             output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
             # Plot H, C, L differences after processing each satellite
             fig, axs = plt.subplots(3, 1, figsize=(10, 8))
+
             for idx, diff_type in enumerate(['H', 'C', 'L']):
                 for config_name, diffs in hcl_differences[diff_type].items():
-                    axs[idx].plot(observation_times, diffs, label=config_name)
+                    # Flatten diffs and ensure it's a list
+                    flat_diffs = np.array(diffs).flatten()
+
+                    # Debugging print statements
+                    print(f"observation_times shape: {np.shape(observation_times)}")
+                    print(f"{diff_type} diffs shape: {np.shape(flat_diffs)}")
+
+                    # Check if lengths match
+                    if len(observation_times) != len(flat_diffs):
+                        raise ValueError(f"Length mismatch: observation_times ({len(observation_times)}) vs diffs ({len(flat_diffs)})")
+
+                    axs[idx].plot(observation_times, flat_diffs, label=config_name)
+
                 axs[idx].set_title(f'{diff_type} Differences for {sat_name}')
                 axs[idx].set_xlabel('Time')
                 axs[idx].set_ylabel(f'{diff_type} Difference')
                 axs[idx].legend()
+
             plt.tight_layout()
             plt.savefig(f"{output_dir}/{sat_name}_HCL_differences.png")
             plt.close()

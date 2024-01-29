@@ -13,7 +13,7 @@
         "mass": 600.2,
         "cross_section": 3.123,
         "cd": 2.4,
-        "cr": 1.5
+        "cr": 1
     },
     "GRACE-FO-B": {
         "norad_id": 43477,
@@ -21,7 +21,7 @@
         "mass": 600.2,
         "cross_section": 3.123,
         "cd": 2.4,
-        "cr": 1.5
+        "cr": 1
     },
     "TanDEM-X": {
         "norad_id": 36605,
