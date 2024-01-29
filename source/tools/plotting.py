@@ -378,10 +378,18 @@ def plot_kepels_evolution(keplerian_element_data, sat_name):
     plt.savefig(f'output/ERP_prop/{sat_name}_{timenow}_ERP_Kepels.png')
     # plt.show()
 
-def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, i, arc_num, estimate_drag, format_array):
-    fig = plt.figure(figsize=(12, 9))
+def format_array(array, precision=6):
+    return np.array2string(array, formatter={'float_kind':lambda x: f"{x:.{precision}f}"})
+
+import os
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+
+def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, i, arc_num, estimate_drag):
+    fig = plt.figure(figsize=(10, 8))
     sns.set(style="whitegrid")
-    gs = GridSpec(4, 4, figure=fig)
+    gs = GridSpec(5, 4, figure=fig)  # Increased number of rows in GridSpec
 
     # Scatter plots for position and velocity residuals
     ax1 = fig.add_subplot(gs[0, :])
@@ -418,20 +426,23 @@ def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate,
     ax4.legend(['u', 'v', 'w'])
 
     # Table for force model configuration, initial state, and final estimated state
-    ax5 = fig.add_subplot(gs[3, :])
-    formatted_initial_state = format_array(a_priori_estimate)
-    formatted_optimized_state = format_array(optimized_state)
-    force_model_data = [['Force Model Config', str(force_model_config)],
-                        ['Initial State', formatted_initial_state],
-                        ['Final Estimated State', formatted_optimized_state]]
-    table = plt.table(cellText=force_model_data, colWidths=[0.5 for _ in force_model_data[0]], loc='center', cellLoc='left')
+    ax5 = fig.add_subplot(gs[3:5, :])  # Increase the height of the table
+    formatted_initial_state = format_array(a_priori_estimate, precision=6)
+    formatted_optimized_state = format_array(optimized_state, precision=6)
+    force_model_data = [
+        ['Force Model Config', str(force_model_config)],
+        ['Initial State', formatted_initial_state],
+        ['Final Estimated State', formatted_optimized_state],
+        ['Estimated Parameters', 'Position, Velocity' + (', C_D' if estimate_drag else '')]
+    ]
+    table = plt.table(cellText=force_model_data, colWidths=[0.2, 0.8], loc='center', cellLoc='left')  # Adjust column widths
     ax5.axis('off')
     table.auto_set_font_size(False)
     table.set_fontsize(10)
-    table.scale(1.0, 1.7)
+    table.scale(1, 2.4)  # Adjust the scale for table height
 
-    plt.suptitle(f"Residuals (O-C) for best BLS iteration. \nRMS: {final_RMS:.3f} \n{sat_name}", y=0.95, fontsize=16)
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.3)
+    plt.suptitle(f"{sat_name} - Residuals (O-C) for best BLS iteration, RMS: {final_RMS:.3f}", fontsize=16)
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.05, hspace=0.4)
 
     # Save the combined plot
     sat_name_folder = f"output/OD_BLS/Tapley/combined_plots/{sat_name}"

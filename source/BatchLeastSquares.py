@@ -17,7 +17,7 @@ from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory, TideSystem
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, ThirdBodyAttraction, Relativity, NewtonianAttraction
+from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, OceanTides, ThirdBodyAttraction, Relativity, NewtonianAttraction
 from org.orekit.forces import BoxAndSolarArraySpacecraft
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
 from org.orekit.forces.drag import DragForce, IsotropicDrag
@@ -32,8 +32,8 @@ from org.orekit.time import TimeScalesFactory
 from tools.utilities import extract_acceleration, keys_to_string, download_file_url,get_boxwing_config, calculate_cross_correlation_matrix, get_satellite_info, pos_vel_from_orekit_ephem, keplerian_elements_from_orekit_ephem
 from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
-from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
-from tools.CERES_ERP import CERES_ERP_ForceModel
+# from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
+# from tools.CERES_ERP import CERES_ERP_ForceModel
 from tools.plotting import combined_residuals_plot
 
 import pandas as pd
@@ -60,11 +60,11 @@ dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices
 solfsmy_data_source = DataSource(solfsmy_file)
 dtcfile_data_source = DataSource(dtcfile_file)
 
-# load CERES dataset, combine longwave and shortwave, extract the associated times in UTC format
-ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
-data = nc.Dataset(ceres_dataset_path)
-ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
-combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
+# # load CERES dataset, combine longwave and shortwave, extract the associated times in UTC format
+# ceres_dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'
+# data = nc.Dataset(ceres_dataset_path)
+# ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+# combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
 def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
 
@@ -100,9 +100,18 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         propagator.addForceModel(solid_tides_sun)
         propagator.addForceModel(solid_tides_moon)
 
+    if force_model_config.get('ocean_tides', False):
+        central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
+        ae = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+        mu = Constants.WGS84_EARTH_MU
+        ocean_tides = OceanTides(central_frame, ae, mu, 4, 4, IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False))
+        propagator.addForceModel(ocean_tides)
+
     if config_flags.get('SRP', False):
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
-        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), Constants.EIGEN5C_EARTH_EQUATORIAL_RADIUS, isotropicRadiationSingleCoeff)
+        earth_ellipsoid =  OneAxisEllipsoid(Constants.IERS2010_EARTH_EQUATORIAL_RADIUS, Constants.IERS2010_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, False))
+        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth_ellipsoid, isotropicRadiationSingleCoeff)
+        solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(), Constants.MOON_EQUATORIAL_RADIUS)
         propagator.addForceModel(solarRadiationPressure)
 
     if force_model_config.get('knocke_erp', False):
@@ -117,9 +126,9 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         propagator.addForceModel(relativity)
 
-    if config_flags.get('ceres_erp', False):
-        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
-        propagator.addForceModel(ceres_erp_force_model)
+    # if config_flags.get('ceres_erp', False):
+    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
+    #     propagator.addForceModel(ceres_erp_force_model)
 
     if config_flags.get('drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
@@ -231,9 +240,21 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         solid_tides_sun_eci_t0 = np.array([solid_tides_sun_eci_t0[0].getX(), solid_tides_sun_eci_t0[0].getY(), solid_tides_sun_eci_t0[0].getZ()])
         accelerations_t0+=solid_tides_sun_eci_t0
 
+    if force_model_config.get('ocean_tides', False):
+        central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
+        ae = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+        mu = Constants.WGS84_EARTH_MU
+        ocean_tides = OceanTides(central_frame, ae, mu, 4, 4, IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False))
+        force_models.append(ocean_tides)
+        ocean_tides_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ocean_tides)
+        ocean_tides_eci_t0 = np.array([ocean_tides_eci_t0[0].getX(), ocean_tides_eci_t0[0].getY(), ocean_tides_eci_t0[0].getZ()])
+        accelerations_t0+=ocean_tides_eci_t0
+
     if force_model_config.get('SRP', False):
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
-        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), Constants.EIGEN5C_EARTH_EQUATORIAL_RADIUS, isotropicRadiationSingleCoeff)
+        earth_ellipsoid =  OneAxisEllipsoid(Constants.IERS2010_EARTH_EQUATORIAL_RADIUS, Constants.IERS2010_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, False))
+        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth_ellipsoid, isotropicRadiationSingleCoeff)
+        solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(), Constants.MOON_EQUATORIAL_RADIUS)
         force_models.append(solarRadiationPressure)
         solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
@@ -250,12 +271,12 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
         accelerations_t0+=knocke_eci_t0
 
-    if force_model_config.get('ceres_erp', False):
-        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr) # pass the time and radiation data to the force model
-        force_models.append(ceres_erp_force_model)
-        ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
-        ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
-        accelerations_t0+=ceres_erp_eci_t0
+    # if force_model_config.get('ceres_erp', False):
+    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr) # pass the time and radiation data to the force model
+    #     force_models.append(ceres_erp_force_model)
+    #     ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
+    #     ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
+    #     accelerations_t0+=ceres_erp_eci_t0
 
     if force_model_config.get('relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
@@ -331,8 +352,6 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
     return phi_t1
 
 def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=None):
-
-    print(f"boxwing config in ODBLS: {box_wing_config}")
 
     t0 = observations_df['UTC'].iloc[0]
     x_bar_0 = np.array(a_priori_estimate[1:7])  # x, y, z, u, v, w
@@ -451,28 +470,27 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
 
     return all_xbar_0s, all_covs, all_residuals, all_rms
 
-def format_array(arr, precision=3):
-    """Format numpy array elements to strings with specified precision."""
-    return np.array2string(arr, precision=precision, separator=', ', suppress_small=True)
-
 def generate_config_name(config_dict, arc_number):
     config_keys = '+'.join(key for key, value in config_dict.items() if value)
     return f"arc{arc_number}_{config_keys}"
 
 if __name__ == "__main__":
-    # sat_names_to_test = ["TanDEM-X"]
-    sat_names_to_test = ["TanDEM-X", "TerraSAR-X", "GRACE-FO-A", "GRACE-FO-B"]
+    # sat_names_to_test = ["TanDEM-X", "TerraSAR-X"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
     num_arcs = 1
-    arc_length = 30 # in minutes
-    prop_length = 60 * 60 * 24 
+    arc_length = 60 # in minutes
+    prop_length = 60 * 60 * 24
+    estimate_drag = True
     force_model_configs = [
                 # {'gravity': True},
                 # {'gravity': True, '3BP': True},
                 {'gravity': True, '3BP': True, 'drag': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True, 'SRP': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True, 'SRP': True, 'relativity': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'relativity': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'relativity': True, 'knocke_erp': True}]
+    
+    cd_estimates = {}
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -487,7 +505,6 @@ if __name__ == "__main__":
         arc_step = int(arc_length / time_step)  # Convert arc_length to number of rows
 
         rms_results = {}  # Dictionary to store RMS values for each configuration
-
         for arc in range(num_arcs):
             start_index = arc * arc_step
             end_index = start_index + arc_step
@@ -501,11 +518,10 @@ if __name__ == "__main__":
 
             a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
             observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-            estimate_drag = False
 
             for i, force_model_config in enumerate(force_model_configs):
-                if not force_model_config.get('drag', False):
-                    estimate_drag = False
+                if force_model_config.get('drag', False):
+                    estimate_drag = True
 
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, box_wing_config=None)
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -520,8 +536,14 @@ if __name__ == "__main__":
                 optimized_state = optimized_states[min_RMS_index]
                 residuals_final = residuals[min_RMS_index]
                 # Assume combined_residuals_plot and other necessary functions are defined here
+                if estimate_drag:
+                    # C_D value is the 7th element in optimized_state
+                    cd_value = optimized_state[6]
+                    cd = cd_value
+                    config_name = generate_config_name(force_model_config, arc + 1)
+                    cd_estimates[config_name] = cd_estimates.get(config_name, []) + [cd_value]
 
-                combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc, estimate_drag, lambda arr: str(arr))
+                combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc, estimate_drag)
                 # Propagation and RMS calculation logic
                 optimized_state_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(optimized_state[0]), float(optimized_state[1]), float(optimized_state[2])),
                                                                     Vector3D(float(optimized_state[3]), float(optimized_state[4]), float(optimized_state[5]))),
@@ -538,6 +560,7 @@ if __name__ == "__main__":
                 optimized_state_propagator.setInitialState(initialState)
 
                 # Add all the force models
+                print(f"propagating with force model config: {force_model_config}")
                 optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd, **force_model_config)
                 ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()  # Get the ephemeris generator
                 end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t))
@@ -595,5 +618,5 @@ if __name__ == "__main__":
         output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        plt.savefig(f"{output_dir}/{sat_name}_RMS_plot.png", bbox_inches='tight')
+        plt.savefig(f"{output_dir}/{sat_name}_dragest_{estimate_drag}_RMS_plot.png", bbox_inches='tight')
         plt.close()  # Close the plot to avoid displaying it inline
