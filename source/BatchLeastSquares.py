@@ -16,8 +16,8 @@ from org.orekit.orbits import CartesianOrbit
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
 from org.orekit.orbits import OrbitType
-from org.orekit.forces.gravity.potential import GravityFieldFactory
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, ThirdBodyAttraction, Relativity, NewtonianAttraction
+from org.orekit.forces.gravity.potential import GravityFieldFactory, TideSystem
+from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, ThirdBodyAttraction, Relativity, NewtonianAttraction
 from org.orekit.forces import BoxAndSolarArraySpacecraft
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
 from org.orekit.forces.drag import DragForce, IsotropicDrag
@@ -86,10 +86,23 @@ def configure_force_models(propagator,cr,cross_section,cd, **config_flags):
         propagator.addForceModel(moon_3dbodyattraction)
         propagator.addForceModel(sun_3dbodyattraction)
 
+    if force_model_config.get('solid_tides', False):
+        central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
+        ae = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+        mu = Constants.WGS84_EARTH_MU
+        tidesystem = TideSystem.ZERO_TIDE
+        iersConv = IERSConventions.IERS_2010
+        ut1scale = TimeScalesFactory.getUT1(IERSConventions.IERS_2010, True)
+        sun = CelestialBodyFactory.getSun()
+        moon = CelestialBodyFactory.getMoon()
+        solid_tides_sun = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, sun)
+        solid_tides_moon = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, moon)
+        propagator.addForceModel(solid_tides_sun)
+        propagator.addForceModel(solid_tides_moon)
+
     if config_flags.get('SRP', False):
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
-        earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
+        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), Constants.EIGEN5C_EARTH_EQUATORIAL_RADIUS, isotropicRadiationSingleCoeff)
         propagator.addForceModel(solarRadiationPressure)
 
     if force_model_config.get('knocke_erp', False):
@@ -198,10 +211,29 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
         accelerations_t0+=sun_eci_t0
 
+    if force_model_config.get('solid_tides', False):
+        central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
+        ae = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+        mu = Constants.WGS84_EARTH_MU
+        tidesystem = TideSystem.ZERO_TIDE
+        iersConv = IERSConventions.IERS_2010
+        ut1scale = TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False)
+        sun = CelestialBodyFactory.getSun()
+        moon = CelestialBodyFactory.getMoon()
+        solid_tides_moon = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, moon)
+        force_models.append(solid_tides_moon)
+        solid_tides_sun = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, sun)
+        force_models.append(solid_tides_sun)
+        solid_tides_moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solid_tides_moon)
+        solid_tides_moon_eci_t0 = np.array([solid_tides_moon_eci_t0[0].getX(), solid_tides_moon_eci_t0[0].getY(), solid_tides_moon_eci_t0[0].getZ()])
+        accelerations_t0+=solid_tides_moon_eci_t0
+        solid_tides_sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solid_tides_sun)
+        solid_tides_sun_eci_t0 = np.array([solid_tides_sun_eci_t0[0].getX(), solid_tides_sun_eci_t0[0].getY(), solid_tides_sun_eci_t0[0].getZ()])
+        accelerations_t0+=solid_tides_sun_eci_t0
+
     if force_model_config.get('SRP', False):
         isotropicRadiationSingleCoeff = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
-        earth = OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth, isotropicRadiationSingleCoeff)
+        solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), Constants.EIGEN5C_EARTH_EQUATORIAL_RADIUS, isotropicRadiationSingleCoeff)
         force_models.append(solarRadiationPressure)
         solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
@@ -430,17 +462,17 @@ def generate_config_name(config_dict, arc_number):
 if __name__ == "__main__":
     # sat_names_to_test = ["TanDEM-X"]
     sat_names_to_test = ["TanDEM-X", "TerraSAR-X", "GRACE-FO-A", "GRACE-FO-B"]
-    num_arcs = 3
+    num_arcs = 1
     arc_length = 30 # in minutes
-    prop_length = 60 * 60 * 48 # 48 hour
+    prop_length = 60 * 60 * 24 
     force_model_configs = [
                 # {'gravity': True},
                 # {'gravity': True, '3BP': True},
                 {'gravity': True, '3BP': True, 'drag': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True},
-                # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'ceres_erp': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
+                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True, 'SRP': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True, 'SRP': True, 'relativity': True},
+                {'gravity': True, '3BP': True, 'drag': True, 'solid_tides': True, 'SRP': True, 'relativity': True, 'knocke_erp': True}]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -467,11 +499,8 @@ if __name__ == "__main__":
             prop_observations_df = ephemeris_df[(ephemeris_df['UTC'] >= initial_t) & (ephemeris_df['UTC'] <= final_prop_t)]
             initial_vals = np.array(initial_values.tolist() + [cd, cr, cross_section, mass], dtype=float)
 
-            # Now initial_t is separate and initial_vals contains the rest of the values
             a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
-
             observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-            #make a dataframe of observations from ephemeris_df that goes from initial_t to final_prop_t
             estimate_drag = False
 
             for i, force_model_config in enumerate(force_model_configs):
@@ -532,26 +561,33 @@ if __name__ == "__main__":
 
         # Setting seaborn style
         sns.set_style("whitegrid")
+
         # Define a color palette
         palette = sns.color_palette("husl", len(rms_results))
-        # Plotting RMS values for this spacecraft
+
         plt.figure(figsize=(10, 6))
+        text_str = ""  # String to accumulate final RMS values
         for i, (config_name, rms_values_list) in enumerate(rms_results.items()):
             for rms_values in rms_values_list:
                 color = palette[i]
-                plt.plot(observation_times, rms_values, marker='o', label=config_name, color=color)
+                # Adjusting marker size with the 's' parameter
+                plt.scatter(observation_times, rms_values, marker='o', label=config_name, color=color, s=3, alpha=0.7)
                 final_rms = rms_values[-1]
 
-                # Adjust the text position slightly for each line to avoid overlap
-                text_y_position = final_rms * (1 + 0.05 * i)
-                plt.text(observation_times[-1], text_y_position, f"{final_rms:.2e}", color=color, verticalalignment='bottom')
+                # Accumulate final RMS values in text_str
+                text_str += f"{config_name}: {final_rms:.4f}\n"
+
+        # Adding accumulated RMS values as text on the plot
+        plt.text(0.02, 0.7, text_str, transform=plt.gca().transAxes, verticalalignment='top')
 
         plt.xlabel('Time')
         plt.ylabel('RMS (m)')
         plt.title(f'Difference from SP3 orbit for {sat_name}')
-        plt.legend()
+
+        # Move the legend outside of the plot area
+        plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+
         plt.grid(True)
-        plt.yscale('log')  # Logarithmic scale for y-axis
         plt.xticks(rotation=45)
         plt.tight_layout()
 
@@ -559,5 +595,5 @@ if __name__ == "__main__":
         output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        plt.savefig(f"{output_dir}/{sat_name}_RMS_plot.png")
+        plt.savefig(f"{output_dir}/{sat_name}_RMS_plot.png", bbox_inches='tight')
         plt.close()  # Close the plot to avoid displaying it inline
