@@ -1,17 +1,32 @@
 {
-    "TerraSAR-X": {
-        "norad_id": 31698,
-        "sp3-c_code": "L13",
-        "mass": 1230.0,
-        "x_length": 5.0,
+    "GRACE-FO-A": {
+        "norad_id": 43476,
+        "sp3-c_code": "L64",
+        "mass": 600.2,
+        "x_length": 3.0,
         "y_length": 2.0,
-        "z_length": 2.0,
-        "solar_array_area": 10.0,
+        "z_length": 0.8,
+        "solar_array_area": 0.0,
         "solar_array_axis": [0.0, 1.0, 0.0],
-        "cd": 2.2,
+        "cd": 2.4,
         "c_lift": 0.0,
         "c_absorption": 0.7,
-        "c_reflection": 0.2,
+        "c_reflection": 0.5,
+        "solar_array_rotation_rate": 0.0
+    },
+    "GRACE-FO-B": {
+        "norad_id": 43477,
+        "sp3-c_code": "L65",
+        "mass": 600.2,
+        "x_length": 3.0,
+        "y_length": 2.0,
+        "z_length": 0.8,
+        "solar_array_area": 0.0,
+        "solar_array_axis": [0.0, 1.0, 0.0],
+        "cd": 2.4,
+        "c_lift": 0.0,
+        "c_absorption": 0.7,
+        "c_reflection": 0.5,
         "solar_array_rotation_rate": 0.0
     }
 }

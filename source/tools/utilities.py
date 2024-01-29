@@ -22,7 +22,7 @@ from org.orekit.utils import PVCoordinates
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates, IERSConventions
 from org.orekit.orbits import KeplerianOrbit, CartesianOrbit
-from org.orekit.forces import ForceModel
+from org.orekit.forces import ForceModel, BoxAndSolarArraySpacecraft, Panel
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 
@@ -579,12 +579,33 @@ def get_satellite_info(satellite_name, file_path='misc/sat_list.json'):
     else:
         return "Satellite not found in the list."
     
-def get_boxwing_config(satellite_name, file_path='misc/boxwing_configs.json'):
-    with open(file_path, 'r') as file:
-        boxwing_data = json.load(file)
+def build_boxwing(satellite_name):
+    # Load configurations from the JSON file
+    with open('misc/boxwing_configs.json', 'r') as file:
+        configs = json.load(file)
 
-    if satellite_name in boxwing_data:
-        info = boxwing_data[satellite_name]
-        return {k: info[k] for k in ['mass', 'x_length', 'y_length', 'z_length', "solar_array_area", "solar_array_axis", "cd", "c_lift", "c_absorption", "c_reflection"]}
-    else:
-        return "Satellite not found in the list."
+    # Extract the configuration for the specified satellite
+    config = configs[satellite_name]
+
+    # Extract parameters
+    x_length = config['x_length']
+    y_length = config['y_length']
+    z_length = config['z_length']
+    solar_array_area = config['solar_array_area']
+    solar_array_axis = Vector3D(*config['solar_array_axis'])
+    drag_coeff = config['cd']
+    lift_ratio = config['c_lift']
+    absorption_coeff = config['c_absorption']
+    reflection_coeff = config['c_reflection']
+
+    # Build panels
+    panels = BoxAndSolarArraySpacecraft.buildBox(
+        x_length, y_length, z_length, drag_coeff, lift_ratio, absorption_coeff, reflection_coeff
+    )
+
+    # Add solar array panel if solar_array_area is greater than zero
+    if solar_array_area > 0:
+        solar_array_panel = Panel(solar_array_area, solar_array_axis, drag_coeff, absorption_coeff, reflection_coeff)
+        panels.append(solar_array_panel)
+
+    return BoxAndSolarArraySpacecraft(panels)
