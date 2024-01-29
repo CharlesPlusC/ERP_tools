@@ -608,9 +608,6 @@ if __name__ == "__main__":
                 print(f"shape of state vectros: {np.shape(state_vectors)}")
                 print(f"shape of observation state vectors: {np.shape(observation_state_vectors)}")
                 h_diffs, c_diffs, l_diffs = HCL_diff(state_vectors, observation_state_vectors)
-                print(f"max H diff: {np.max(h_diffs)}")
-                print(f"max C diff: {np.max(c_diffs)}")
-                print(f"max L diff: {np.max(l_diffs)}")
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
                 hcl_differences['L'][config_name] = hcl_differences['L'].get(config_name, []) + [l_diffs]
@@ -618,7 +615,7 @@ if __name__ == "__main__":
             ###### PLOTS ######
             output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
             # Plot H, C, L differences after processing each satellite
-            fig, axs = plt.subplots(3, 1, figsize=(10, 8))
+            fig, axs = plt.subplots(3, 1, figsize=(8, 6))
 
             for idx, diff_type in enumerate(['H', 'C', 'L']):
                 for config_name, diffs in hcl_differences[diff_type].items():
