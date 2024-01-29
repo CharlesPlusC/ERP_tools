@@ -620,3 +620,15 @@ if __name__ == "__main__":
             os.makedirs(output_dir)
         plt.savefig(f"{output_dir}/{sat_name}_dragest_{estimate_drag}_RMS_plot.png", bbox_inches='tight')
         plt.close()  # Close the plot to avoid displaying it inline
+
+    # After all iterations, plot the estimated C_D values if estimate_drag is True
+    if estimate_drag:
+        plt.figure(figsize=(10, 6))
+        sns.barplot(x=list(cd_estimates.keys()), y=[np.mean(values) for values in cd_estimates.values()])
+        plt.xticks(rotation=45)
+        plt.xlabel('Force Model Configuration')
+        plt.ylabel('Average Estimated C_D')
+        plt.title(f'Estimated CD values for {", ".join(sat_names_to_test)}')
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/CD_estimates_comparison.png")
+        plt.close()
