@@ -492,21 +492,21 @@ def generate_config_name(config_dict, arc_number):
     return f"arc{arc_number}_{config_keys}"
 
 if __name__ == "__main__":
-    # sat_names_to_test = ["TanDEM-X", "TerraSAR-X"]
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
-    num_arcs = 1
-    arc_length = 60
-    prop_length = 60 * 60 * 3
+    num_arcs = 5
+    arc_length = 10
+    prop_length = 60*60  # in seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
-                # {'gravity': True},
-                # {'gravity': True, '3BP': True},
-                {'gravity': True, '3BP': True, 'drag': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True,'ocean_tides': True},
-                {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True}]
-                # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True,'ocean_tides': True, 'knocke_erp': True, 'relativity': True}]
+        {'gravity': True},
+        {'gravity': True, '3BP': True},
+        {'gravity': True, '3BP': True, 'drag': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
+        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
+        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
+    ]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -524,12 +524,11 @@ if __name__ == "__main__":
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         arc_step = int(arc_length / time_step)  # Convert arc_length to number of rows
 
-        # Dictionaries to store results for each satellite
         rms_results = {}  
         cd_estimates = {}
-        hcl_differences = {'H': {}, 'C': {}, 'L': {}}
 
         for arc in range(num_arcs):
+            hcl_differences = {'H': {}, 'C': {}, 'L': {}}
             start_index = arc * arc_step
             end_index = start_index + arc_step
             arc_df = ephemeris_df.iloc[start_index:end_index]
@@ -612,90 +611,56 @@ if __name__ == "__main__":
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
                 hcl_differences['L'][config_name] = hcl_differences['L'].get(config_name, []) + [l_diffs]
 
-            ###### PLOTS ######
-            output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
-            # Plot H, C, L differences after processing each satellite
-            fig, axs = plt.subplots(3, 1, figsize=(8, 6))
+            # Output directory for each arc
+            output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc + 1}"
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
 
-            for idx, diff_type in enumerate(['H', 'C', 'L']):
+            for diff_type in ['H', 'C', 'L']:
+                fig, ax = plt.subplots(figsize=(8, 4))  # Adjusted figure size for better layout
+                vertical_offset = 0  # Starting offset for text annotations
+
                 for config_name, diffs in hcl_differences[diff_type].items():
-                    # Flatten diffs and ensure it's a list
                     flat_diffs = np.array(diffs).flatten()
+                    line, = ax.plot(observation_times, flat_diffs, label=config_name)  # Keep a reference to the line object
 
-                    # Debugging print statements
-                    print(f"observation_times shape: {np.shape(observation_times)}")
-                    print(f"{diff_type} diffs shape: {np.shape(flat_diffs)}")
+                    # Annotate the last point in the top left corner
+                    ax.text(0.02, 0.98 - vertical_offset, f'{config_name}: {flat_diffs[-1]:.2f}', 
+                            transform=ax.transAxes, color=line.get_color(), verticalalignment='top')
+                    vertical_offset += 0.07  # Increment offset for the next line
 
-                    # Check if lengths match
-                    if len(observation_times) != len(flat_diffs):
-                        raise ValueError(f"Length mismatch: observation_times ({len(observation_times)}) vs diffs ({len(flat_diffs)})")
+                ax.set_title(f'{diff_type} Differences for {sat_name}')
+                ax.set_xlabel('Time')
+                ax.set_ylabel(f'{diff_type} Difference')
 
-                    axs[idx].plot(observation_times, flat_diffs, label=config_name)
+                # Place legend below the graph
+                ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True, shadow=True, ncol=3, fontsize='small')
 
-                axs[idx].set_title(f'{diff_type} Differences for {sat_name}')
-                axs[idx].set_xlabel('Time')
-                axs[idx].set_ylabel(f'{diff_type} Difference')
-                axs[idx].legend()
+                plt.tight_layout()
+                plt.savefig(f"{output_dir}/{diff_type}_diff_{arc_length}obs_{prop_length}prop.png")
+                print(f"saved {diff_type} differences plot for {sat_name} to {output_dir}")
+                plt.close()
 
-            plt.tight_layout()
-            plt.savefig(f"{output_dir}/{sat_name}_HCL_differences.png")
-            plt.close()
-
-        if estimate_drag:
-            plt.figure(figsize=(8, 6))
-            barplot = sns.barplot(x=list(cd_estimates.keys()), y=[np.mean(values) for values in cd_estimates.values()])
-            plt.xticks(rotation=45)
-            plt.xlabel('Force Model Configuration')
-            plt.ylabel('Average Estimated C_D')
-            plt.title(f'Estimated CD values for {sat_name}')  # Updated to display current satellite name
-
-            # Add the value on each bar
-            for bar in barplot.patches:
-                bar_height = bar.get_height()
-                plt.text(bar.get_x() + bar.get_width() / 2, bar_height,
-                        f'{bar_height:.4f}', ha='center', va='bottom')
-
-            plt.tight_layout()
-            plt.savefig(f"{output_dir}/{sat_name}_CD_estimates_comparison.png")  # Save with the satellite's name
-            print(f"saved CD estimates comparison plot for {sat_name} to {output_dir}")
-            plt.close()
-
-        # Setting seaborn style
-        sns.set_style("whitegrid")
-
-        # Define a color palette
-        palette = sns.color_palette("husl", len(rms_results))
+    # Separate RMS plot for each arc
+    for arc in range(num_arcs):
+        output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc + 1}"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
         plt.figure(figsize=(10, 6))
-        text_str = ""  # String to accumulate final RMS values
+        sns.set_palette(sns.color_palette("bright", len(rms_results)))  # Change to a brighter color palette
+
         for i, (config_name, rms_values_list) in enumerate(rms_results.items()):
-            for rms_values in rms_values_list:
-                color = palette[i]
-                # Adjusting marker size with the 's' parameter
-                plt.scatter(observation_times, rms_values, marker='o', label=config_name, color=color, s=3, alpha=0.7)
-                final_rms = rms_values[-1]
-
-                # Accumulate final RMS values in text_str
-                text_str += f"{config_name}: {final_rms:.4f}\n"
-
-        # Adding accumulated RMS values as text on the plot
-        plt.text(0.02, 0.7, text_str, transform=plt.gca().transAxes, verticalalignment='top')
+            if len(rms_values_list) > arc:
+                rms_values = rms_values_list[arc]
+                plt.scatter(observation_times, rms_values, label=config_name, s=3, alpha=0.7)
 
         plt.xlabel('Time')
         plt.ylabel('RMS (m)')
-        plt.title(f'Difference from SP3 orbit for {sat_name}')
-
-        # Move the legend outside of the plot area
+        plt.title(f'RMS Differences for {sat_name} - Arc {arc + 1}')
         plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-
         plt.grid(True)
         plt.xticks(rotation=45)
         plt.tight_layout()
-
-        # Save the plot in the specified directory
-        output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}"
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        plt.savefig(f"{output_dir}/{sat_name}_obs{arc_length}_dragest_{estimate_drag}_RMS_plot.png", bbox_inches='tight')
-        plt.close()  # Close the plot to avoid displaying it inline
-
+        plt.savefig(f"{output_dir}/RMS_diff_{arc_length}obs_{prop_length}prop_arc{arc + 1}.png", bbox_inches='tight')
+        plt.close()
