@@ -183,17 +183,15 @@ def HCL_diff(eph1: np.ndarray, eph2: np.ndarray) -> Tuple[List[float], List[floa
     tuple
         Three lists, each containing the height, cross-track, and along-track differences at each time step.
     """
-    #check that the starting conditions are the same
-    # if (eph1[0][0:3]) != (eph2[0][0:3]) or (eph1[0][3:6]) != (eph2[0][3:6]):
-    #     warnings.warn('The two orbits do not have the same starting conditions. Make sure this is intentional.')
-
     H_diffs = []
     C_diffs = []
     L_diffs = []
 
-    for i in range(0, len(eph1), 1):
-        #calculate the HCL difference at each time step
-        
+    # Determine the minimum length to avoid IndexError
+    min_length = min(len(eph1), len(eph2))
+    print(f"min length{min_length}")
+
+    for i in range(min_length):
         r1 = np.array(eph1[i][0:3])
         r2 = np.array(eph2[i][0:3])
         
@@ -204,16 +202,11 @@ def HCL_diff(eph1: np.ndarray, eph2: np.ndarray) -> Tuple[List[float], List[floa
         unit_cross_track = np.cross(r1, v1)/np.linalg.norm(np.cross(r1, v1))
         unit_along_track = np.cross(unit_radial, unit_cross_track)
 
-        #put the three unit vectors into a matrix
         unit_vectors = np.array([unit_radial, unit_cross_track, unit_along_track])
 
-        #subtract the two position vectors
         r_diff = r1 - r2
-
-        #relative position in HCL frame
         r_diff_HCL = np.matmul(unit_vectors, r_diff)
 
-        #height, cross track and along track differences
         h_diff = r_diff_HCL[0]
         c_diff = r_diff_HCL[1]
         l_diff = r_diff_HCL[2]

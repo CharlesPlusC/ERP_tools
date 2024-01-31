@@ -3,7 +3,7 @@
         "norad_id": 31698,
         "sp3-c_code": "L13",
         "mass": 1230.0,
-        "cross_section": 4,
+        "cross_section": 4.0,
         "cd": 2.4,
         "cr": 1.5
     },
@@ -27,15 +27,15 @@
         "norad_id": 36605,
         "sp3-c_code": "L20",
         "mass": 1350.0,
-        "cross_section": 5,
+        "cross_section": 5.0,
         "cd": 2.4,
         "cr": 1.5
     },
-    "NAVSTAR-76": {
+    "NAVSTAR76": {
         "norad_id": 41328,
         "sp3-c_code": "G76",
-        "mass": 1663,
-        "cross_section": 6,
+        "mass": 1663.0,
+        "cross_section": 12.0,
         "cd": 2.2,
         "cr": 1
     }

@@ -377,7 +377,7 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
     cr = a_priori_estimate[-3]
     cross_section = a_priori_estimate[-2]
     mass = a_priori_estimate[-1]
-
+    
     if estimate_drag:
         print(f"Estimating drag coefficient. Initial value: {cd}")
         x_bar_0 = np.append(x_bar_0, cd)
@@ -492,11 +492,12 @@ def generate_config_name(config_dict, arc_number):
     return f"arc{arc_number}_{config_keys}"
 
 if __name__ == "__main__":
-    sat_names_to_test = ["SENTINEL-3A"]
-    # sat_names_to_test = ["SENTINEL-3A", "GRACE-FO-A", "GRACE-FO-B"]
-    num_arcs = 5
-    arc_length = 35
-    prop_length = 60*60*12  # in seconds
+    # sat_names_to_test = ["NAVSTAR76"]
+    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
+    sat_names_to_test = ["GRACE-FO-A"]
+    num_arcs = 1
+    arc_length = 60
+    prop_length = 60*60*24  # in seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
@@ -521,8 +522,8 @@ if __name__ == "__main__":
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]
-
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
+        time_step_seconds = time_step * 60.0
         arc_step = int(arc_length / time_step)  # Convert arc_length to number of rows
 
         rms_results = {}  
@@ -586,12 +587,14 @@ if __name__ == "__main__":
                 # Add all the force models
                 print(f"propagating with force model config: {force_model_config}")
                 print(f"using estimated drag coeff: {cd}")
+                print(f"optimized state: {optimized_state}")
                 optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd,boxwing, **force_model_config)
-                ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()  # Get the ephemeris generator
+                ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()
                 end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t))
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
 
-                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t), INTEGRATOR_INIT_STEP)
+                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t), time_step_seconds)
+                print(f"times: {times}")
                 state_vector_data = (times, state_vectors)
 
                 observation_state_vectors = prop_observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
@@ -604,7 +607,9 @@ if __name__ == "__main__":
                     rms = np.sqrt(np.mean(np.square(state_vector[:3] - observation_state_vector[:3])))
                     rms_values.append(rms)
                 rms_results[config_name] = rms_results.get(config_name, []) + [rms_values]
-                
+                print(f"RMS for {config_name}: {rms_values}")
+                print(f"state vectors: {state_vectors}")
+                print(f"observation state vectors: {observation_state_vectors}")
                 h_diffs, c_diffs, l_diffs = HCL_diff(state_vectors, observation_state_vectors)
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
