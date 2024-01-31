@@ -30,5 +30,13 @@
         "cross_section": 5,
         "cd": 2.4,
         "cr": 1.5
+    },
+    "NAVSTAR-76": {
+        "norad_id": 41328,
+        "sp3-c_code": "G76",
+        "mass": 1663,
+        "cross_section": 6,
+        "cd": 2.2,
+        "cr": 1
     }
 }

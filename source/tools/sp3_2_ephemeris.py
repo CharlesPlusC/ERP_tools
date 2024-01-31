@@ -162,7 +162,6 @@ def main():
             df.index = pd.to_datetime(df.index)
 
         # Convert time to MJD
-        # Convert time to MJD
         mjd_times = [utc_to_mjd(dt) for dt in df.index]
         df['MJD'] = mjd_times
 
@@ -189,9 +188,7 @@ def main():
 
     # After adding sigma columns to each dataframe
     for satellite, df in sp3_dataframes.items():
-        #print head of dataframe
         write_ephemeris_file(satellite, df, sat_dict)
 
 if __name__ == "__main__":
     main()
-    #NOTE: set up to run a different set of Orbits (change back to the experimental set of orbits)

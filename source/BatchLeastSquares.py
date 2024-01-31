@@ -492,20 +492,21 @@ def generate_config_name(config_dict, arc_number):
     return f"arc{arc_number}_{config_keys}"
 
 if __name__ == "__main__":
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
+    sat_names_to_test = ["SENTINEL-3A"]
+    # sat_names_to_test = ["SENTINEL-3A", "GRACE-FO-A", "GRACE-FO-B"]
     num_arcs = 5
-    arc_length = 10
-    prop_length = 60*60  # in seconds
+    arc_length = 35
+    prop_length = 60*60*12  # in seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
-        {'gravity': True},
+        # {'gravity': True},
         {'gravity': True, '3BP': True},
         {'gravity': True, '3BP': True, 'drag': True},
         {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -604,8 +605,6 @@ if __name__ == "__main__":
                     rms_values.append(rms)
                 rms_results[config_name] = rms_results.get(config_name, []) + [rms_values]
                 
-                print(f"shape of state vectros: {np.shape(state_vectors)}")
-                print(f"shape of observation state vectors: {np.shape(observation_state_vectors)}")
                 h_diffs, c_diffs, l_diffs = HCL_diff(state_vectors, observation_state_vectors)
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
@@ -626,7 +625,7 @@ if __name__ == "__main__":
 
                     # Annotate the last point in the top left corner
                     ax.text(0.02, 0.98 - vertical_offset, f'{config_name}: {flat_diffs[-1]:.2f}', 
-                            transform=ax.transAxes, color=line.get_color(), verticalalignment='top')
+                            transform=ax.transAxes, color=line.get_color(), verticalalignment='top', fontsize=8)
                     vertical_offset += 0.07  # Increment offset for the next line
 
                 ax.set_title(f'{diff_type} Differences for {sat_name}')
