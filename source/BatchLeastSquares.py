@@ -505,9 +505,9 @@ if __name__ == "__main__":
         {'gravity': True, '3BP': True},
         {'gravity': True, '3BP': True, 'drag': True},
         {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
+        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
+        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -607,9 +607,6 @@ if __name__ == "__main__":
                     rms = np.sqrt(np.mean(np.square(state_vector[:3] - observation_state_vector[:3])))
                     rms_values.append(rms)
                 rms_results[config_name] = rms_results.get(config_name, []) + [rms_values]
-                print(f"RMS for {config_name}: {rms_values}")
-                print(f"state vectors: {state_vectors}")
-                print(f"observation state vectors: {observation_state_vectors}")
                 h_diffs, c_diffs, l_diffs = HCL_diff(state_vectors, observation_state_vectors)
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
