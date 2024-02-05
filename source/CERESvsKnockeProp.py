@@ -12,7 +12,7 @@ from org.orekit.propagation.analytical.tle import TLEPropagator
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, NewtonianAttraction
 from org.orekit.propagation import SpacecraftState
-from org.hipparchus.ode.nonstiff import DormandPrince853Integrator, 
+from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from org.orekit.bodies import CelestialBodyFactory
 from org.orekit.forces.radiation import KnockeRediffusedForceModel, IsotropicRadiationSingleCoefficient
 
@@ -29,7 +29,7 @@ from tools.plotting import plot_kepels_evolution, plot_hcl_differences
 
 # Define constants
 SATELLITE_MASS = 500.0
-PROPAGATION_TIME = 3600.0 * 24.0 * 7.0
+PROPAGATION_TIME = 60.0
 INTEGRATOR_MIN_STEP = 0.01
 INTEGRATOR_MAX_STEP = 120.0
 INTEGRATOR_INIT_STEP = 30.0

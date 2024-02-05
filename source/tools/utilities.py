@@ -76,6 +76,28 @@ def lla_to_ecef(lat2d, lon2d, alt):
 
     return x, y, z
 
+def lla_to_ecef_vectorized(latitudes, longitudes, altitudes):
+    """
+    Convert latitude, longitude, and altitude to ECEF coordinates in a vectorized manner.
+    """
+    # Constants for WGS84
+    a = 6378137.0  # Equatorial radius
+    e_sq = 6.69437999014e-3  # Square of eccentricity
+
+    # Convert latitudes and longitudes to radians
+    lat_r = np.radians(latitudes)
+    lon_r = np.radians(longitudes)
+
+    # Calculate prime vertical radius of curvature
+    N = a / np.sqrt(1 - e_sq * np.sin(lat_r)**2)
+
+    # Calculate ECEF coordinates
+    X = (N + altitudes) * np.cos(lat_r) * np.cos(lon_r)
+    Y = (N + altitudes) * np.cos(lat_r) * np.sin(lon_r)
+    Z = ((1 - e_sq) * N + altitudes) * np.sin(lat_r)
+
+    return np.vstack((X, Y, Z)).T
+
 def eci2ecef_astropy(eci_pos, eci_vel, mjd):
     """
     Convert ECI (Earth-Centered Inertial) coordinates to ECEF (Earth-Centered, Earth-Fixed) coordinates using Astropy.

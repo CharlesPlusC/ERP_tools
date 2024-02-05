@@ -108,7 +108,8 @@ class CERES_ERP_ForceModel(PythonForceModel):
         ceres_time = julian_day_to_ceres_time(jd_time)
         ceres_indices = find_nearest_index(self.ceres_times, ceres_time)
         erp_vec, scalar_acc, erp_angle = compute_erp_at_sc(ceres_indices, self.combined_radiation_data, latitude_deg, longitude_deg, alt_km, horizon_dist, self.sc_mass, self.sc_area, self.cr)
-
+        print(f"scalar_acc: {scalar_acc}, erp_angle: {erp_angle}, time: {jd_time}")
+        
         eci = FramesFactory.getEME2000()
         transform = ecef.getTransformTo(eci, spacecraftState.getDate())
         erp_vec_ecef_pv = PVCoordinates(Vector3D(float(erp_vec[0]), float(erp_vec[1]), float(erp_vec[2])))

@@ -6,43 +6,30 @@ This module contains functions and classes for processing satellite and CERES da
 import numpy as np
 import math
 from geopy.distance import great_circle
-from .utilities import find_nearest_index, lla_to_ecef, eci2ecef_astropy, ecef_to_lla, julian_day_to_ceres_time
+from .utilities import find_nearest_index, lla_to_ecef_vectorized, lla_to_ecef, eci2ecef_astropy, ecef_to_lla, julian_day_to_ceres_time
 
 def sat_normal_surface_angle_vectorized(sat_alt, sat_lat, sat_lon, pixel_lats, pixel_lons):
     """
-    Compute the angle between the satellite's normal vector and the normal vectors at each pixel location on the Earth's surface.
-
-    Parameters:
-    ----------
-    sat_lat : float
-        Latitude of the satellite in degrees.
-    sat_lon : float
-        Longitude of the satellite in degrees.
-    pixel_lats : array-like
-        Array of latitudes for the pixels.
-    pixel_lons : array-like
-        Array of longitudes for the pixels.
-
-    Returns:
-    -------
-    numpy.ndarray
-        An array of cosine of angles between the satellite normal and each pixel surface normal.
+    Optimized computation of the angle between the satellite's normal vector and the normal vectors at each pixel location on the Earth's surface using vectorized operations.
     """
-    # Convert satellite position from LLA to ECEF (including altitude)
-    sat_ecef = np.array(lla_to_ecef(sat_lat, sat_lon, sat_alt))
+    # Convert satellite position from LLA to ECEF (altitude included)
+    sat_ecef = lla_to_ecef_vectorized(np.array([sat_lat]), np.array([sat_lon]), np.array([sat_alt]))[0]
 
-    # Convert pixel positions from LLA to ECEF
-    pixel_ecef = np.array([lla_to_ecef(lat, lon, 0) for lat, lon in zip(pixel_lats, pixel_lons)])
+    # Convert pixel positions from LLA to ECEF in a vectorized manner
+    pixel_ecef = lla_to_ecef_vectorized(pixel_lats, pixel_lons, np.zeros_like(pixel_lats))
 
     # Normalize the satellite vector
     satellite_normal = sat_ecef / np.linalg.norm(sat_ecef)
 
-    earth_surface_normals = pixel_ecef / np.linalg.norm(pixel_ecef, axis=1)[:, np.newaxis] 
-    
-    # Calculate angles between vectors
-    dot_products = np.einsum('i,ji->j', satellite_normal, earth_surface_normals)
+    # Normalize earth surface normals
+    norms = np.linalg.norm(pixel_ecef, axis=1, keepdims=True)
+    earth_surface_normals = pixel_ecef / norms
 
-    cos_thetas = np.clip(dot_products, 0, 1)
+    # Calculate dot products (cosine of angles)
+    dot_products = np.dot(earth_surface_normals, satellite_normal)
+
+    # Ensure dot products are within valid range [-1, 1] for acos
+    cos_thetas = np.clip(dot_products, -1, 1)
     
     return cos_thetas
 
