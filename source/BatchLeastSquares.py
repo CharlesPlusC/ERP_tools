@@ -497,7 +497,7 @@ if __name__ == "__main__":
     sat_names_to_test = ["GRACE-FO-A"]
     num_arcs = 1
     arc_length = 60
-    prop_length = 60*60*24  # in seconds
+    prop_length = 60*60*12  # in seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
@@ -505,9 +505,9 @@ if __name__ == "__main__":
         {'gravity': True, '3BP': True},
         {'gravity': True, '3BP': True, 'drag': True},
         {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        # {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -594,7 +594,6 @@ if __name__ == "__main__":
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
 
                 times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t), time_step_seconds)
-                print(f"times: {times}")
                 state_vector_data = (times, state_vectors)
 
                 observation_state_vectors = prop_observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values

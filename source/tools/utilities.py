@@ -211,7 +211,6 @@ def HCL_diff(eph1: np.ndarray, eph2: np.ndarray) -> Tuple[List[float], List[floa
 
     # Determine the minimum length to avoid IndexError
     min_length = min(len(eph1), len(eph2))
-    print(f"min length{min_length}")
 
     for i in range(min_length):
         r1 = np.array(eph1[i][0:3])

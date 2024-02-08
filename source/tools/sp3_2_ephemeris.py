@@ -19,6 +19,8 @@ def read_sp3_gz_file(sp3_gz_file_path):
         temp_file.write(gz_file.read())
     temp_file.close()
 
+    print(f"reading sp3 file: {sp3_gz_file_path}")
+
     product = sp3.Product.from_file(temp_file_path)
     
     satellite = product.satellites[0]
@@ -44,6 +46,7 @@ def read_sp3_gz_file(sp3_gz_file_path):
         'Velocity_Z': [vel[2]/1000 for vel in velocities]
     })
 
+    print(f"Read {len(df)} records from {temp_file_path}")
     os.remove(temp_file_path)
     return df
 
@@ -56,20 +59,17 @@ def process_sp3_files(base_path, sat_list):
         for day_folder in glob.glob(f"{satellite_path}/*"):
             for sp3_gz_file in glob.glob(f"{day_folder}/*.sp3.gz"):
                 df = read_sp3_gz_file(sp3_gz_file)
+                print(f"Appending DataFrame for {sat_name} from {sp3_gz_file}")  # Debug print
                 all_dataframes[sat_name].append(df)
 
-    # Concatenating dataframes for each spacecraft
     concatenated_dataframes = {}
     for sat_name, dfs in all_dataframes.items():
-        concatenated_df = pd.concat(dfs).drop_duplicates(subset='Time').set_index('Time').sort_index()
-        
-        # Checking for consistent time intervals (30 seconds), ignoring NaN values
-        time_diffs = concatenated_df.index.to_series().diff().dt.total_seconds()
-        if not time_diffs[time_diffs.notna()].eq(30).all():
-            print(f"found a time interval of {time_diffs[time_diffs.notna()].unique()} seconds in data for {sat_name}")
-            raise ValueError(f"Inconsistent time intervals found in data for {sat_name}")
-
-        concatenated_dataframes[sat_name] = concatenated_df
+        if dfs:
+            concatenated_df = pd.concat(dfs).drop_duplicates(subset='Time').set_index('Time').sort_index()
+            concatenated_dataframes[sat_name] = concatenated_df
+            print(f"Concatenated {len(dfs)} DataFrames for {sat_name}")  # Confirmation print
+        else:
+            print(f"No data found for concatenation for {sat_name}, skipping.")
 
     return concatenated_dataframes
 
