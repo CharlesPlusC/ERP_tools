@@ -493,21 +493,21 @@ def generate_config_name(config_dict, arc_number):
 
 if __name__ == "__main__":
     # sat_names_to_test = ["NAVSTAR76"]
-    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
-    sat_names_to_test = ["GRACE-FO-A"]
-    num_arcs = 1
-    arc_length = 60
-    prop_length = 60*60*12  # in seconds
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    # sat_names_to_test = ["GRACE-FO-A"]
+    num_arcs = 3
+    arc_length = 10 #mins
+    prop_length = 60 * 60 * 1 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
         # {'gravity': True},
         {'gravity': True, '3BP': True},
-        {'gravity': True, '3BP': True, 'drag': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        {'gravity': True, '3BP': True, 'drag': True, 'SRP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True}
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'drag': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -524,7 +524,7 @@ if __name__ == "__main__":
         ephemeris_df = ephemeris_df.iloc[::2, :]
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         time_step_seconds = time_step * 60.0
-        arc_step = int(arc_length / time_step)  # Convert arc_length to number of rows
+        arc_step = int(arc_length / time_step)
 
         rms_results = {}  
         cd_estimates = {}
@@ -586,7 +586,7 @@ if __name__ == "__main__":
 
                 # Add all the force models
                 print(f"propagating with force model config: {force_model_config}")
-                print(f"using estimated drag coeff: {cd}")
+                print(f"using drag coeff: {cd}")
                 print(f"optimized state: {optimized_state}")
                 optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd,boxwing, **force_model_config)
                 ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()
@@ -634,7 +634,7 @@ if __name__ == "__main__":
                 ax.set_ylabel(f'{diff_type} Difference')
 
                 # Place legend below the graph
-                ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True, shadow=True, ncol=3, fontsize='small')
+                # ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True, shadow=True, ncol=3, fontsize='small')
 
                 plt.tight_layout()
                 plt.savefig(f"{output_dir}/{diff_type}_diff_{arc_length}obs_{prop_length}prop.png")

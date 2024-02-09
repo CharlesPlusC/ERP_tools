@@ -381,70 +381,99 @@ def plot_kepels_evolution(keplerian_element_data, sat_name):
 def format_array(array, precision=6):
     return np.array2string(array, formatter={'float_kind':lambda x: f"{x:.{precision}f}"})
 
+import textwrap
+
+def format_state_with_labels(array, include_additional_params=True):
+    # Base labels for position and velocity
+    position_str = "Pos:" + ",".join([f"{x:.1f}" for x in array[:3]])
+    velocity_str = "Vel:" + ",".join([f"{x:.1f}" for x in array[3:6]])
+
+    # Initialize the full_str with position and velocity
+    full_str = f"{position_str} {velocity_str}"
+
+    if include_additional_params:
+        # For the initial state, including cr, area, and mass
+        if len(array) > 9:  # Checking if additional parameters are present
+            cd, cr, area, mass = array[-4:]
+            additional_str = f" Cd:{cd:.1f}, Cr:{cr:.1f}, Area:{area:.1f}, Mass:{mass:.1f}"
+            full_str += additional_str
+    else:
+        # For the final estimated state, conditionally include the drag coefficient
+        if len(array) == 7:  # Assuming the drag coefficient is included
+            cd = array[6]
+            cd_str = f" cd:{cd:.1f}"
+            full_str += cd_str
+
+    # Use textwrap to ensure that the line does not exceed 50 characters, if needed
+    wrapped_str = textwrap.fill(full_str, 70)
+    return wrapped_str
+
+
 import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+from scipy.stats import shapiro
 
 def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, i, arc_num, estimate_drag):
     fig = plt.figure(figsize=(10, 8))
     sns.set(style="whitegrid")
-    gs = GridSpec(5, 4, figure=fig)  # Increased number of rows in GridSpec
-
-    # Scatter plots for position and velocity residuals
+    gs = GridSpec(5, 4, figure=fig, hspace=0.6)
     ax1 = fig.add_subplot(gs[0, :])
     ax2 = fig.add_subplot(gs[1, :])
 
-    # Position residuals plot
     sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,0], ax=ax1, color="xkcd:blue", s=10, label='x')
     sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,1], ax=ax1, color="xkcd:green", s=10, label='y')
     sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,2], ax=ax1, color="xkcd:red", s=10, label='z')
     ax1.set_ylabel("Position Residual (m)")
-    ax1.set_xlabel("Observation time (UTC)")
-    ax1.legend()
+    ax1.legend(loc='upper left')
+    ax1.set_xlabel("") 
 
-    # Velocity residuals plot
     sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,3], ax=ax2, color="xkcd:purple", s=10, label='u')
     sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,4], ax=ax2, color="xkcd:orange", s=10, label='v')
-    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,5], ax=ax2, color="xkcd:yellow", s=10, label='w')
+    sns.scatterplot(data=observations_df, x='UTC', y=residuals_final[:,5], ax=ax2, color="xkcd:aqua", s=10, label='w')
     ax2.set_ylabel("Velocity Residual (m/s)")
-    ax2.set_xlabel("Observation time (UTC)")
-    ax2.legend()
+    ax2.set_xlabel("DD HH:MM (UTC)")
+    ax2.legend(loc='upper left')
 
-    # Histograms for position and velocity residuals
+    _, pos_shapiro_p = shapiro(residuals_final[:,0:3].flatten())
+    _, vel_shapiro_p = shapiro(residuals_final[:,3:6].flatten())
+    
     ax3 = fig.add_subplot(gs[2, :2])
     ax4 = fig.add_subplot(gs[2, 2:])
 
-    sns.histplot(residuals_final[:,0:3], bins=20, ax=ax3, palette=["xkcd:blue", "xkcd:green", "xkcd:red"], legend=False)
+    sns.histplot(residuals_final[:,0:3], bins=20, ax=ax3, palette=["xkcd:blue", "xkcd:green", "xkcd:red"], legend=True)
     ax3.set_xlabel("Position Residual (m)")
     ax3.set_ylabel("Frequency")
-    ax3.legend(['x', 'y', 'z'])
+    ax3.legend(['x', 'y', 'z'], loc='upper left')
+    ax3.text(0.95, 0.95, f'SW (Pos): {pos_shapiro_p:.2e}', transform=ax3.transAxes, verticalalignment='top', horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.7))
 
-    sns.histplot(residuals_final[:,3:6], bins=20, ax=ax4, palette=["xkcd:purple", "xkcd:orange", "xkcd:yellow"], legend=False)
+    sns.histplot(residuals_final[:,3:6], bins=20, ax=ax4, palette=["xkcd:purple", "xkcd:orange", "xkcd:aqua"], legend=True)
     ax4.set_xlabel("Velocity Residual (m/s)")
     ax4.set_ylabel("Frequency")
-    ax4.legend(['u', 'v', 'w'])
+    ax4.legend(['u', 'v', 'w'], loc='upper left')
+    ax4.text(0.95, 0.95, f'SW (Vel): {vel_shapiro_p:.2e}', transform=ax4.transAxes, verticalalignment='top', horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.7))
 
-    # Table for force model configuration, initial state, and final estimated state
-    ax5 = fig.add_subplot(gs[3:5, :])  # Increase the height of the table
-    formatted_initial_state = format_array(a_priori_estimate, precision=6)
-    formatted_optimized_state = format_array(optimized_state, precision=6)
+    force_model_keys = ', '.join(force_model_config.keys())
+    formatted_initial_state = format_state_with_labels(a_priori_estimate, include_additional_params=True)
+    formatted_optimized_state = format_state_with_labels(optimized_state, include_additional_params=False)
+
+    ax5 = fig.add_subplot(gs[3:5, :])
     force_model_data = [
-        ['Force Model Config', str(force_model_config)],
+        ['Force Model Config', force_model_keys],
         ['Initial State', formatted_initial_state],
-        ['Final Estimated State', formatted_optimized_state],
-        ['Estimated Parameters', 'Position, Velocity' + (', C_D' if estimate_drag else '')]
+        ['Estimated State', formatted_optimized_state],
+        ['Estimated Params', 'Position, Velocity' + (', Drag Coefficient' if estimate_drag else '')]
     ]
-    table = plt.table(cellText=force_model_data, colWidths=[0.2, 0.8], loc='center', cellLoc='left')  # Adjust column widths
+    table = plt.table(cellText=force_model_data, colWidths=[0.2, 0.8], loc='center', cellLoc='left')
     ax5.axis('off')
     table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2.4)  # Adjust the scale for table height
+    table.set_fontsize(13)
+    table.scale(1, 2.4)
 
-    plt.suptitle(f"{sat_name} - Residuals (O-C) for best BLS iteration, RMS: {final_RMS:.3f}", fontsize=16)
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.05, hspace=0.4)
+    plt.suptitle(f"{sat_name} - OD Residuals for best BLS iteration, RMS: {final_RMS:.3f}", fontsize=16)
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.05)
 
-    # Save the combined plot
     sat_name_folder = f"output/OD_BLS/Tapley/combined_plots/{sat_name}"
     if not os.path.exists(sat_name_folder):
         os.makedirs(sat_name_folder)

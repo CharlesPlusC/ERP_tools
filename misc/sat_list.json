@@ -11,7 +11,7 @@
         "norad_id": 43476,
         "sp3-c_code": "L64",
         "mass": 600.2,
-        "cross_section": 3.123,
+        "cross_section": 1.94,
         "cd": 2.4,
         "cr": 1
     },
@@ -19,7 +19,7 @@
         "norad_id": 43477,
         "sp3-c_code": "L65",
         "mass": 600.2,
-        "cross_section": 3.123,
+        "cross_section": 1.94,
         "cd": 2.4,
         "cr": 1
     },
