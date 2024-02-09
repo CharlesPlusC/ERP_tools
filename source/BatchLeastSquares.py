@@ -158,6 +158,10 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         propagator.addForceModel(dragForce)
 
     elif config_flags.get('nrlmsise00drag', False):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
@@ -663,7 +667,7 @@ if __name__ == "__main__":
 
             #save arc-specific results
             np.save(f"{output_folder}/hcl_diffs.npy", hcl_differences)
-            np.save(f"{output_folder}/rms_results.npy", rms_results)
+            np.save(f"{output_folder}/prop_rms.npy", rms_results) #These are not the residuals from the OD fitting process, but from the propagation
             np.save(f"{output_folder}/state_vector_data.npy", state_vector_data)
 
             if estimate_drag:
