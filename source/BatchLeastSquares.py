@@ -26,8 +26,9 @@ from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData
-from org.orekit.models.earth.atmosphere import JB2008
+from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00
 from org.orekit.data import DataSource
+from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
 
 from tools.utilities import build_boxwing, HCL_diff, extract_acceleration, keys_to_string, download_file_url,build_boxwing, calculate_cross_correlation_matrix, get_satellite_info, pos_vel_from_orekit_ephem, keplerian_elements_from_orekit_ephem
@@ -73,8 +74,6 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         MU = Constants.WGS84_EARTH_MU
         newattr = NewtonianAttraction(MU)
         propagator.addForceModel(newattr)
-
-        ### 120x120 gravity model 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(120, 120)
         gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
@@ -134,7 +133,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
     #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
     #     propagator.addForceModel(ceres_erp_force_model)
 
-    if config_flags.get('drag', False):
+    if config_flags.get('jb08drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
                                             dtcfile_data_source)
@@ -146,6 +145,16 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         else:
             drag_sensitive = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, drag_sensitive)
+        propagator.addForceModel(dragForce)
+
+    elif config_flags.get('dtm2000drag', False):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
     return propagator
 
@@ -296,8 +305,8 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
         accelerations_t0+=relativity_eci_t0
 
-    ###NOTE: this force model has to stay last in the if-loop (see below)
-    if force_model_config.get('drag', False):
+    ###NOTE: Drag force model has to stay last in the if-loop (see below)
+    if force_model_config.get('jb08drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
                                             dtcfile_data_source)
@@ -309,6 +318,19 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         else:
             drag_sensitive = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, drag_sensitive)
+        force_models.append(dragForce)
+        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        accelerations_t0+=atmospheric_drag_eci_t0
+
+    elif force_model_config.get('dtm2000drag', False):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
@@ -328,11 +350,18 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
             # Perturb drag coefficient and re-instantiate drag model and atmosphere
             cd_perturbed = cd + cd_perturbation
             # Re-instantiate required objects for drag force model
-            wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-            
-            jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source, dtcfile_data_source)
-            utc = TimeScalesFactory.getUTC()
-            atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
+            if force_model_config.get('jb08drag', False):
+                wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
+                
+                jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source, dtcfile_data_source)
+                utc = TimeScalesFactory.getUTC()
+                atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
+            elif force_model_config.get('dtm2000drag', False):
+                wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+                msafe = MarshallSolarActivityFutureEstimation(
+                    MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+                    MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+                atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
             if boxwing:
                 drag_sensitive = boxwing
             else:
@@ -497,17 +526,18 @@ if __name__ == "__main__":
     # sat_names_to_test = ["GRACE-FO-A"]
     num_arcs = 3
     arc_length = 10 #mins
-    prop_length = 60 * 60 * 1 #seconds
+    prop_length = 60 * 60 * 2 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
         # {'gravity': True},
-        {'gravity': True, '3BP': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'drag': True}
+        # {'gravity': True, '3BP': True},
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -545,7 +575,7 @@ if __name__ == "__main__":
             observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
 
             for i, force_model_config in enumerate(force_model_configs):
-                if not force_model_config.get('drag', False):
+                if not force_model_config.get('jb08drag', False) and not force_model_config.get('dtm2000drag', False):
                     estimate_drag = False
 
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing_model)
@@ -626,7 +656,7 @@ if __name__ == "__main__":
 
                     # Annotate the last point in the top left corner
                     ax.text(0.02, 0.98 - vertical_offset, f'{config_name}: {flat_diffs[-1]:.2f}', 
-                            transform=ax.transAxes, color=line.get_color(), verticalalignment='top', fontsize=8)
+                            transform=ax.transAxes, color=line.get_color(), verticalalignment='top', fontsize=10)
                     vertical_offset += 0.07  # Increment offset for the next line
 
                 ax.set_title(f'{diff_type} Differences for {sat_name}')
