@@ -605,7 +605,7 @@ if __name__ == "__main__":
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing_model)
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
-                output_folder = f"{folder_path}/fmodel{i}arc{arc}#pts{len(observations_df)}estdrag{estimate_drag}_{date_now}"
+                output_folder = f"{folder_path}/{sat_name}fmodel{i}arc{arc}#pts{len(observations_df)}estdrag{estimate_drag}_{date_now}"
                 os.makedirs(output_folder)
                 np.save(f"{output_folder}/optimized_states.npy", optimized_states)
                 np.save(f"{output_folder}/cov_mats.npy", cov_mats)
@@ -668,7 +668,7 @@ if __name__ == "__main__":
             #save arc-specific results
             np.save(f"{output_folder}/hcl_diffs.npy", hcl_differences)
             np.save(f"{output_folder}/prop_rms.npy", rms_results) #These are not the residuals from the OD fitting process, but from the propagation
-            np.save(f"{output_folder}/state_vector_data.npy", state_vector_data)
+            np.savez(f"{output_folder}/state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
 
             if estimate_drag:
                 np.save(f"{output_folder}/cd_estimates.npy", cd_estimates)
