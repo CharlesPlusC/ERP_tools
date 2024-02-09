@@ -156,6 +156,12 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
+
+    elif config_flags.get('nrlmsise00drag', False):
+        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        dragForce = DragForce(atmosphere, isotropicDrag)
+        propagator.addForceModel(dragForce)
     return propagator
 
 def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass,boxwing, **config_flags):
@@ -329,6 +335,19 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
+        dragForce = DragForce(atmosphere, isotropicDrag)
+        force_models.append(dragForce)
+        atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        accelerations_t0+=atmospheric_drag_eci_t0
+
+    elif force_model_config.get('nrlmsise00drag', False):
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+        msafe = MarshallSolarActivityFutureEstimation(
+            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
@@ -525,8 +544,8 @@ if __name__ == "__main__":
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     # sat_names_to_test = ["GRACE-FO-A"]
     num_arcs = 3
-    arc_length = 10 #mins
-    prop_length = 60 * 60 * 2 #seconds
+    arc_length = 65 #mins
+    prop_length = 60 * 60 * 6 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
@@ -537,7 +556,8 @@ if __name__ == "__main__":
         # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
         # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
         {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True}
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -575,17 +595,17 @@ if __name__ == "__main__":
             observations_df = arc_df[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
 
             for i, force_model_config in enumerate(force_model_configs):
-                if not force_model_config.get('jb08drag', False) and not force_model_config.get('dtm2000drag', False):
+                if not force_model_config.get('jb08drag', False) and not force_model_config.get('dtm2000drag', False) and not force_model_config.get('nrlmsise00drag', False):
                     estimate_drag = False
 
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing_model)
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
-                output_folder = f"{folder_path}/{date_now}_fmodel_{i}_#pts_{len(observations_df)}_estdrag_{estimate_drag}"
+                output_folder = f"{folder_path}/fmodel{i}arc{arc}#pts{len(observations_df)}estdrag{estimate_drag}_{date_now}"
                 os.makedirs(output_folder)
                 np.save(f"{output_folder}/optimized_states.npy", optimized_states)
                 np.save(f"{output_folder}/cov_mats.npy", cov_mats)
-                np.save(f"{output_folder}/residuals.npy", residuals)
+                np.save(f"{output_folder}/ODresiduals.npy", residuals)
                 np.save(f"{output_folder}/RMSs.npy", RMSs)
                 min_RMS_index = np.argmin(RMSs)
                 optimized_state = optimized_states[min_RMS_index]
@@ -640,6 +660,14 @@ if __name__ == "__main__":
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
                 hcl_differences['L'][config_name] = hcl_differences['L'].get(config_name, []) + [l_diffs]
+
+            #save arc-specific results
+            np.save(f"{output_folder}/hcl_diffs.npy", hcl_differences)
+            np.save(f"{output_folder}/rms_results.npy", rms_results)
+            np.save(f"{output_folder}/state_vector_data.npy", state_vector_data)
+
+            if estimate_drag:
+                np.save(f"{output_folder}/cd_estimates.npy", cd_estimates)
 
             # Output directory for each arc
             output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc + 1}"
