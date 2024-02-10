@@ -4,7 +4,6 @@ from orekit.pyhelpers import setup_orekit_curdir
 orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir()
-import textwrap
 
 from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
@@ -46,8 +45,6 @@ import datetime
 import os
 import netCDF4 as nc
 from scipy.integrate import solve_ivp
-from matplotlib.colors import SymLogNorm
-from matplotlib.gridspec import GridSpec
 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
@@ -547,9 +544,9 @@ if __name__ == "__main__":
     # sat_names_to_test = ["NAVSTAR76"]
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     # sat_names_to_test = ["GRACE-FO-A"]
-    num_arcs = 3
-    arc_length = 15 #mins
-    prop_length = 60 * 60 * 1 #seconds
+    num_arcs = 10
+    arc_length = 90 #mins
+    prop_length = 60 * 60 * 24 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
@@ -557,11 +554,11 @@ if __name__ == "__main__":
         {'gravity': True, '3BP': True},
         {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
         {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -642,8 +639,6 @@ if __name__ == "__main__":
 
                 # Add all the force models
                 print(f"propagating with force model config: {force_model_config}")
-                print(f"using drag coeff: {cd}")
-                print(f"optimized state: {optimized_state}")
                 optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd,boxwing, **force_model_config)
                 ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()
                 end_state_optimized = optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t))
@@ -666,6 +661,16 @@ if __name__ == "__main__":
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
                 hcl_differences['L'][config_name] = hcl_differences['L'].get(config_name, []) + [l_diffs]
+                
+                with open(f"{output_folder}/run_config.txt", "w") as f:
+                    f.write(f"intial_t: {initial_t}\n")
+                    f.write(f"final_prop_t: {final_prop_t}\n")
+                    f.write(f"sat_name: {sat_name}\n")
+                    f.write(f"force_model_config: {force_model_config}\n")
+                    f.write(f"arc_length: {arc_length}\n")
+                    f.write(f"prop_length: {prop_length}\n")
+                    f.write(f"estimate_drag: {estimate_drag}\n")
+                    f.write(f"boxwing: {boxwing}\n")
 
             #save arc-specific results
             np.save(f"{output_folder}_hcl_diffs.npy", hcl_differences)
@@ -680,15 +685,6 @@ if __name__ == "__main__":
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
 
-            with open(f"{output_folder}/run_config.txt", "w") as f:
-                f.write(f"intial_t: {initial_t}\n")
-                f.write(f"final_prop_t: {final_prop_t}\n")
-                f.write(f"sat_name: {sat_name}\n")
-                f.write(f"force_model_config: {force_model_config}\n")
-                f.write(f"arc_length: {arc_length}\n")
-                f.write(f"prop_length: {prop_length}\n")
-                f.write(f"estimate_drag: {estimate_drag}\n")
-                f.write(f"boxwing: {boxwing}\n")
 
             for diff_type in ['H', 'C', 'L']:
                 fig, ax = plt.subplots(figsize=(8, 4))  # Adjusted figure size for better layout
