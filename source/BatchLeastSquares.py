@@ -67,7 +67,15 @@ dtcfile_data_source = DataSource(dtcfile_file)
 
 def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flags):
 
-    if config_flags.get('gravity', False):
+    if config_flags.get('36x36gravity', False):
+        MU = Constants.WGS84_EARTH_MU
+        newattr = NewtonianAttraction(MU)
+        propagator.addForceModel(newattr)
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(36, 36)
+        gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
+        propagator.addForceModel(gravityAttractionModel)
+
+    if config_flags.get('120x120gravity', False):
         MU = Constants.WGS84_EARTH_MU
         newattr = NewtonianAttraction(MU)
         propagator.addForceModel(newattr)
@@ -213,7 +221,22 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
     accelerations_t0 = np.zeros(3)
     force_models = []
 
-    if force_model_config.get('gravity', False):
+    if force_model_config.get('36x36gravity', False):
+        MU = Constants.WGS84_EARTH_MU
+        monopolegrav = NewtonianAttraction(MU)
+        force_models.append(monopolegrav)
+        monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, monopolegrav)
+        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+        accelerations_t0+=monopole_gravity_eci_t0
+
+        gravityProvider = GravityFieldFactory.getNormalizedProvider(36,36)
+        gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
+        force_models.append(gravityfield)
+        gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, gravityfield)
+        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+        accelerations_t0+=gravityfield_eci_t0
+
+    if force_model_config.get('120x120gravity', False):
         MU = Constants.WGS84_EARTH_MU
         monopolegrav = NewtonianAttraction(MU)
         force_models.append(monopolegrav)
@@ -382,6 +405,12 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
                     MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
                     MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
                 atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+            elif force_model_config.get('nrlmsise00drag', False):
+                wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+                msafe = MarshallSolarActivityFutureEstimation(
+                    MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+                    MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+                atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
             if boxwing:
                 drag_sensitive = boxwing
             else:
@@ -544,21 +573,22 @@ if __name__ == "__main__":
     # sat_names_to_test = ["NAVSTAR76"]
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     # sat_names_to_test = ["GRACE-FO-A"]
-    num_arcs = 10
-    arc_length = 90 #mins
-    prop_length = 60 * 60 * 24 #seconds
+    num_arcs = 6
+    arc_length = 45 #mins
+    prop_length = 60 * 60 * 6 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
         # {'gravity': True},
-        {'gravity': True, '3BP': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
+        {'36x36gravity': True, '3BP': True},
+        {'120x120gravity': True, '3BP': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
     ]
 
     for sat_name in sat_names_to_test:
