@@ -548,20 +548,20 @@ if __name__ == "__main__":
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     # sat_names_to_test = ["GRACE-FO-A"]
     num_arcs = 3
-    arc_length = 65 #mins
-    prop_length = 60 * 60 * 6 #seconds
+    arc_length = 15 #mins
+    prop_length = 60 * 60 * 1 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
         # {'gravity': True},
-        # {'gravity': True, '3BP': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
-        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'gravity': True, '3BP': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
+        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
         # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
         # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
-        {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
+        # {'gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -605,12 +605,14 @@ if __name__ == "__main__":
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing_model)
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
-                output_folder = f"{folder_path}/{sat_name}fmodel{i}arc{arc}#pts{len(observations_df)}estdrag{estimate_drag}_{date_now}"
+                initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")  # Format datetime
+                output_folder = f"{folder_path}/{sat_name}/fm{i+1}arc{arc+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}"
                 os.makedirs(output_folder)
                 np.save(f"{output_folder}/optimized_states.npy", optimized_states)
                 np.save(f"{output_folder}/cov_mats.npy", cov_mats)
                 np.save(f"{output_folder}/ODresiduals.npy", residuals)
                 np.save(f"{output_folder}/RMSs.npy", RMSs)
+                #save the force model, arc length, and prop length in a file
                 min_RMS_index = np.argmin(RMSs)
                 optimized_state = optimized_states[min_RMS_index]
                 residuals_final = residuals[min_RMS_index]
@@ -666,9 +668,9 @@ if __name__ == "__main__":
                 hcl_differences['L'][config_name] = hcl_differences['L'].get(config_name, []) + [l_diffs]
 
             #save arc-specific results
-            np.save(f"{output_folder}/hcl_diffs.npy", hcl_differences)
-            np.save(f"{output_folder}/prop_rms.npy", rms_results) #These are not the residuals from the OD fitting process, but from the propagation
-            np.savez(f"{output_folder}/state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
+            np.save(f"{output_folder}_hcl_diffs.npy", hcl_differences)
+            np.save(f"{output_folder}_prop_rms.npy", rms_results) #These are not the residuals from the OD fitting process, but from the propagation
+            np.savez(f"{output_folder}_state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
 
             if estimate_drag:
                 np.save(f"{output_folder}/cd_estimates.npy", cd_estimates)
@@ -677,6 +679,16 @@ if __name__ == "__main__":
             output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc + 1}"
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
+
+            with open(f"{output_folder}/run_config.txt", "w") as f:
+                f.write(f"intial_t: {initial_t}\n")
+                f.write(f"final_prop_t: {final_prop_t}\n")
+                f.write(f"sat_name: {sat_name}\n")
+                f.write(f"force_model_config: {force_model_config}\n")
+                f.write(f"arc_length: {arc_length}\n")
+                f.write(f"prop_length: {prop_length}\n")
+                f.write(f"estimate_drag: {estimate_drag}\n")
+                f.write(f"boxwing: {boxwing}\n")
 
             for diff_type in ['H', 'C', 'L']:
                 fig, ax = plt.subplots(figsize=(8, 4))  # Adjusted figure size for better layout
