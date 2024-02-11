@@ -607,7 +607,7 @@ if __name__ == "__main__":
         time_step_seconds = time_step * 60.0
         arc_step = int(arc_length / time_step)
 
-        rms_results = {}  
+        diffs_3d_abs_results = {}  
         cd_estimates = {}
 
         for arc in range(num_arcs):
@@ -682,11 +682,11 @@ if __name__ == "__main__":
 
                 # Compare the propagated state vectors with the observations
                 config_name = generate_config_name(force_model_config, arc + 1)
-                rms_values = []
+                diffs_3d_abs = []
                 for state_vector, observation_state_vector in zip(state_vectors, observation_state_vectors):
-                    rms = np.sqrt(np.mean(np.square(state_vector[:3] - observation_state_vector[:3])))
-                    rms_values.append(rms)
-                rms_results[config_name] = rms_results.get(config_name, []) + [rms_values]
+                    diff_3d_abs = np.sqrt(np.mean(np.square(state_vector[:3] - observation_state_vector[:3])))
+                    diffs_3d_abs.append(diff_3d_abs)
+                diffs_3d_abs_results[config_name] = diffs_3d_abs_results.get(config_name, []) + [diffs_3d_abs]
                 h_diffs, c_diffs, l_diffs = HCL_diff(state_vectors, observation_state_vectors)
                 hcl_differences['H'][config_name] = hcl_differences['H'].get(config_name, []) + [h_diffs]
                 hcl_differences['C'][config_name] = hcl_differences['C'].get(config_name, []) + [c_diffs]
@@ -704,7 +704,7 @@ if __name__ == "__main__":
 
             #save arc-specific results
             np.save(f"{output_folder}_hcl_diffs.npy", hcl_differences)
-            np.save(f"{output_folder}_prop_rms.npy", rms_results) #These are not the residuals from the OD fitting process, but from the propagation
+            np.save(f"{output_folder}_prop_residuals.npy", diffs_3d_abs_results) #These are not the residuals from the OD fitting process, but from the propagation
             np.savez(f"{output_folder}_state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
 
             if estimate_drag:
