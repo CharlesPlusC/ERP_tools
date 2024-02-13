@@ -748,9 +748,9 @@ if __name__ == "__main__":
             os.makedirs(output_dir)
 
         plt.figure(figsize=(10, 6))
-        sns.set_palette(sns.color_palette("bright", len(rms_results)))  # Change to a brighter color palette
+        sns.set_palette(sns.color_palette("bright", len(diffs_3d_abs_results)))  # Change to a brighter color palette
 
-        for i, (config_name, rms_values_list) in enumerate(rms_results.items()):
+        for i, (config_name, rms_values_list) in enumerate(diffs_3d_abs_results.items()):
             if len(rms_values_list) > arc:
                 rms_values = rms_values_list[arc]
                 plt.scatter(observation_times, rms_values, label=config_name, s=3, alpha=0.7)
