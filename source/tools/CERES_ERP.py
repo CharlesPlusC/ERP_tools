@@ -1,8 +1,8 @@
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir, absolutedate_to_datetime
-orekit.pyhelpers.download_orekit_data_curdir()
+# orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
-setup_orekit_curdir()
+setup_orekit_curdir("misc/orekit-data.zip")
 from org.orekit.utils import Constants, PVCoordinates, IERSConventions
 from org.orekit.forces import PythonForceModel
 from org.orekit.frames import FramesFactory

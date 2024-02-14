@@ -1,9 +1,9 @@
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir
 
-orekit.pyhelpers.download_orekit_data_curdir()
+# orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
-setup_orekit_curdir()
+setup_orekit_curdir("misc/orekit-data.zip")
 
 from tools.spaceX_ephem_tools import  parse_spacex_datetime_stamps
 from tools.utilities import yyyy_mm_dd_hh_mm_ss_to_jd, jd_to_utc

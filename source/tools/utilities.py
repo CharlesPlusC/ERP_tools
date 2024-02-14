@@ -13,9 +13,9 @@ import orekit
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from datetime import datetime, timedelta
 
-orekit.pyhelpers.download_orekit_data_curdir()
+# orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
-setup_orekit_curdir()
+setup_orekit_curdir("misc/orekit-data.zip")
 
 from org.orekit.frames import FramesFactory, ITRFVersion
 from org.orekit.utils import PVCoordinates

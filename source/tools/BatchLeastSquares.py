@@ -1,9 +1,10 @@
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir
 
-orekit.pyhelpers.download_orekit_data_curdir()
+# orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
-setup_orekit_curdir()
+setup_orekit_curdir("misc/orekit-data.zip")
+
 from tools.orekit_tools import  propagate_state, propagate_STM, rho_i
 import numpy as np
 
