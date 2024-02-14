@@ -39,9 +39,7 @@ def generate_config_name(config_dict, arc_number):
     return f"arc{arc_number}_{config_keys}"
 
 def main():
-    # sat_names_to_test = ["NAVSTAR76"]
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    # sat_names_to_test = ["GRACE-FO-A"]
     num_arcs = 6
     arc_length = 45 #mins
     prop_length = 60 * 60 * 6 #seconds
@@ -105,7 +103,7 @@ def main():
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
                 initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")  # Format datetime
                 output_folder = f"{folder_path}/{sat_name}/fm{i+1}arc{arc+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}"
-                os.makedirs(output_folder)
+                os.makedirs(output_folder, exist_ok=True)
                 np.save(f"{output_folder}/optimized_states.npy", optimized_states)
                 np.save(f"{output_folder}/cov_mats.npy", cov_mats)
                 np.save(f"{output_folder}/ODresiduals.npy", residuals)

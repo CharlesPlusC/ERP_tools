@@ -18,7 +18,7 @@ from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory, TideSystem
 from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, OceanTides, ThirdBodyAttraction, Relativity, NewtonianAttraction
-from org.orekit.forces import BoxAndSolarArraySpacecraft
+# from org.orekit.forces import BoxAndSolarArraySpacecraft
 from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
 from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
@@ -30,19 +30,11 @@ from org.orekit.data import DataSource
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
 
-from tools.utilities import build_boxwing, HCL_diff, extract_acceleration, keys_to_string, download_file_url,build_boxwing, calculate_cross_correlation_matrix, get_satellite_info, pos_vel_from_orekit_ephem, keplerian_elements_from_orekit_ephem
-from tools.spaceX_ephem_tools import spacex_ephem_to_df_w_cov
-from tools.sp3_2_ephemeris import sp3_ephem_to_df
+from tools.utilities import extract_acceleration, download_file_url
 # from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
 # from tools.CERES_ERP import CERES_ERP_ForceModel
-from tools.plotting import combined_residuals_plot
 
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import datetime
-import os
 import netCDF4 as nc
 from scipy.integrate import solve_ivp
 
@@ -65,8 +57,6 @@ dtcfile_data_source = DataSource(dtcfile_file)
 # ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
 # combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
-
-#some orekit wrapper functions
 
 def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flags):
 
@@ -297,8 +287,8 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
     if force_model_config.get('SRP', False):
         # if boxwing:
         #     radiation_sensitive = boxwing
-        else:
-            radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
+        # else:
+        radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         earth_ellipsoid =  OneAxisEllipsoid(Constants.IERS2010_EARTH_EQUATORIAL_RADIUS, Constants.IERS2010_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth_ellipsoid, radiation_sensitive)
         solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(), Constants.MOON_EQUATORIAL_RADIUS)

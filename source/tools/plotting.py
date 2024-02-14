@@ -474,13 +474,19 @@ def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate,
     plt.suptitle(f"{sat_name} - OD Residuals for best BLS iteration, RMS: {final_RMS:.3f}", fontsize=16)
     plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.05)
 
+    #first time stamp
+    initial_t = observations_df['UTC'].iloc[0]
+    #turn into string
+    initial_t = str(initial_t)
+
     sat_name_folder = f"output/OD_BLS/Tapley/combined_plots/{sat_name}"
     if not os.path.exists(sat_name_folder):
         os.makedirs(sat_name_folder)
     obs_length_folder = f"{sat_name_folder}/{len(observations_df)}"
     if not os.path.exists(obs_length_folder):
         os.makedirs(obs_length_folder)
-    save_path = f"{obs_length_folder}/arcnum{arc_num}_fmodel_{i}_estdrag_{estimate_drag}.png"
+    save_path = f"{obs_length_folder}/arcnum{arc_num}_fmodel_{i}_estdrag_{estimate_drag}_{initial_t}.png"
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
     print(f"saving to {save_path}")
     plt.close()
