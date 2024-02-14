@@ -97,17 +97,8 @@ def main():
         ephemeris = ephemeris_generator.getGeneratedEphemeris()
         kepler_prop_times, kepler_prop_state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(t0), 
                                                         datetime_to_absolutedate(t24), 60.0)
-        
-        #now put the kepler_prop_state_vectors into the dataframe with the SP3 ephemeris but as [x_kep, y_kep, z_kep, xv_kep, yv_kep, zv_kep]
-        #kepler_prop_state_vectors is of the shape array([-5.09081592e+06, -2.86173423e+06, -3.61381978e+06,  3.54737132e+03,
-        # 1.80505709e+03, -6.49082528e+03]), array([-4.86686204e+06, -2.74717620e+06, -3.99498267e+06,  3.91494921e+03,
-        # 2.01210444e+03, -6.20995679e+03]), array([-4.62137472e+06, -2.62046329e+06, -4.35847011e+06,  4.26489444e+03,
-        # 2.21007370e+03, -5.90186773e+03]),
-        #and then plot the difference between the SP3 ephemeris and the two-body propagation.
-        print(f"kepler prop state vecs:", kepler_prop_state_vectors)
-        print(f"kepler times:", kepler_prop_times)
-        print(f"epehem df at t24:", ephemeris_df.iloc[t24_index])
 
+        kepler_prop_state_vectors = kepler_prop_state_vectors[::-1]
         kepler_prop_state_vectors = np.array(kepler_prop_state_vectors)
         ephemeris_df = ephemeris_df.iloc[:len(kepler_prop_state_vectors)]
 
@@ -128,19 +119,47 @@ def main():
         ephemeris_df_truncated['yv_kep'] = kepler_prop_state_vectors[:, 4]
         ephemeris_df_truncated['zv_kep'] = kepler_prop_state_vectors[:, 5]
 
-        # Now plot both sets of x, y, z in 3D for the truncated DataFrame
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(ephemeris_df_truncated['x'], ephemeris_df_truncated['y'], ephemeris_df_truncated['z'], label='SP3')
-        ax.scatter(ephemeris_df_truncated['x_kep'], ephemeris_df_truncated['y_kep'], ephemeris_df_truncated['z_kep'], label='Keplerian')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        #make sure the aspect ratio is equal
-        ax.set_box_aspect([1,1,1])
-        ax.legend()
-        plt.show()
+        last_50 = ephemeris_df_truncated.iloc[-50:]
 
+        # Generating a color map based on the index (time progression)
+        color_map = np.linspace(0, 1, 50)
+
+        # Calculating the 3D cartesian distance between the two orbits for the last 50 points
+        distances = np.sqrt((last_50['x'] - last_50['x_kep'])**2 + (last_50['y'] - last_50['y_kep'])**2 + (last_50['z'] - last_50['z_kep'])**2)
+
+        # Now plot the 3D cartesian distance over time in a new subplot
+        fig = plt.figure(figsize=(12, 6))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Scatter plot for SP3 ephemeris, colored by time progression
+        sc1 = ax.scatter(last_50['x'], last_50['y'], last_50['z'], c=color_map, cmap='Greys', label='SP3')
+
+        # Scatter plot for Keplerian propagation, colored by time progression
+        sc2 = ax.scatter(last_50['x_kep'], last_50['y_kep'], last_50['z_kep'], c=color_map, cmap='Purples', label='Keplerian')
+
+        # First subplot for SP3 and Keplerian scatter plot
+        ax1 = fig.add_subplot(121, projection='3d')
+        ax1.scatter(last_50['x'], last_50['y'], last_50['z'], c=color_map, cmap='Greys', label='SP3')
+        ax1.scatter(last_50['x_kep'], last_50['y_kep'], last_50['z_kep'], c=color_map, cmap='Purples', label='Keplerian')
+        ax1.set_xlabel('X')
+        ax1.set_ylabel('Y')
+        ax1.set_zlabel('Z')
+        ax1.set_box_aspect([1,1,1])  # Equal aspect ratio
+        ax1.legend()
+        plt.colorbar(sc1, ax=ax1, label='Time Progression (SP3)')
+        plt.colorbar(sc2, ax=ax1, label='Time Progression (Keplerian)', location='left')
+
+        # Second subplot for distance over time
+        ax2 = fig.add_subplot(122)
+        time_indices = np.arange(len(distances))
+        sc3 = ax2.scatter(time_indices, distances, c=color_map, cmap='viridis')
+        ax2.set_xlabel('Time Index')
+        ax2.set_ylabel('Distance')
+        ax2.set_title('3D Cartesian Distance Over Time')
+        plt.colorbar(sc3, ax=ax2, label='Time Progression')
+
+        plt.tight_layout()
+        plt.show()
 
 
         # As verification, plot the difference between SP3 ephemeris and the two-body propagation. Should collide at t24 
