@@ -9,11 +9,12 @@ from orekit.pyhelpers import datetime_to_absolutedate
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.frames import FramesFactory
 from org.orekit.utils import PVCoordinates
-from org.orekit.orbits import CartesianOrbit
+from org.orekit.orbits import CartesianOrbit, KeplerianOrbit, PositionAngleType
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.propagation.numerical import NumericalPropagator
+from org.orekit.propagation.analytical import KeplerianPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 
@@ -64,17 +65,85 @@ def main():
         time_step_seconds = time_step * 60.0
 
         #now find the value of the first time step
-        t1 = ephemeris_df['UTC'].iloc[0]
-        print(f"ti_minus1: {t1}")
-        print(f"ephemeris at ti_minus1: {ephemeris_df.iloc[0]}")
+        t0 = ephemeris_df['UTC'].iloc[0]
+        print(f"t1: {t0}")
+        print(f"ephemeris at t1: {ephemeris_df.iloc[0]}")
         #now find 24 hours later
-        t24 = t1 + datetime.timedelta(days=1)
+        t24 = t0 + datetime.timedelta(days=1)
         print(f"ti: {t24}")
         #now find the index of the ephemeris at t24
         t24_index = ephemeris_df[ephemeris_df['UTC'] == t24].index[0]
         print(f"ephemeris at ti: {ephemeris_df.iloc[t24_index]}")
         
+        # make a KeplerianOrbit object from the ephemeris at t24
+            # get 'x', 'y', 'z', 'xv', 'yv', 'zv' from ephemeris_df.iloc[t24_index]
 
+        x, y, z, xv, yv, zv = ephemeris_df.iloc[t24_index][['x', 'y', 'z', 'xv', 'yv', 'zv']]
+        print(f"x: {x}, y: {y}, z: {z}, xv: {xv}, yv: {yv}, zv: {zv}")
+        pv_coords_t24 = PVCoordinates(Vector3D(float(x), float(y), float(z)),
+                                    Vector3D(float(xv), float(yv), float(zv)))
+
+        keplerOG = KeplerianOrbit(pv_coords_t24, FramesFactory.getEME2000(), datetime_to_absolutedate(t24), Constants.WGS84_EARTH_MU)
+        # Precess the raan by 180 degrees
+        keplerMod = KeplerianOrbit(keplerOG.getA(), keplerOG.getE(), keplerOG.getI(), keplerOG.getPerigeeArgument(), 
+                                 keplerOG.getRightAscensionOfAscendingNode() + float(np.pi/2), keplerOG.getAnomaly(PositionAngleType.TRUE), 
+                                 PositionAngleType.TRUE, FramesFactory.getEME2000(), datetime_to_absolutedate(t24), 
+                                 Constants.WGS84_EARTH_MU)
+        # Propagate this new orbit backwards to t1 (Keplerian propagation)
+        propagator = KeplerianPropagator(keplerMod) 
+        ephemeris_generator = propagator.getEphemerisGenerator()
+        kepler_state_at_t1 = propagator.propagate(datetime_to_absolutedate(t24), datetime_to_absolutedate(t0)) 
+
+        ephemeris = ephemeris_generator.getGeneratedEphemeris()
+        kepler_prop_times, kepler_prop_state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(t0), 
+                                                        datetime_to_absolutedate(t24), 60.0)
+        
+        #now put the kepler_prop_state_vectors into the dataframe with the SP3 ephemeris but as [x_kep, y_kep, z_kep, xv_kep, yv_kep, zv_kep]
+        #kepler_prop_state_vectors is of the shape array([-5.09081592e+06, -2.86173423e+06, -3.61381978e+06,  3.54737132e+03,
+        # 1.80505709e+03, -6.49082528e+03]), array([-4.86686204e+06, -2.74717620e+06, -3.99498267e+06,  3.91494921e+03,
+        # 2.01210444e+03, -6.20995679e+03]), array([-4.62137472e+06, -2.62046329e+06, -4.35847011e+06,  4.26489444e+03,
+        # 2.21007370e+03, -5.90186773e+03]),
+        #and then plot the difference between the SP3 ephemeris and the two-body propagation.
+        print(f"kepler prop state vecs:", kepler_prop_state_vectors)
+        print(f"kepler times:", kepler_prop_times)
+        print(f"epehem df at t24:", ephemeris_df.iloc[t24_index])
+
+        kepler_prop_state_vectors = np.array(kepler_prop_state_vectors)
+        ephemeris_df = ephemeris_df.iloc[:len(kepler_prop_state_vectors)]
+
+        ephemeris_df['x_kep'] = kepler_prop_state_vectors[:, 0]
+        ephemeris_df['y_kep'] = kepler_prop_state_vectors[:, 1]
+        ephemeris_df['z_kep'] = kepler_prop_state_vectors[:, 2]
+        ephemeris_df['xv_kep'] = kepler_prop_state_vectors[:, 3]
+        ephemeris_df['yv_kep'] = kepler_prop_state_vectors[:, 4]
+        ephemeris_df['zv_kep'] = kepler_prop_state_vectors[:, 5]
+
+        ephemeris_df_truncated = ephemeris_df.iloc[:len(kepler_prop_state_vectors)]
+
+        # Assign Keplerian propagated state vectors to the truncated DataFrame
+        ephemeris_df_truncated['x_kep'] = kepler_prop_state_vectors[:, 0]
+        ephemeris_df_truncated['y_kep'] = kepler_prop_state_vectors[:, 1]
+        ephemeris_df_truncated['z_kep'] = kepler_prop_state_vectors[:, 2]
+        ephemeris_df_truncated['xv_kep'] = kepler_prop_state_vectors[:, 3]
+        ephemeris_df_truncated['yv_kep'] = kepler_prop_state_vectors[:, 4]
+        ephemeris_df_truncated['zv_kep'] = kepler_prop_state_vectors[:, 5]
+
+        # Now plot both sets of x, y, z in 3D for the truncated DataFrame
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(ephemeris_df_truncated['x'], ephemeris_df_truncated['y'], ephemeris_df_truncated['z'], label='SP3')
+        ax.scatter(ephemeris_df_truncated['x_kep'], ephemeris_df_truncated['y_kep'], ephemeris_df_truncated['z_kep'], label='Keplerian')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        #make sure the aspect ratio is equal
+        ax.set_box_aspect([1,1,1])
+        ax.legend()
+        plt.show()
+
+
+
+        # As verification, plot the difference between SP3 ephemeris and the two-body propagation. Should collide at t24 
 
         # arc_step = int(arc_length / time_step)
 

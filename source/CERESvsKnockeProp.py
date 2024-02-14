@@ -172,8 +172,6 @@ def main(TLE, sat_name):
         state_vector_data[ephem_name] = (times, state_vectors)
         keplerian_element_data[ephem_name] = (times, keplerian_elements)
 
-    #TODO: this is what I need to save not the derived data
-
     knocke_accelerations, knocke_rtn_components = extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, knockeModel, rtn=True)
     plot_kepels_evolution(keplerian_element_data, sat_name)
 
