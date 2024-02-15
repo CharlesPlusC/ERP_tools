@@ -242,8 +242,17 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
     times = []
     state_vectors = []  # Store position and velocity vectors
 
+    # Determine the direction of time flow (forward or backward)
+    if initial_date.compareTo(end_date) < 0:
+        time_flow_forward = True
+        step = abs(step)  # Ensure step is positive for forward propagation
+    else:
+        time_flow_forward = False
+        step = -abs(step)  # Ensure step is negative for backward propagation
+
     current_date = initial_date
-    while current_date.compareTo(end_date) <= 0:
+    while (time_flow_forward and current_date.compareTo(end_date) <= 0) or \
+          (not time_flow_forward and current_date.compareTo(end_date) >= 0):
         state = ephemeris.propagate(current_date)
         position = state.getPVCoordinates().getPosition().toArray()
         velocity = state.getPVCoordinates().getVelocity().toArray()
@@ -254,6 +263,7 @@ def pos_vel_from_orekit_ephem(ephemeris, initial_date, end_date, step):
         current_date = current_date.shiftedBy(step)
 
     return times, state_vectors
+
 
 def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, forceModel, rtn=False):
     """

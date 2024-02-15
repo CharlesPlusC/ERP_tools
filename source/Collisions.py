@@ -60,94 +60,99 @@ def main():
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]
-        #slice the ephemeris to start 6 arcs past the beginning
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
-        time_step_seconds = time_step * 60.0
-
-        #now find the value of the first time step
+        # find the time of the first time step
         t0 = ephemeris_df['UTC'].iloc[0]
-        print(f"t1: {t0}")
-        print(f"ephemeris at t1: {ephemeris_df.iloc[0]}")
-        #now find 24 hours later
-        t24 = t0 + datetime.timedelta(days=1)
-        print(f"ti: {t24}")
-        #now find the index of the ephemeris at t24
-        t24_index = ephemeris_df[ephemeris_df['UTC'] == t24].index[0]
-        print(f"ephemeris at ti: {ephemeris_df.iloc[t24_index]}")
+        t0_plus_24 = t0 + datetime.timedelta(days=1)
         
-        # make a KeplerianOrbit object from the ephemeris at t24
-            # get 'x', 'y', 'z', 'xv', 'yv', 'zv' from ephemeris_df.iloc[t24_index]
+        pvcoords_t24 = PVCoordinates(Vector3D(float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['x']),
+                                                float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['y']),
+                                                float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['z'])),
+                                        Vector3D(float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['xv']),
+                                                float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['yv']),
+                                                float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['zv'])))
+        
 
-        x, y, z, xv, yv, zv = ephemeris_df.iloc[t24_index][['x', 'y', 'z', 'xv', 'yv', 'zv']]
-        print(f"x: {x}, y: {y}, z: {z}, xv: {xv}, yv: {yv}, zv: {zv}")
-        pv_coords_t24 = PVCoordinates(Vector3D(float(x), float(y), float(z)),
-                                    Vector3D(float(xv), float(yv), float(zv)))
+        inverted_velocities = Vector3D(-float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['xv']),
+                                        -float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['yv']),
+                                        -float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['zv']))
 
-        keplerOG = KeplerianOrbit(pv_coords_t24, FramesFactory.getEME2000(), datetime_to_absolutedate(t24), Constants.WGS84_EARTH_MU)
-        # Precess the raan by 180 degrees
-        keplerMod = KeplerianOrbit(keplerOG.getA(), keplerOG.getE(), keplerOG.getI(), keplerOG.getPerigeeArgument(), 
-                                 keplerOG.getRightAscensionOfAscendingNode() + float(np.pi/2), keplerOG.getAnomaly(PositionAngleType.TRUE), 
-                                 PositionAngleType.TRUE, FramesFactory.getEME2000(), datetime_to_absolutedate(t24), 
-                                 Constants.WGS84_EARTH_MU)
-        # Propagate this new orbit backwards to t1 (Keplerian propagation)
-        propagator = KeplerianPropagator(keplerMod) 
-        ephemeris_generator = propagator.getEphemerisGenerator()
-        kepler_state_at_t1 = propagator.propagate(datetime_to_absolutedate(t24), datetime_to_absolutedate(t0)) 
+        inverted_pvcoords_t24 = PVCoordinates(pvcoords_t24.getPosition(), inverted_velocities)
 
-        ephemeris = ephemeris_generator.getGeneratedEphemeris()
-        kepler_prop_times, kepler_prop_state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(t0), 
-                                                        datetime_to_absolutedate(t24), 60.0)
+        kepler24 = KeplerianOrbit(pvcoords_t24,
+                                FramesFactory.getEME2000(),
+                                datetime_to_absolutedate(t0_plus_24),
+                                Constants.WGS84_EARTH_MU)
+        
 
-        kepler_prop_state_vectors = kepler_prop_state_vectors[::-1]
-        kepler_prop_state_vectors = np.array(kepler_prop_state_vectors)
-        ephemeris_df = ephemeris_df.iloc[:len(kepler_prop_state_vectors)]
+        inverted_kepler24 = KeplerianOrbit(inverted_pvcoords_t24,
+                                FramesFactory.getEME2000(),
+                                datetime_to_absolutedate(t0_plus_24),
+                                Constants.WGS84_EARTH_MU)
+                                           
 
-        ephemeris_df['x_kep'] = kepler_prop_state_vectors[:, 0]
-        ephemeris_df['y_kep'] = kepler_prop_state_vectors[:, 1]
-        ephemeris_df['z_kep'] = kepler_prop_state_vectors[:, 2]
-        ephemeris_df['xv_kep'] = kepler_prop_state_vectors[:, 3]
-        ephemeris_df['yv_kep'] = kepler_prop_state_vectors[:, 4]
-        ephemeris_df['zv_kep'] = kepler_prop_state_vectors[:, 5]
+        # new_inclination = np.pi - kepler24.getI()  # Inverting inclination
+        # new_raan = (kepler24.getRightAscensionOfAscendingNode() + np.pi) # Adjusting RAAN
+        # new_arg_perigee = (kepler24.getPerigeeArgument() + np.pi)  # Adjusting argument of perigee
 
-        ephemeris_df_truncated = ephemeris_df.iloc[:len(kepler_prop_state_vectors)]
+        # # Create the modified orbit
+        # keplerMod = KeplerianOrbit(kepler24.getA(), kepler24.getE(), new_inclination, new_arg_perigee, 
+        #                         new_raan, kepler24.getTrueAnomaly(), 
+        #                         PositionAngleType.MEAN, FramesFactory.getEME2000(), 
+        #                         datetime_to_absolutedate(t0_plus_24), Constants.WGS84_EARTH_MU)
 
-        # Assign Keplerian propagated state vectors to the truncated DataFrame
-        ephemeris_df_truncated['x_kep'] = kepler_prop_state_vectors[:, 0]
-        ephemeris_df_truncated['y_kep'] = kepler_prop_state_vectors[:, 1]
-        ephemeris_df_truncated['z_kep'] = kepler_prop_state_vectors[:, 2]
-        ephemeris_df_truncated['xv_kep'] = kepler_prop_state_vectors[:, 3]
-        ephemeris_df_truncated['yv_kep'] = kepler_prop_state_vectors[:, 4]
-        ephemeris_df_truncated['zv_kep'] = kepler_prop_state_vectors[:, 5]
+        propagator24 = KeplerianPropagator(inverted_kepler24)
+        ephemeris_generator24 = propagator24.getEphemerisGenerator()
+        propagator24.propagate(datetime_to_absolutedate(t0_plus_24), datetime_to_absolutedate(t0))
+        ephemeris24 = ephemeris_generator24.getGeneratedEphemeris()
 
-        last_50 = ephemeris_df_truncated.iloc[-50:]
+        kepler_prop_times24, kepler_prop_state_vectors24 = pos_vel_from_orekit_ephem(ephemeris24, datetime_to_absolutedate(t0_plus_24), datetime_to_absolutedate(t0), 60.0)
+        print(f"initial state vector in prop24: {kepler_prop_state_vectors24[0]}")
+        print(f"state vector in ephemeris at t0_plus_24: {ephemeris_df[ephemeris_df['UTC'] == t0_plus_24][['x', 'y', 'z', 'xv', 'yv', 'zv']]}")
+        # print(f"final state vector in prop0: {kepler_prop_state_vectors24[-1]}")
+
+        #use kepler_prop_times0 and t0 to construct the UTC times for the ephemeris_df
+        kepler_prop_times24_dt = [t0_plus_24 + datetime.timedelta(seconds=sec) for sec in kepler_prop_times24]
+        kepler_times_df = pd.DataFrame({'UTC': pd.to_datetime(kepler_prop_times24_dt)})
+
+        kepler_states_df = pd.DataFrame(kepler_prop_state_vectors24, columns=['x_kep', 'y_kep', 'z_kep', 'xv_kep', 'yv_kep', 'zv_kep'])
+
+        # Merge based on the closest UTC match
+        ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+        merged_df = pd.merge_asof(ephemeris_df.sort_values('UTC'), kepler_times_df.sort_values('UTC').join(kepler_states_df), on='UTC')
+
+        last_50 = merged_df.iloc[:1441]
 
         # Generating a color map based on the index (time progression)
-        color_map = np.linspace(0, 1, 50)
+        color_map = np.linspace(0, 1, len(last_50))
 
         # Calculating the 3D cartesian distance between the two orbits for the last 50 points
         distances = np.sqrt((last_50['x'] - last_50['x_kep'])**2 + (last_50['y'] - last_50['y_kep'])**2 + (last_50['z'] - last_50['z_kep'])**2)
+
+        print(f"min distance: {min(distances)}")
+        print(f"max distance: {max(distances)}")
+        #calculate the ifference in height at the point of closest approach
+        min_dist_index = np.argmin(distances)
+        print(f"min_dist_index: {min_dist_index}")
+
+        print(f"distance at first time step: {distances[0]}")
+
 
         # Now plot the 3D cartesian distance over time in a new subplot
         fig = plt.figure(figsize=(12, 6))
         ax = fig.add_subplot(111, projection='3d')
 
-        # Scatter plot for SP3 ephemeris, colored by time progression
-        sc1 = ax.scatter(last_50['x'], last_50['y'], last_50['z'], c=color_map, cmap='Greys', label='SP3')
-
-        # Scatter plot for Keplerian propagation, colored by time progression
-        sc2 = ax.scatter(last_50['x_kep'], last_50['y_kep'], last_50['z_kep'], c=color_map, cmap='Purples', label='Keplerian')
-
         # First subplot for SP3 and Keplerian scatter plot
         ax1 = fig.add_subplot(121, projection='3d')
-        ax1.scatter(last_50['x'], last_50['y'], last_50['z'], c=color_map, cmap='Greys', label='SP3')
-        ax1.scatter(last_50['x_kep'], last_50['y_kep'], last_50['z_kep'], c=color_map, cmap='Purples', label='Keplerian')
+        sc1= ax1.scatter(last_50['x'], last_50['y'], last_50['z'], c=color_map, cmap='Greys', label='SP3')
+        sc2= ax1.scatter(last_50['x_kep'], last_50['y_kep'], last_50['z_kep'], c=color_map, cmap='Purples', label='Keplerian')
         ax1.set_xlabel('X')
         ax1.set_ylabel('Y')
         ax1.set_zlabel('Z')
         ax1.set_box_aspect([1,1,1])  # Equal aspect ratio
         ax1.legend()
-        plt.colorbar(sc1, ax=ax1, label='Time Progression (SP3)')
-        plt.colorbar(sc2, ax=ax1, label='Time Progression (Keplerian)', location='left')
+        plt.colorbar(sc1, ax=ax1, label='Time Progression')
+        ax1.set_title('SP3 and Keplerian Propagation')
 
         # Second subplot for distance over time
         ax2 = fig.add_subplot(122)
@@ -195,3 +200,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+            # keplerMod = KeplerianOrbit(keplerOG.getA(), keplerOG.getE(), keplerOG.getI(), keplerOG.getPerigeeArgument(), 
+        #                          keplerOG.getRightAscensionOfAscendingNode(), keplerOG.getTrueAnomaly(), 
+        #                          PositionAngleType.MEAN, FramesFactory.getEME2000(), datetime_to_absolutedate(t24), 
+        #                          Constants.WGS84_EARTH_MU)
