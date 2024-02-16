@@ -159,31 +159,53 @@ def main():
                 opt_to_kep_distances = np.sqrt((merged_df['x_opt'] - merged_df['x_kep'])**2 + (merged_df['y_opt'] - merged_df['y_kep'])**2 + (merged_df['z_opt'] - merged_df['z_kep'])**2)
                 print(f"min opt_to_kep_distances distance: {min(opt_to_kep_distances)}")
                 print(f"min sp3_to_opt_distances distance: {min(sp3_to_opt_distances)}")
-                print(f"min sp3_to_kep_distances distance: {min(sp3_to_kep_distances)}")
 
-                diff = np.abs(sp3_to_opt_distances - opt_to_kep_distances)
-                print(f"max diff: {max(diff)}")
-                print(f"min diff: {min(diff)}")
-                #one subplot with the 3D cartesian distance between the two orbits for the last 50 points]
-                #another subplot wioth the diff between the two distances
-                fig, ax = plt.subplots(2, 1, figsize=(10, 10))
-                ax[0].plot(merged_df['UTC'], sp3_to_opt_distances, label='distance of optimized orbit to true trajectory')
-                ax[0].plot(merged_df['UTC'], diff, label='diff between the two distances')
-                # ax[0].plot(merged_df['UTC'], opt_to_kep_distances, label='opt_to_kep_distances')
+                # Calculate the minimum distance and the corresponding time for both cases
+                min_sp3_to_kep_distance = min(sp3_to_kep_distances)
+                time_of_closest_approach_sp3_to_kep = merged_df['UTC'][sp3_to_kep_distances.idxmin()]
+                print(f"min sp3_to_kep_distances distance: {min_sp3_to_kep_distance}")
+                print(f"time_of_closest_approach_sp3_to_kep: {time_of_closest_approach_sp3_to_kep}")
+
+                min_opt_to_kep_distance = min(opt_to_kep_distances)
+                time_of_closest_approach_opt_to_kep = merged_df['UTC'][opt_to_kep_distances.idxmin()]
+                print(f"min opt_to_kep_distances distance: {min_opt_to_kep_distance}")
+                print(f"time_of_closest_approach_opt_to_kep: {time_of_closest_approach_opt_to_kep}")
+
+                fig, ax = plt.subplots(3, 1, figsize=(10, 15))
+
+                # First subplot
+                ax[0].plot(merged_df['UTC'], sp3_to_opt_distances, label='Distance of optimized orbit to true trajectory')
                 ax[0].set_xlabel('UTC')
-                ax[0].set_ylabel('distance (m)')
+                ax[0].set_ylabel('Distance (m)')
                 ax[0].set_title(f"{sat_name} - {force_model_config}")
                 ax[0].legend()
                 ax[0].grid(True)
-                ax[1].plot(merged_df['UTC'], opt_to_kep_distances, label='distance of optmized orbit to secondary trajectory') #we want to know if this one collides
-                ax[1].plot(merged_df['UTC'], sp3_to_kep_distances, label='distance of true trajectory to secondary trajectory') #we know that this one collides
-                #log the y axis
+
+                # Second subplot
+                ax[1].plot(merged_df['UTC'], sp3_to_kep_distances, label='Distance of true trajectory to secondary trajectory')
+                # Add horizontal line for Distance of Closest Approach
+                ax[1].axhline(y=min_sp3_to_kep_distance, color='r', linestyle='--', label=f'Closest Approach: {min_sp3_to_kep_distance} m')
+                # Add vertical line for Time of Closest Approach
+                ax[1].axvline(x=time_of_closest_approach_sp3_to_kep, color='g', linestyle='--', label=f'Time of Closest Approach: {time_of_closest_approach_sp3_to_kep}')
                 ax[1].set_yscale('log')
-                #add a grid with minor and major ticks
                 ax[1].grid(which='both')
                 ax[1].set_xlabel('UTC')
-                ax[1].set_ylabel('distance (m)')
+                ax[1].set_ylabel('Distance (m)')
                 ax[1].legend()
+
+                # Third subplot
+                ax[2].plot(merged_df['UTC'], opt_to_kep_distances, label='Optimized to secondary trajectory distance')
+                # Add horizontal line for Distance of Closest Approach
+                ax[2].axhline(y=min_opt_to_kep_distance, color='r', linestyle='--', label=f'Closest Approach: {min_opt_to_kep_distance} m')
+                # Add vertical line for Time of Closest Approach
+                ax[2].axvline(x=time_of_closest_approach_opt_to_kep, color='g', linestyle='--', label=f'Time of Closest Approach: {time_of_closest_approach_opt_to_kep}')
+                ax[2].set_yscale('log')
+                ax[2].grid(which='both')
+                ax[2].set_xlabel('UTC')
+                ax[2].set_ylabel('Distance (m)')
+                ax[2].legend()
+
+                plt.tight_layout()
                 plt.show()
 
                 #select the state and covariance matrix that corresponds to the iteration with the lowest RMS
