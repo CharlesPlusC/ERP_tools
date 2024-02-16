@@ -37,7 +37,7 @@ POSITION_TOLERANCE = 1e-2 # 1 cm
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_arcs = 6
-    arc_length = 45 #mins
+    arc_length = 10 #mins
     prop_length = 60 * 60 * 24 #seconds
     force_model_configs = [
         # {'gravity': True},
@@ -63,7 +63,8 @@ def main():
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         # find the time of the first time step
         t0 = ephemeris_df['UTC'].iloc[0]
-        t0_plus_24 = t0 + datetime.timedelta(days=1)
+        t0_plus_24 = t0 + datetime.timedelta(days=1) #this is the time at which the collision will occur
+        t0_plus_24_plus_t = t0_plus_24 + datetime.timedelta(minutes=45) #this is the time at which we want the propagation to end
         
         pvcoords_t24 = PVCoordinates(Vector3D(float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['x']),
                                                 float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['y']),
@@ -85,20 +86,20 @@ def main():
                                            
         propagator24 = KeplerianPropagator(inverted_kepler24)
         ephemeris_generator24 = propagator24.getEphemerisGenerator()
-        propagator24.propagate(datetime_to_absolutedate(t0_plus_24), datetime_to_absolutedate(t0))
+        propagator24.propagate(datetime_to_absolutedate(t0_plus_24_plus_t), datetime_to_absolutedate(t0))
         ephemeris24 = ephemeris_generator24.getGeneratedEphemeris()
 
-        kepler_prop_times24, kepler_prop_state_vectors24 = pos_vel_from_orekit_ephem(ephemeris24, datetime_to_absolutedate(t0_plus_24), datetime_to_absolutedate(t0), 60.0)
+        kepler_prop_times24, kepler_prop_state_vectors24 = pos_vel_from_orekit_ephem(ephemeris24, datetime_to_absolutedate(t0_plus_24_plus_t), datetime_to_absolutedate(t0), 60.0)
 
         #use kepler_prop_times0 and t0 to construct the UTC times for the ephemeris_df
-        kepler_prop_times24_dt = [t0_plus_24 + datetime.timedelta(seconds=sec) for sec in kepler_prop_times24]
+        kepler_prop_times24_dt = [t0_plus_24_plus_t + datetime.timedelta(seconds=sec) for sec in kepler_prop_times24]
         kepler_times_df = pd.DataFrame({'UTC': pd.to_datetime(kepler_prop_times24_dt)})
         kepler_states_df = pd.DataFrame(kepler_prop_state_vectors24, columns=['x_kep', 'y_kep', 'z_kep', 'xv_kep', 'yv_kep', 'zv_kep'])
         # Merge based on the closest UTC match
         ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-        merged_df = pd.merge_asof(ephemeris_df.sort_values('UTC'), kepler_times_df.sort_values('UTC').join(kepler_states_df), on='UTC')
-        collision_df = merged_df.iloc[:1441]
-
+        collision_df = pd.merge_asof(ephemeris_df.sort_values('UTC'), kepler_times_df.sort_values('UTC').join(kepler_states_df), on='UTC')
+        # collision_df = merged_df.iloc[:int(prop_length / time_step), :]
+        
         # Calculating the 3D cartesian distance between the two orbits for the last 50 points
         sp3_to_kep_distances = np.sqrt((collision_df['x'] - collision_df['x_kep'])**2 + (collision_df['y'] - collision_df['y_kep'])**2 + (collision_df['z'] - collision_df['z_kep'])**2)
         print(f"min sp3_to_kep_distances distance: {min(sp3_to_kep_distances)}")
@@ -149,17 +150,50 @@ def main():
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
 
                 times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t), 60.0)
-                state_vector_data = (times, state_vectors)
+                optimized_times_df = pd.DataFrame({'UTC': pd.to_datetime([initial_t + datetime.timedelta(seconds=sec) for sec in times])})
+                #add the newly calculated state vectors to the collision_df using UTC as the thing to merge on (x_new, y_new, z_new, xv_new, yv_new, zv_new)
+                optimized_states_df = pd.DataFrame(state_vectors, columns=['x_opt', 'y_opt', 'z_opt', 'xv_opt', 'yv_opt', 'zv_opt'])
+                merged_df = pd.merge_asof(collision_df.sort_values('UTC'), optimized_times_df.sort_values('UTC').join(optimized_states_df), on='UTC')
+                # Calculating the 3D cartesian distance between the two orbits for the last 50 points
+                sp3_to_opt_distances = np.sqrt((merged_df['x'] - merged_df['x_opt'])**2 + (merged_df['y'] - merged_df['y_opt'])**2 + (merged_df['z'] - merged_df['z_opt'])**2)
+                #now calculate the opt to kep distances
+                opt_to_kep_distances = np.sqrt((merged_df['x_opt'] - merged_df['x_kep'])**2 + (merged_df['y_opt'] - merged_df['y_kep'])**2 + (merged_df['z_opt'] - merged_df['z_kep'])**2)
+                print(f"min opt_to_kep_distances distance: {min(opt_to_kep_distances)}")
+                print(f"max opt_to_kep_distances distance: {max(opt_to_kep_distances)}")
+                print(f"min sp3_to_opt_distances distance: {min(sp3_to_opt_distances)}")
+                print(f"min sp3_to_kep_distances distance: {min(sp3_to_kep_distances)}")
+                print(f"max sp3_to_opt_distances distance: {max(sp3_to_opt_distances)}")
+                print(f"max sp3_to_kep_distances distance: {max(sp3_to_kep_distances)}")
 
-                observation_state_vectors = prop_observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].values
-                observation_times = pd.to_datetime(prop_observations_df['UTC'].values)
+                # find the 3D difference betweem sp3_to_opt_distances and opt_to_kep_distances
+                diff = np.abs(sp3_to_opt_distances - opt_to_kep_distances)
+                print(f"max diff: {max(diff)}")
+                print(f"min diff: {min(diff)}")
+                #one subplot with the 3D cartesian distance between the two orbits for the last 50 points]
+                #another subplot wioth the diff between the two distances
+                fig, ax = plt.subplots(2, 1, figsize=(10, 10))
+                ax[0].plot(merged_df['UTC'], sp3_to_opt_distances, label='distance of optimized orbit to true trajectory')
+                # ax[0].plot(merged_df['UTC'], opt_to_kep_distances, label='opt_to_kep_distances')
+                ax[0].set_xlabel('UTC')
+                ax[0].set_ylabel('distance (m)')
+                ax[0].set_title(f"{sat_name} - {force_model_config}")
+                ax[0].legend()
+                ax[0].grid(True)
+                ax[1].plot(merged_df['UTC'], opt_to_kep_distances, label='distance of optmized orbit to secondary trajectory') #we want to know if this one collides
+                ax[1].plot(merged_df['UTC'], sp3_to_kep_distances, label='distance of true trajectory to secondary trajectory') #we know that this one collides
+                #log the y axis
+                ax[1].set_yscale('log')
+                #add a grid with minor and major ticks
+                ax[1].grid(which='both')
+                ax[1].set_xlabel('UTC')
+                ax[1].set_ylabel('distance (m)')
+                ax[1].legend()
+                plt.show()
 
-                #compare the optimized state to the observations
-                print(f"final position diff between optimized state and observations: {np.linalg.norm(state_vectors[-1] - observation_state_vectors[-1])}")
-                #compare the optimized state to the keplerian orbit 
-                print(f"final position diff between optimized state and collision df orbit: {np.linalg.norm(state_vectors[-1] - np.array(collision_df[['x', 'y', 'z', 'xv', 'yv', 'zv']].iloc[-1]))}")
-                #compare the observations to the keplerian orbit (should collide at the end of the arc)
-                print(f"final position diff between observations and keplerian orbit: {np.linalg.norm(observation_state_vectors[-1] - kepler_prop_state_vectors24[1441])}")
+
+
+
+
 
                 #select the state and covariance matrix that corresponds to the iteration with the lowest RMS
                 #check the optimized state is in the format the initial_state_vector wants it
@@ -171,10 +205,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-            # keplerMod = KeplerianOrbit(keplerOG.getA(), keplerOG.getE(), keplerOG.getI(), keplerOG.getPerigeeArgument(), 
-        #                          keplerOG.getRightAscensionOfAscendingNode(), keplerOG.getTrueAnomaly(), 
-        #                          PositionAngleType.MEAN, FramesFactory.getEME2000(), datetime_to_absolutedate(t24), 
-        #                          Constants.WGS84_EARTH_MU)
