@@ -63,8 +63,13 @@ def main():
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         # find the time of the first time step
         t0 = ephemeris_df['UTC'].iloc[0]
+        print(f't0: {t0}')
         t0_plus_24 = t0 + datetime.timedelta(days=1) #this is the time at which the collision will occur
+        print(f"t0_plus_24: {t0_plus_24}")
         t0_plus_24_plus_t = t0_plus_24 + datetime.timedelta(minutes=45) #this is the time at which we want the propagation to end
+        #slice ephemeris_df so that it stops at t0_plus_24_plus_t
+        ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= t0) & (ephemeris_df['UTC'] <= t0_plus_24_plus_t)]
+        print(f"t0_plus_24_plus_t: {t0_plus_24_plus_t}")
         
         pvcoords_t24 = PVCoordinates(Vector3D(float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['x']),
                                                 float(ephemeris_df[ephemeris_df['UTC'] == t0_plus_24]['y']),
@@ -88,22 +93,16 @@ def main():
         ephemeris_generator24 = propagator24.getEphemerisGenerator()
         propagator24.propagate(datetime_to_absolutedate(t0_plus_24_plus_t), datetime_to_absolutedate(t0))
         ephemeris24 = ephemeris_generator24.getGeneratedEphemeris()
-
         kepler_prop_times24, kepler_prop_state_vectors24 = pos_vel_from_orekit_ephem(ephemeris24, datetime_to_absolutedate(t0_plus_24_plus_t), datetime_to_absolutedate(t0), 60.0)
-
         #use kepler_prop_times0 and t0 to construct the UTC times for the ephemeris_df
         kepler_prop_times24_dt = [t0_plus_24_plus_t + datetime.timedelta(seconds=sec) for sec in kepler_prop_times24]
         kepler_times_df = pd.DataFrame({'UTC': pd.to_datetime(kepler_prop_times24_dt)})
         kepler_states_df = pd.DataFrame(kepler_prop_state_vectors24, columns=['x_kep', 'y_kep', 'z_kep', 'xv_kep', 'yv_kep', 'zv_kep'])
-        # Merge based on the closest UTC match
         ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
         collision_df = pd.merge_asof(ephemeris_df.sort_values('UTC'), kepler_times_df.sort_values('UTC').join(kepler_states_df), on='UTC')
-        # collision_df = merged_df.iloc[:int(prop_length / time_step), :]
-        
+    
         # Calculating the 3D cartesian distance between the two orbits for the last 50 points
         sp3_to_kep_distances = np.sqrt((collision_df['x'] - collision_df['x_kep'])**2 + (collision_df['y'] - collision_df['y_kep'])**2 + (collision_df['z'] - collision_df['z_kep'])**2)
-        print(f"min sp3_to_kep_distances distance: {min(sp3_to_kep_distances)}")
-        print(f"max sp3_to_kep_distances distance: {max(sp3_to_kep_distances)}")
 
         arc_step = int(arc_length / time_step)
         for arc in range(num_arcs):
@@ -146,10 +145,10 @@ def main():
                 print(f"propagating with force model config: {force_model_config}")
                 optimized_state_propagator = configure_force_models(optimized_state_propagator, cr, cross_section, cd, False, **force_model_config)
                 ephemGen_optimized = optimized_state_propagator.getEphemerisGenerator()
-                optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t))
+                optimized_state_propagator.propagate(datetime_to_absolutedate(initial_t), datetime_to_absolutedate(t0_plus_24_plus_t))
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
 
-                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(final_prop_t), 60.0)
+                times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(t0_plus_24_plus_t), 60.0)
                 optimized_times_df = pd.DataFrame({'UTC': pd.to_datetime([initial_t + datetime.timedelta(seconds=sec) for sec in times])})
                 #add the newly calculated state vectors to the collision_df using UTC as the thing to merge on (x_new, y_new, z_new, xv_new, yv_new, zv_new)
                 optimized_states_df = pd.DataFrame(state_vectors, columns=['x_opt', 'y_opt', 'z_opt', 'xv_opt', 'yv_opt', 'zv_opt'])
@@ -159,13 +158,9 @@ def main():
                 #now calculate the opt to kep distances
                 opt_to_kep_distances = np.sqrt((merged_df['x_opt'] - merged_df['x_kep'])**2 + (merged_df['y_opt'] - merged_df['y_kep'])**2 + (merged_df['z_opt'] - merged_df['z_kep'])**2)
                 print(f"min opt_to_kep_distances distance: {min(opt_to_kep_distances)}")
-                print(f"max opt_to_kep_distances distance: {max(opt_to_kep_distances)}")
                 print(f"min sp3_to_opt_distances distance: {min(sp3_to_opt_distances)}")
                 print(f"min sp3_to_kep_distances distance: {min(sp3_to_kep_distances)}")
-                print(f"max sp3_to_opt_distances distance: {max(sp3_to_opt_distances)}")
-                print(f"max sp3_to_kep_distances distance: {max(sp3_to_kep_distances)}")
 
-                # find the 3D difference betweem sp3_to_opt_distances and opt_to_kep_distances
                 diff = np.abs(sp3_to_opt_distances - opt_to_kep_distances)
                 print(f"max diff: {max(diff)}")
                 print(f"min diff: {min(diff)}")
@@ -173,6 +168,7 @@ def main():
                 #another subplot wioth the diff between the two distances
                 fig, ax = plt.subplots(2, 1, figsize=(10, 10))
                 ax[0].plot(merged_df['UTC'], sp3_to_opt_distances, label='distance of optimized orbit to true trajectory')
+                ax[0].plot(merged_df['UTC'], diff, label='diff between the two distances')
                 # ax[0].plot(merged_df['UTC'], opt_to_kep_distances, label='opt_to_kep_distances')
                 ax[0].set_xlabel('UTC')
                 ax[0].set_ylabel('distance (m)')
@@ -188,29 +184,7 @@ def main():
                 ax[1].set_xlabel('UTC')
                 ax[1].set_ylabel('distance (m)')
                 ax[1].legend()
-
-                # Set x-axis limits
-                import matplotlib.dates as mdates
-
-                start_date = merged_df['UTC'].iloc[0]  # Assuming this is the start date you're interested in
-                end_date = t0_plus_24_plus_t  # Your end date
-
-                # Convert to matplotlib date format
-                start_num = mdates.date2num(start_date)
-                end_num = mdates.date2num(end_date)
-
-                for a in ax:
-                    a.set_xlim([start_num, end_num])
-                    a.xaxis_date()  # Ensure the x-axis interprets the numbers as dates
-                    a.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S'))
-                    a.xaxis.set_major_locator(mdates.AutoDateLocator())
-
-                plt.tight_layout()
                 plt.show()
-
-                #the distance between the optimized orbit and the true trajectory is weird now...
-                # add a vertical line to the second subplot at the two TCAs and note the difference in TCA
-                # add an annotated horizontal line to the second subplot at the two DCAs
 
                 #select the state and covariance matrix that corresponds to the iteration with the lowest RMS
                 #check the optimized state is in the format the initial_state_vector wants it
