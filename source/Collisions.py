@@ -188,12 +188,29 @@ def main():
                 ax[1].set_xlabel('UTC')
                 ax[1].set_ylabel('distance (m)')
                 ax[1].legend()
+
+                # Set x-axis limits
+                import matplotlib.dates as mdates
+
+                start_date = merged_df['UTC'].iloc[0]  # Assuming this is the start date you're interested in
+                end_date = t0_plus_24_plus_t  # Your end date
+
+                # Convert to matplotlib date format
+                start_num = mdates.date2num(start_date)
+                end_num = mdates.date2num(end_date)
+
+                for a in ax:
+                    a.set_xlim([start_num, end_num])
+                    a.xaxis_date()  # Ensure the x-axis interprets the numbers as dates
+                    a.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S'))
+                    a.xaxis.set_major_locator(mdates.AutoDateLocator())
+
+                plt.tight_layout()
                 plt.show()
 
-
-
-
-
+                #the distance between the optimized orbit and the true trajectory is weird now...
+                # add a vertical line to the second subplot at the two TCAs and note the difference in TCA
+                # add an annotated horizontal line to the second subplot at the two DCAs
 
                 #select the state and covariance matrix that corresponds to the iteration with the lowest RMS
                 #check the optimized state is in the format the initial_state_vector wants it
