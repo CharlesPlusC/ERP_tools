@@ -171,10 +171,10 @@ def main():
                     f.write(f"estimate_drag: {estimate_drag}\n")
                     f.write(f"boxwing: {boxwing}\n")
 
-            #save arc-specific results
-            np.save(f"{output_folder}_hcl_diffs.npy", hcl_differences)
-            np.save(f"{output_folder}_prop_residuals.npy", diffs_3d_abs_results) #These are not the residuals from the OD fitting process, but from the propagation
-            np.savez(f"{output_folder}_state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
+                    #save arc-specific results
+            np.save(f"{output_folder}/hcl_diffs.npy", hcl_differences)
+            np.save(f"{output_folder}/prop_residuals.npy", diffs_3d_abs_results) #These are not the residuals from the OD fitting process, but from the propagation
+            np.savez(f"{output_folder}/state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
 
             if estimate_drag:
                 np.save(f"{output_folder}/cd_estimates.npy", cd_estimates)
