@@ -28,6 +28,7 @@ import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import uuid
 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
@@ -39,10 +40,11 @@ def generate_config_name(config_dict, arc_number):
     return f"arc{arc_number}_{config_keys}"
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    num_arcs = 6
-    arc_length = 45 #mins
-    prop_length = 60 * 60 * 6 #seconds
+    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
+    num_arcs = 1
+    arc_length = 15 #mins
+    prop_length = 60 * 60 * 1 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
@@ -71,7 +73,7 @@ def main():
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]
         #slice the ephemeris to start 7 arcs past the beginning
-        ephemeris_df = ephemeris_df.iloc[7*arc_length:]
+        ephemeris_df = ephemeris_df.iloc[15*arc_length:]
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         time_step_seconds = time_step * 60.0
         arc_step = int(arc_length / time_step)
@@ -99,10 +101,9 @@ def main():
                     estimate_drag = False
 
                 optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing_model)
-                date_now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 folder_path = "output/OD_BLS/Tapley/saved_runs"
-                initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")  # Format datetime
-                output_folder = f"{folder_path}/{sat_name}/fm{i+1}arc{arc+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}"
+                initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")
+                output_folder = f"{folder_path}/{sat_name}/fm{i+1}arc{arc+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}_ID{uuid.uuid4()}" # Add uuid to avoid overwriting
                 os.makedirs(output_folder, exist_ok=True)
                 np.save(f"{output_folder}/optimized_states.npy", optimized_states)
                 np.save(f"{output_folder}/cov_mats.npy", cov_mats)
