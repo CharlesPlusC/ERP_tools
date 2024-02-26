@@ -1,6 +1,6 @@
 # for all the satellites below, this script will take the sp3 files in sp3_cache, and concatenate them into a single dataframe per spacecraft. 
 # the datatframe will then be used to write out an ephemeris file for each spacecraft that will be saved in the specified directory.
-
+import numpy as np
 import json
 import pandas as pd
 import sp3
@@ -10,6 +10,43 @@ import os
 import glob
 from source.tools.utilities import SP3_to_EME2000, utc_to_mjd
 #run from CLI from root using: python source/tools/sp3_2_ephemeris.py
+
+def read_sp3_file(sp3_file_path):
+    print(f"reading sp3 file: {sp3_file_path}")
+
+    product = sp3.Product.from_file(sp3_file_path)
+    
+    satellite = product.satellites[0]
+    records = satellite.records
+
+    times = []
+    positions = []
+    velocities = []
+
+    for record in records:
+        utc_time = record.time
+        times.append(utc_time)
+        positions.append(record.position)
+        # Check if velocity data is available; assign NaNs if not
+        velocities.append(record.velocity if record.velocity is not None else (np.nan, np.nan, np.nan))
+
+    print("first position: ", positions[0])
+    print("first velocity: ", velocities[0] if velocities[0] is not None else "None")
+    print("first time: ", times[0])
+
+    df = pd.DataFrame({
+        'Time': times,
+        'Position_X': [pos[0] / 1000 for pos in positions],
+        'Position_Y': [pos[1] / 1000 for pos in positions],
+        'Position_Z': [pos[2] / 1000 for pos in positions],
+        # Use NaN for velocities if they are None
+        'Velocity_X': [vel[0] / 1000 if vel is not None else np.nan for vel in velocities],
+        'Velocity_Y': [vel[1] / 1000 if vel is not None else np.nan for vel in velocities],
+        'Velocity_Z': [vel[2] / 1000 if vel is not None else np.nan for vel in velocities]
+    })
+
+    print(f"Read {len(df)} records from {sp3_file_path}")
+    return df
 
 def read_sp3_gz_file(sp3_gz_file_path):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.sp3')
@@ -56,10 +93,31 @@ def process_sp3_files(base_path, sat_list):
     for sat_name, sat_info in sat_list.items():
         sp3_c_code = sat_info['sp3-c_code']
         satellite_path = os.path.join(base_path, sp3_c_code)
+        print(f"Processing {sat_name} from {satellite_path}")
+
+        if not os.path.exists(satellite_path):
+            print(f"Directory does not exist: {satellite_path}")
+            continue
+
         for day_folder in glob.glob(f"{satellite_path}/*"):
-            for sp3_gz_file in glob.glob(f"{day_folder}/*.sp3.gz"):
-                df = read_sp3_gz_file(sp3_gz_file)
-                print(f"Appending DataFrame for {sat_name} from {sp3_gz_file}")  # Debug print
+            print(f"Looking in {day_folder}")
+            sp3_files_found = glob.glob(f"{day_folder}/*sp3*")
+            if not sp3_files_found:
+                print(f"No SP3 files found in {day_folder}")
+                continue
+
+            for sp3_file in sp3_files_found:
+                if sp3_file.endswith('.gz'):
+                    print(f"Found .gz file: {sp3_file}")
+                    df = read_sp3_gz_file(sp3_file)
+                elif sp3_file.endswith('.sp3'):
+                    print(f"Found .sp3 file: {sp3_file}")
+                    df = read_sp3_file(sp3_file)
+                else:
+                    print(f"Incorrect or missing file extension for {sp3_file}")
+                    continue
+
+                print(f"Appending DataFrame for {sat_name} from {sp3_file}")  # Debug print
                 all_dataframes[sat_name].append(df)
 
     concatenated_dataframes = {}

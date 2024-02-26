@@ -40,16 +40,16 @@ def main():
     arc_length = 10 #mins
     prop_length = 60 * 60 * 24 #seconds
     force_model_configs = [
-        # {'gravity': True},
-        # {'36x36gravity': True, '3BP': True},
-        # {'120x120gravity': True, '3BP': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+        {'gravity': True},
+        {'36x36gravity': True, '3BP': True},
+        {'120x120gravity': True, '3BP': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
         {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
     ]
 
     for sat_name in sat_names_to_test:
@@ -123,9 +123,10 @@ def main():
                 if not force_model_config.get('jb08drag', False) and not force_model_config.get('dtm2000drag', False) and not force_model_config.get('nrlmsise00drag', False):
                     estimate_drag = False
 
-                optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=False, max_patience=1)
+                optimized_states, cov_mats, _, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=False, max_patience=1)
                 min_RMS_index = np.argmin(RMSs)
                 optimized_state = optimized_states[min_RMS_index]
+                optimized_state_cov = cov_mats[min_RMS_index]
 
                 optimized_state_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(optimized_state[0]), float(optimized_state[1]), float(optimized_state[2])),
                                                                     Vector3D(float(optimized_state[3]), float(optimized_state[4]), float(optimized_state[5]))),
@@ -149,6 +150,10 @@ def main():
                 ephemeris = ephemGen_optimized.getGeneratedEphemeris()
 
                 times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(initial_t), datetime_to_absolutedate(t0_plus_24_plus_t), 60.0)
+
+                #Now propagate the covariance matrix at the same time steps
+                
+
                 optimized_times_df = pd.DataFrame({'UTC': pd.to_datetime([initial_t + datetime.timedelta(seconds=sec) for sec in times])})
                 #add the newly calculated state vectors to the collision_df using UTC as the thing to merge on (x_new, y_new, z_new, xv_new, yv_new, zv_new)
                 optimized_states_df = pd.DataFrame(state_vectors, columns=['x_opt', 'y_opt', 'z_opt', 'xv_opt', 'yv_opt', 'zv_opt'])
@@ -213,8 +218,6 @@ def main():
                 #set start_date to t0, then set end_date to t0_plus_24 (+10 mins so we have a bit of a buffer for plotting)
                 # set phi0 to the identity matrix?
 
-                # state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,boxwing=None, **force_model_config)
-                # phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,boxwing=None, **force_model_config)
 
 if __name__ == "__main__":
     main()

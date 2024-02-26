@@ -1,4 +1,20 @@
 {
+    "NAVSTAR76": {
+        "norad_id": 41328,
+        "sp3-c_code": "G76",
+        "mass": 1663.0,
+        "cross_section": 12.0,
+        "cd": 2.2,
+        "cr": 1
+    },
+    "NAVSTAR46": {
+        "norad_id": 41328,
+        "sp3-c_code": "G11",
+        "mass": 1663.0,
+        "cross_section": 12.0,
+        "cd": 2.2,
+        "cr": 1
+    },
     "TerraSAR-X": {
         "norad_id": 31698,
         "sp3-c_code": "L13",
@@ -30,13 +46,5 @@
         "cross_section": 5.0,
         "cd": 2.4,
         "cr": 1.5
-    },
-    "NAVSTAR76": {
-        "norad_id": 41328,
-        "sp3-c_code": "G76",
-        "mass": 1663.0,
-        "cross_section": 12.0,
-        "cd": 2.2,
-        "cr": 1
     }
 }
