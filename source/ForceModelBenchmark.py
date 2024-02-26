@@ -40,11 +40,10 @@ def generate_config_name(config_dict, arc_number):
     return f"arc{arc_number}_{config_keys}"
 
 def main():
-    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B"]
-    num_arcs = 1
-    arc_length = 15 #mins
-    prop_length = 60 * 60 * 1 #seconds
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    num_arcs = 6
+    arc_length = 45 #mins
+    prop_length = 60 * 60 * 6 #seconds
     estimate_drag = False
     boxwing = False
     force_model_configs = [
@@ -72,8 +71,8 @@ def main():
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]
-        #slice the ephemeris to start 7 arcs past the beginning
-        ephemeris_df = ephemeris_df.iloc[15*arc_length:]
+        #slice the ephemeris to start 15 arcs past the beginning
+        ephemeris_df = ephemeris_df.iloc[12*arc_length:]
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         time_step_seconds = time_step * 60.0
         arc_step = int(arc_length / time_step)
