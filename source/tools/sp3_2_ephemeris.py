@@ -9,10 +9,9 @@ import tempfile
 import os
 import glob
 from source.tools.utilities import SP3_to_EME2000, utc_to_mjd
-#run from CLI from root using: python source/tools/sp3_2_ephemeris.py
+#run using CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 def read_sp3_file(sp3_file_path):
-    print(f"reading sp3 file: {sp3_file_path}")
 
     product = sp3.Product.from_file(sp3_file_path)
     
@@ -29,10 +28,6 @@ def read_sp3_file(sp3_file_path):
         positions.append(record.position)
         # Check if velocity data is available; assign NaNs if not
         velocities.append(record.velocity if record.velocity is not None else (np.nan, np.nan, np.nan))
-
-    print("first position: ", positions[0])
-    print("first velocity: ", velocities[0] if velocities[0] is not None else "None")
-    print("first time: ", times[0])
 
     df = pd.DataFrame({
         'Time': times,
