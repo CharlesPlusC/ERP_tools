@@ -490,6 +490,35 @@ def utc_to_mjd(utc_time: datetime) -> float:
     mjd = time.mjd
     return mjd
 
+def utc_to_jd(utc_time: datetime) -> float:
+    """
+    Convert UTC time (datetime object) to Julian Date using Astropy,
+    rounding to the nearest full second to avoid timing errors.
+
+    Parameters
+    ----------
+    utc_time : datetime
+        UTC time tag.
+
+    Returns
+    -------
+    float
+        Julian Date.
+    """
+    # Round the input datetime to the nearest full second
+    if utc_time.microsecond >= 500000:
+        rounded_utc_time = utc_time + timedelta(seconds=1)
+        rounded_utc_time = rounded_utc_time.replace(microsecond=0)
+    else:
+        rounded_utc_time = utc_time.replace(microsecond=0)
+
+    # Convert the rounded datetime object to Astropy Time object
+    time = Time(rounded_utc_time, format='datetime', scale='utc', precision=9)
+
+    # Convert to Julian Date
+    jd = time.jd
+    return jd
+
 def std_dev_from_lower_triangular(lower_triangular_data):
     cov_matrix = np.zeros((6, 6))
     row, col = np.tril_indices(6)
@@ -546,6 +575,43 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
         # Convert back from m to km 
         eme2000_pos[i] = eme2000_pos[i] / 1000
         eme2000_vel[i] = eme2000_vel[i] / 1000
+
+    return eme2000_pos, eme2000_vel
+
+def TEME_to_EME2000(teme_pos, teme_vel, mjds):
+    # Orekit Frames
+    frame_TEME = FramesFactory.getTEME()
+    frame_EME2000 = FramesFactory.getEME2000()
+
+    # Prepare output arrays
+    eme2000_pos = np.empty_like(teme_pos)
+    eme2000_vel = np.empty_like(teme_vel)
+
+    # Iterate over each row of position, velocity, and corresponding MJD
+    for i in range(len(teme_pos)):
+        # Convert MJD to Julian Date and then to UTC datetime
+        mjd = mjds.iloc[i]
+        jd = mjd + 2400000.5
+        base_date = datetime(1858, 11, 17, tzinfo=timezone.utc)
+        
+        # Convert to datetime
+        dt = base_date + timedelta(days=(jd - 2400000.5))
+        
+        # Convert datetime to AbsoluteDate
+        absolute_date = datetime_to_absolutedate(dt)
+
+        # Convert inputs to Orekit's Vector3D and PVCoordinates (and convert from km to m)
+        teme_pos_vector = Vector3D(float(teme_pos[i, 0] * 1000), float(teme_pos[i, 1] * 1000), float(teme_pos[i, 2] * 1000))
+        teme_vel_vector = Vector3D(float(teme_vel[i, 0] * 1000), float(teme_vel[i, 1] * 1000), float(teme_vel[i, 2] * 1000))
+        pv_teme = PVCoordinates(teme_pos_vector, teme_vel_vector)
+
+        # Transform Coordinates from TEME to EME2000
+        teme_to_eme2000 = frame_TEME.getTransformTo(frame_EME2000, absolute_date)
+        pv_eme2000 = teme_to_eme2000.transformPVCoordinates(pv_teme)
+
+        # Extract position and velocity from transformed coordinates and convert back from m to km
+        eme2000_pos[i] = np.array([pv_eme2000.getPosition().getX(), pv_eme2000.getPosition().getY(), pv_eme2000.getPosition().getZ()]) / 1000
+        eme2000_vel[i] = np.array([pv_eme2000.getVelocity().getX(), pv_eme2000.getVelocity().getY(), pv_eme2000.getVelocity().getZ()]) / 1000
 
     return eme2000_pos, eme2000_vel
 
