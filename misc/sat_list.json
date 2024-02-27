@@ -1,50 +1,10 @@
 {
-    "NAVSTAR76": {
-        "norad_id": 41328,
-        "sp3-c_code": "G76",
-        "mass": 1663.0,
-        "cross_section": 12.0,
-        "cd": 2.2,
-        "cr": 1
-    },
     "NAVSTAR46": {
-        "norad_id": 41328,
+        "norad_id": 25933,
         "sp3-c_code": "G11",
         "mass": 1663.0,
         "cross_section": 12.0,
         "cd": 2.2,
         "cr": 1
-    },
-    "TerraSAR-X": {
-        "norad_id": 31698,
-        "sp3-c_code": "L13",
-        "mass": 1230.0,
-        "cross_section": 4.0,
-        "cd": 2.4,
-        "cr": 1.5
-    },
-    "GRACE-FO-A": {
-        "norad_id": 43476,
-        "sp3-c_code": "L64",
-        "mass": 600.2,
-        "cross_section": 1.94,
-        "cd": 2.4,
-        "cr": 1
-    },
-    "GRACE-FO-B": {
-        "norad_id": 43477,
-        "sp3-c_code": "L65",
-        "mass": 600.2,
-        "cross_section": 1.94,
-        "cd": 2.4,
-        "cr": 1
-    },
-    "TanDEM-X": {
-        "norad_id": 36605,
-        "sp3-c_code": "L20",
-        "mass": 1350.0,
-        "cross_section": 5.0,
-        "cd": 2.4,
-        "cr": 1.5
     }
 }

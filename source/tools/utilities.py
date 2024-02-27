@@ -461,6 +461,26 @@ def jd_to_utc(jd: float) -> datetime:
     utc = time.datetime
     return utc
 
+def mjd_to_utc(mjd: float) -> datetime:
+    """
+    Convert Modified Julian Date to UTC time tag (datetime object) using Astropy.
+
+    Parameters
+    ----------
+    mjd : float
+        Modified Julian Date.
+
+    Returns
+    -------
+    datetime
+        UTC time tag.
+    """
+    #convert mjd to astropy time object
+    time = Time(mjd, format='mjd', scale='utc', precision=9)
+    #convert astropy time object to datetime object
+    utc = time.datetime
+    return utc
+
 def utc_to_mjd(utc_time: datetime) -> float:
     """
     Convert UTC time (datetime object) to Modified Julian Date using Astropy,

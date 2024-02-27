@@ -8,40 +8,46 @@ import gzip
 import tempfile
 import os
 import glob
+import datetime
 from source.tools.utilities import SP3_to_EME2000, utc_to_mjd
 #run using CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 def read_sp3_file(sp3_file_path):
-
-    product = sp3.Product.from_file(sp3_file_path)
-    
-    satellite = product.satellites[0]
-    records = satellite.records
-
     times = []
     positions = []
-    velocities = []
+    velocities = []  # Velocity data is not available; will remain empty
 
-    for record in records:
-        utc_time = record.time
-        times.append(utc_time)
-        positions.append(record.position)
-        # Check if velocity data is available; assign NaNs if not
-        velocities.append(record.velocity if record.velocity is not None else (np.nan, np.nan, np.nan))
+    with open(sp3_file_path, 'r') as file:
+        for line in file:
+            if line.startswith('*'):  # Line with time information
+                year = int(line[3:7])
+                month = int(line[8:10])
+                day = int(line[11:13])
+                hour = int(line[14:16])
+                minute = int(line[17:19])
+                second = float(line[20:31])
+                current_time = datetime.datetime(year, month, day, hour, minute, int(second))
+            elif line.startswith('PG11'):  # Line with position data for PG11
+                position = line.split()[1:4]  # Extract X, Y, Z positions
+                # Convert position from kilometers to meters and store
+                positions.append([float(pos) for pos in position])
+                times.append(current_time)
+                # Append a placeholder for velocities
+                velocities.append((float('nan'), float('nan'), float('nan')))
 
     df = pd.DataFrame({
         'Time': times,
-        'Position_X': [pos[0] / 1000 for pos in positions],
-        'Position_Y': [pos[1] / 1000 for pos in positions],
-        'Position_Z': [pos[2] / 1000 for pos in positions],
-        # Use NaN for velocities if they are None
-        'Velocity_X': [vel[0] / 1000 if vel is not None else np.nan for vel in velocities],
-        'Velocity_Y': [vel[1] / 1000 if vel is not None else np.nan for vel in velocities],
-        'Velocity_Z': [vel[2] / 1000 if vel is not None else np.nan for vel in velocities]
+        'Position_X': [pos[0] for pos in positions],
+        'Position_Y': [pos[1] for pos in positions],
+        'Position_Z': [pos[2] for pos in positions],
+        'Velocity_X': [vel[0] for vel in velocities],
+        'Velocity_Y': [vel[1] for vel in velocities],
+        'Velocity_Z': [vel[2] for vel in velocities],
     })
 
     print(f"Read {len(df)} records from {sp3_file_path}")
     return df
+
 
 def read_sp3_gz_file(sp3_gz_file_path):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.sp3')
@@ -127,23 +133,28 @@ def process_sp3_files(base_path, sat_list):
     return concatenated_dataframes
 
 def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
+    from datetime import timedelta
+    # GPS to UTC leap seconds difference (verify current value)
+    leap_seconds = 18
+
     # Create directory for satellite if it doesn't exist
     sat_dir = os.path.join(output_dir, satellite)
     os.makedirs(sat_dir, exist_ok=True)
 
     # Define the file name
-    start_day = df.index.min().strftime("%Y-%m-%d")
-    end_day = df.index.max().strftime("%Y-%m-%d")
+    start_day = df.index.min() - timedelta(seconds=leap_seconds)
+    end_day = df.index.max() - timedelta(seconds=leap_seconds)
     norad_id = sat_dict[satellite]['norad_id']
-    file_name = f"NORAD{norad_id}-{start_day}-{end_day}.txt"
+    file_name = f"NORAD{norad_id}-{start_day.strftime('%Y-%m-%d')}-{end_day.strftime('%Y-%m-%d')}.txt"
     file_path = os.path.join(sat_dir, file_name)
 
     # Write data to the ephemeris file
     with open(file_path, 'w') as file:
         for idx, row in df.iterrows():
-            # Convert index to UTC string without timezone information
-            utc = idx.tz_convert(None).strftime("%Y-%m-%d %H:%M:%S.%f")
-            line1 = f"{utc} {row['pos_x_eci']} {row['pos_y_eci']} {row['pos_z_eci']} {row['vel_x_eci']} {row['vel_y_eci']} {row['vel_z_eci']}\n"
+            # Convert index from GPS to UTC by subtracting leap seconds
+            utc_time = idx - timedelta(seconds=leap_seconds)
+            utc_str = utc_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+            line1 = f"{utc_str} {row['pos_x_eci']} {row['pos_y_eci']} {row['pos_z_eci']} {row['vel_x_eci']} {row['vel_y_eci']} {row['vel_z_eci']}\n"
             line2 = f"{row['sigma_x']} {row['sigma_y']} {row['sigma_z']} {row['sigma_xv']} {row['sigma_yv']} {row['sigma_zv']}\n"
             file.write(line1)
             file.write(line2)
