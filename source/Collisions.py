@@ -174,6 +174,17 @@ def main():
                 print(f"min opt_to_kep_distances distance: {min_opt_to_kep_distance}")
                 print(f"time_of_closest_approach_opt_to_kep: {time_of_closest_approach_opt_to_kep}")
 
+                # now propagate the covariance matrix
+                # Initialize the STM at t0 as an identity matrix
+                phi_i = np.identity(len(optimized_state_cov))
+                # Propagate the STM to the final time
+                phi_t1 = propagate_STM(optimized_state, initial_t, final_prop_t - initial_t, phi_i, cr, cd, cross_section, mass, estimate_drag, **force_model_config)
+                print(f"phi_t1: {phi_t1}")
+                # Propagate the covariance matrix
+                optimized_state_cov_t1 = phi_t1.dot(optimized_state_cov).dot(phi_t1.T)
+                print(f"optimized_state_cov_t1: {optimized_state_cov_t1}")
+                print(f"initial_state_cov: {np.diag(optimized_state_cov)}")
+                
                 fig, ax = plt.subplots(3, 1, figsize=(10, 15))
 
                 # First subplot
