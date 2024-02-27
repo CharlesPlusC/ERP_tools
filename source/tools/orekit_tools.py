@@ -198,15 +198,92 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
 
     return position + velocity
 
-def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_drag=False, **force_model_config):
+# def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_drag=False, **force_model_config):
 
+#     df_dy_size = 7 if estimate_drag else 6
+#     df_dy = np.zeros((df_dy_size, df_dy_size))
+
+#     state_vector_data = state_ti[:6]  # x, y, z, xv, yv, zv
+#     epochDate = datetime_to_absolutedate(t0)
+#     accelerations_t0 = np.zeros(3)
+#     force_models = []
+
+#     if force_model_config.get('36x36gravity', False):
+#         MU = Constants.WGS84_EARTH_MU
+#         monopolegrav = NewtonianAttraction(MU)
+#         force_models.append(monopolegrav)
+#         monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, monopolegrav)
+#         monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+#         accelerations_t0+=monopole_gravity_eci_t0
+
+#         gravityProvider = GravityFieldFactory.getNormalizedProvider(36,36)
+#         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
+#         force_models.append(gravityfield)
+#         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, gravityfield)
+#         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+#         accelerations_t0+=gravityfield_eci_t0
+
+#     if force_model_config.get('120x120gravity', False):
+#         MU = Constants.WGS84_EARTH_MU
+#         monopolegrav = NewtonianAttraction(MU)
+#         force_models.append(monopolegrav)
+#         monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, monopolegrav)
+#         monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+#         accelerations_t0+=monopole_gravity_eci_t0
+
+#         gravityProvider = GravityFieldFactory.getNormalizedProvider(120,120)
+#         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
+#         force_models.append(gravityfield)
+#         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, gravityfield)
+#         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+#         accelerations_t0+=gravityfield_eci_t0
+
+#     if force_model_config.get('3BP', False):
+#         moon = CelestialBodyFactory.getMoon()
+#         sun = CelestialBodyFactory.getSun()
+#         moon_3dbodyattraction = ThirdBodyAttraction(moon)
+#         force_models.append(moon_3dbodyattraction)
+#         sun_3dbodyattraction = ThirdBodyAttraction(sun)
+#         force_models.append(sun_3dbodyattraction)
+
+#         moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, moon_3dbodyattraction)
+#         moon_eci_t0 = np.array([moon_eci_t0[0].getX(), moon_eci_t0[0].getY(), moon_eci_t0[0].getZ()])
+#         accelerations_t0+=moon_eci_t0
+
+#         sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, sun_3dbodyattraction)
+#         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
+#         accelerations_t0+=sun_eci_t0
+
+#     if force_model_config.get('solid_tides', False):
+#         central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
+#         ae = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+#         mu = Constants.WGS84_EARTH_MU
+#         tidesystem = TideSystem.ZERO_TIDE
+#         iersConv = IERSConventions.IERS_2010
+#         ut1scale = TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False)
+#         sun = CelestialBodyFactory.getSun()
+#         moon = CelestialBodyFactory.getMoon()
+#         solid_tides_moon = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, moon)
+#         force_models.append(solid_tides_moon)
+#         solid_tides_sun = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, sun)
+#         force_models.append(solid_tides_sun)
+#         solid_tides_moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solid_tides_moon)
+#         solid_tides_moon_eci_t0 = np.array([solid_tides_moon_eci_t0[0].getX(), solid_tides_moon_eci_t0[0].getY(), solid_tides_moon_eci_t0[0].getZ()])
+#         accelerations_t0+=solid_tides_moon_eci_t0
+#         solid_tides_sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solid_tides_sun)
+#         solid_tides_sun_eci_t0 = np.array([solid_tides_sun_eci_t0[0].getX(), solid_tides_sun_eci_t0[0].getY(), solid_tides_sun_eci_t0[0].getZ()])
+#         accelerations_t0+=solid_tides_sun_eci_t0
+
+
+
+def make_STM(state_ti,time, cr, cd, cross_section,mass,estimate_drag=False, **force_model_config):
+    accelerations_t0 = np.zeros(3)
+    state_vector_data = state_ti[:6]
+    epochDate = datetime_to_absolutedate(time)
     df_dy_size = 7 if estimate_drag else 6
     df_dy = np.zeros((df_dy_size, df_dy_size))
-
-    state_vector_data = state_ti[:6]  # x, y, z, xv, yv, zv
-    epochDate = datetime_to_absolutedate(t0)
-    accelerations_t0 = np.zeros(3)
     force_models = []
+
 
     if force_model_config.get('36x36gravity', False):
         MU = Constants.WGS84_EARTH_MU
@@ -372,16 +449,13 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
     for i in range(variables_to_perturb):
         perturbed_accelerations = np.zeros(3)
         state_ti_perturbed = state_ti.copy()
-        
+
         if i < 6:
             state_ti_perturbed[i] += state_perturbation
         elif i == 6:
-            # Perturb drag coefficient and re-instantiate drag model and atmosphere
             cd_perturbed = cd + cd_perturbation
-            # Re-instantiate required objects for drag force model
             if force_model_config.get('jb08drag', False):
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-                
                 jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source, dtcfile_data_source)
                 utc = TimeScalesFactory.getUTC()
                 atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
@@ -397,16 +471,13 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
                     MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
                     MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
                 atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
-            # if boxwing:
-            #     drag_sensitive = boxwing
-            # else:
             drag_sensitive = IsotropicDrag(float(cross_section), float(cd_perturbed))
             dragForce = DragForce(atmosphere, drag_sensitive)
-            force_models[-1] = dragForce  # Update the drag force model
+            force_models[-1] = dragForce
 
         for force_model in force_models:
             acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, mass, force_model)
-            if isinstance(acc_perturbed, np.ndarray): #deal with stupid output of extract_acceleration
+            if isinstance(acc_perturbed, np.ndarray):
                 acc_perturbed_values = acc_perturbed
             else:
                 acc_perturbed_values = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
@@ -415,15 +486,16 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         current_perturbation = cd_perturbation if i == 6 else state_perturbation
         partial_derivatives = (perturbed_accelerations - accelerations_t0) / current_perturbation
 
-        # Assign partial derivatives
-        if i < 6:  # State variables
+        if i < 6:
             df_dy[3:6, i] = partial_derivatives
             if i >= 3:
-                df_dy[i - 3, i] = 1  # Identity matrix for velocity
-        elif i == 6:  # Drag coefficient
-            df_dy[3:6, 6] = partial_derivatives  # Drag coefficient partials
+                df_dy[i - 3, i] = 1
+        elif i == 6:
+            df_dy[3:6, 6] = partial_derivatives
 
-    # Propagate State Transition Matrix (STM)
+    return df_dy
+
+def propagate_STM(df_dy, phi_i, dt):
     dt_seconds = float(dt.total_seconds())
     t_span = [0, dt_seconds]
     initial_condition = phi_i.flatten()

@@ -5,7 +5,7 @@ from orekit.pyhelpers import setup_orekit_curdir
 vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
-from tools.orekit_tools import  propagate_state, propagate_STM, rho_i
+from tools.orekit_tools import  propagate_state, propagate_STM, rho_i, make_STM
 import numpy as np
 
 def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=None):
@@ -68,15 +68,18 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
                 obs_covariance = np.diag(row[['sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']])
             obs_covariance = np.array(obs_covariance, dtype=float)
             W_i = np.linalg.inv(obs_covariance)
-            
+
             # Propagate state and STM
             dt = ti - ti_minus1
             if estimate_drag:
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1[:6], cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,mass=mass,boxwing=boxwing, **force_model_config)
-                phi_ti = propagate_STM(state_ti_minus1[:6], ti, dt, phi_ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,mass=mass,estimate_drag=True,boxwing=boxwing, **force_model_config)
+                #replace with make_STM(state_ti,t0, cr, cd, cross_section,mass,estimate_drag=False, **force_model_config) and propagate_STM(df_dy, phi_i, dt)
+                stm = make_STM(state_ti_minus1[:6], ti_minus1, cr=cr, cd=state_ti_minus1[-1], cross_section=cross_section,mass=mass,estimate_drag=True,boxwing=boxwing, **force_model_config)
+                phi_ti = propagate_STM(df_dy=stm, phi_i=phi_ti_minus1, dt=dt)
             else:
                 state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,boxwing=boxwing, **force_model_config)
-                phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,boxwing=boxwing, **force_model_config)
+                stm = make_STM(state_ti_minus1, ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,estimate_drag=False,boxwing=boxwing, **force_model_config)
+                phi_ti = propagate_STM(df_dy=stm, phi_i=phi_ti_minus1, dt=dt)
 
             # Compute H matrix and residuals for this observation
             H_matrix_row = d_rho_d_state @ phi_ti
@@ -126,4 +129,3 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
         iteration += 1
 
     return all_xbar_0s, all_covs, all_residuals, all_rms
-
