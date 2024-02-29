@@ -38,16 +38,17 @@ def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_arcs = 6
     arc_length = 10 #mins
-    prop_length = 60 * 60 * 24 #seconds
+    prop_length = 60 * 60 * 6 #seconds
+    prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [
         # {'gravity': True},
-        {'36x36gravity': True, '3BP': True},
-        {'120x120gravity': True, '3BP': True},
+        # {'36x36gravity': True, '3BP': True},
+        # {'120x120gravity': True, '3BP': True},
         # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
         # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
         # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
         # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
         # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
         # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
     ]
@@ -64,7 +65,7 @@ def main():
         # find the time of the first time step
         t0 = ephemeris_df['UTC'].iloc[0]
         print(f't0: {t0}')
-        t0_plus_24 = t0 + datetime.timedelta(days=1) #this is the time at which the collision will occur
+        t0_plus_24 = t0 + datetime.timedelta(days=prop_length_days) #this is the time at which the collision will occur
         print(f"t0_plus_24: {t0_plus_24}")
         t0_plus_24_plus_t = t0_plus_24 + datetime.timedelta(minutes=45) #this is the time at which we want the propagation to end
         #slice ephemeris_df so that it stops at t0_plus_24_plus_t
@@ -178,10 +179,10 @@ def main():
                 # Initialize the STM at t0 as an identity matrix
                 phi_i = np.identity(len(optimized_state_cov))
                 # Propagate the STM to the final time
-                phi_t1 = propagate_STM(optimized_state, initial_t, final_prop_t - initial_t, phi_i, cr, cd, cross_section, mass, estimate_drag, **force_model_config)
+                phi_t1 = propagate_STM(optimized_state, initial_t, final_prop_t - initial_t, phi_i, cr, cd, cross_section, mass, estimate_drag=False, **force_model_config)
                 print(f"phi_t1: {phi_t1}")
                 # Propagate the covariance matrix
-                optimized_state_cov_t1 = phi_t1.dot(optimized_state_cov).dot(phi_t1.T)
+                optimized_state_cov_t1 = phi_t1 @ optimized_state_cov @ phi_t1.T
                 print(f"optimized_state_cov_t1: {optimized_state_cov_t1}")
                 print(f"initial_state_cov: {np.diag(optimized_state_cov)}")
                 

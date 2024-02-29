@@ -423,14 +423,46 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         elif i == 6:  # Drag coefficient
             df_dy[3:6, 6] = partial_derivatives  # Drag coefficient partials
 
+    print(df_dy)
     # Propagate State Transition Matrix (STM)
     dt_seconds = float(dt.total_seconds())
-    t_span = [0, dt_seconds]
-    initial_condition = phi_i.flatten()
-    result = solve_ivp(lambda t, y: (df_dy @ y.reshape(phi_i.shape)).flatten(), t_span, initial_condition, method='RK45')
-    phi_t1 = result.y[:, -1].reshape(phi_i.shape)
+    print(f"Propagating STM for {dt_seconds} seconds")
+
+    # Proceed only if dt_seconds is positive
+    if dt_seconds > 61:
+        t_span = [0, dt_seconds]
+        t_eval = np.arange(0, dt_seconds, 60)  # Evaluate every minute
+        initial_condition = phi_i.flatten()
+        print(f"Initial condition: {initial_condition}")
+
+        # Integrate and capture the STM at each minute
+        result = solve_ivp(lambda t, y: (df_dy @ y.reshape(phi_i.shape)).flatten(), t_span, initial_condition, method='Radau', t_eval=t_eval)
+        print(f"Integration result: {result}")
+
+        # If integration is successful and there are results, plot the Frobenius norm
+        if result.success and result.y.size > 0:
+            frobenius_norms = [np.linalg.norm(stm.reshape(phi_i.shape), 'fro') for stm in result.y.T]
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10, 6))
+            plt.plot(result.t, frobenius_norms, marker='o', linestyle='-', color='b')
+            plt.title('Frobenius Norm of the STM over Time')
+            plt.xlabel('Time (seconds)')
+            plt.ylabel('Frobenius Norm')
+            plt.grid(True)
+            plt.show()
+
+            # Return the final STM in the same shape as the original function
+            phi_t1 = result.y[:, -1].reshape(phi_i.shape)
+        else:
+            print("Integration failed or produced no results.")
+            return None
+    else:
+        print("Non-positive dt_seconds, skipping propagation.")
+        return phi_i  # Return the initial condition unchanged if time step is zero or negative
 
     return phi_t1
+
+
 
 def rho_i(measured_state, measurement_type='state'):
     # maps a state vector to a measurement vector
