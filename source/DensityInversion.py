@@ -74,14 +74,15 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, P_nm_all, da
     a = provider.getAe()
     print(f"a: {a}")
     V = 0.0
-    for n in range(degree + 1):
+    # Start from n = 1 to exclude the central gravitational potential
+    for n in range(1, degree + 1):
         for m in range(min(n, order) + 1):
             C_nm = harmonics.getNormalizedCnm(n, m)
             S_nm = harmonics.getNormalizedSnm(n, m)
             P_nm = P_nm_all[n, m]
             sectorial_term = (C_nm * np.cos(m * lambda_) + S_nm * np.sin(m * lambda_)) * P_nm
             V += ((a / r) ** n) * sectorial_term
-    V = (mu / r) * V
+    V *= mu / r # Multiply by the gravitational parameter and the radius
     return V
 
 def energy(ephemeris_df):
@@ -95,7 +96,6 @@ def energy(ephemeris_df):
     # Convert ECEF to latitude, longitude, and altitude
     converted_coords = np.vectorize(ecef_to_lla, signature='(),(),()->(),(),()')(ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef'])
     ephemeris_df[['lat', 'lon', 'alt']] = np.column_stack(converted_coords)
-    print(f'first five lat lon alt: \n{ephemeris_df.head()}')
 
     # Pre-compute and cache unique associated Legendre polynomials
     unique_phis = np.unique(ephemeris_df['lat'].apply(np.radians))
@@ -107,16 +107,15 @@ def energy(ephemeris_df):
         phi_rad = np.radians(row['lat'])
         P_nm_all = legendre_cache[phi_rad]
         lambda_rad = np.radians(row['lon'])
-        r = row['alt'] * 1000
-        print(f"r: {r}, phi_rad: {phi_rad}, lambda_rad: {lambda_rad}")
+        r = row['alt']
+        print(f"r: {r}")
         date = datetime_to_absolutedate(row['UTC'])
         potential = compute_gravitational_potential(r, phi_rad, lambda_rad, 36, 36, P_nm_all, date)
         potentials.append(potential)
     ephemeris_df['U_non_spherical'] = potentials
 
     # Calculate total energy
-    ephemeris_df['energy'] = ephemeris_df['U_spherical'] - ephemeris_df['U_non_spherical']
-    # ephemeris_df['energy'] = ephemeris_df['U_spherical']
+    ephemeris_df['energy'] = ephemeris_df['U_spherical'] + ephemeris_df['U_non_spherical']
     return ephemeris_df
 
 def main():
@@ -125,7 +124,7 @@ def main():
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         #slice the dataframe to keep only the first 100 rows
-        ephemeris_df = ephemeris_df.head(1000)
+        ephemeris_df = ephemeris_df.head(100)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
@@ -153,57 +152,57 @@ def main():
         ephemeris_df['yv_ecef'] = yv_ecef
         ephemeris_df['zv_ecef'] = zv_ecef
 
-        # print(f"First five ephemeris data points for {sat_name}: \n{ephemeris_df.head()}")
-        # ephemeris_df = energy(ephemeris_df)
-
-        # # Plot the energy
-        # plt.figure()
-        # plt.plot(ephemeris_df['MJD'], ephemeris_df['energy'], label='Energy')
-        # plt.plot(ephemeris_df['MJD'], ephemeris_df['U_spherical'], label='Spherical Potential')
-        # # plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='Non-Spherical Potential')
-        # plt.xlabel('MJD')
-        # plt.ylabel('Energy (J/kg)')
-        # plt.title(f'Energy for {sat_name}')
-        # plt.grid(True)
-        # plt.legend()
-        # title = f'Energy for {sat_name}'
-        # folder_path = "output/DensityInversion/OrbitEnergy"
-        # if not os.path.exists(folder_path):
-        #     os.makedirs(folder_path)
-        # plt.savefig(f"{folder_path}/{title}.png")
+        ephemeris_df = energy(ephemeris_df)
+        
+        print(f"First five ephemeris data points for {sat_name}: \n{ephemeris_df.head()}")
+        # Plot the energy
+        plt.figure()
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy'], label='Potential with Non-Spherical')
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_spherical'], label='Potential with Spherical only ')
+        # plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='Non-Spherical Potential')
+        plt.xlabel('MJD')
+        plt.ylabel('Energy (J/kg)')
+        plt.title(f'Energy for {sat_name}')
+        plt.grid(True)
+        plt.legend()
+        title = f'Energy for {sat_name}'
+        folder_path = "output/DensityInversion/OrbitEnergy"
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        plt.savefig(f"{folder_path}/{title}.png")
         # plt.show()
 
         print(f"First five ephemeris data points for {sat_name}: \n{ephemeris_df.head()}")
 
 
-    # # Constants
-    # radius_at_500km = 6378136.3 + 500000  # Earth's radius plus 500 km
-    # degree = 64
-    # order = 64
-    # date = AbsoluteDate(2000, 1, 1, 12, 0, 0.0, TimeScalesFactory.getUTC())
+    # Constants
+    radius_at_500km = 6378136.3 + 500000  # Earth's radius plus 500 km
+    degree = 64
+    order = 64
+    date = AbsoluteDate(2000, 1, 1, 12, 0, 0.0, TimeScalesFactory.getUTC())
 
-    # # Define a sparser range of latitude and longitude for faster computation
-    # latitudes = np.linspace(-np.pi / 2, np.pi / 2, 12)  # Reduced points for latitude
-    # longitudes = np.linspace(-np.pi, np.pi, 24)  # Reduced points for longitude
+    # Define a sparser range of latitude and longitude for faster computation
+    latitudes = np.linspace(-np.pi / 2, np.pi / 2, 64)  # Reduced points for latitude
+    longitudes = np.linspace(-np.pi, np.pi, 64)  # Reduced points for longitude
 
-    # # Initialize an array to store the potential values
-    # potential_map = np.zeros((len(latitudes), len(longitudes)))
+    # Initialize an array to store the potential values
+    potential_map = np.zeros((len(latitudes), len(longitudes)))
 
-    # # Compute the potential at each point
-    # for i, phi in enumerate(latitudes):
-    #     print(f"Computing latitude {i+1} out of {len(latitudes)}...")
-    #     for j, lambda_ in enumerate(longitudes):
-    #         potential_map[i, j] = compute_gravitational_potential(radius_at_500km, phi, lambda_, degree, order, date)
+    # Compute the potential at each point
+    for i, phi in enumerate(latitudes):
+        print(f"Computing latitude {i+1} out of {len(latitudes)}...")
+        for j, lambda_ in enumerate(longitudes):
+            potential_map[i, j] = compute_gravitational_potential(radius_at_500km, phi, lambda_, degree, order, date)
 
-    # print("Computation complete. Plotting...")
+    print("Computation complete. Plotting...")
 
-    # # Plotting
-    # plt.figure(figsize=(10, 5))
-    # plt.contourf(longitudes * 180 / np.pi, latitudes * 180 / np.pi, potential_map, 100, cmap='viridis')
-    # plt.colorbar(label='Gravitational Potential (m^2/s^2)')
-    # plt.xlabel('Longitude (degrees)')
-    # plt.ylabel('Latitude (degrees)')
-    # plt.title('Gravitational Potential at 500 km Altitude (Coarse Resolution)')
-    # plt.show()
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    plt.contourf(longitudes * 180 / np.pi, latitudes * 180 / np.pi, potential_map, 100, cmap='viridis')
+    plt.colorbar(label='Gravitational Potential (m^2/s^2)')
+    plt.xlabel('Longitude (degrees)')
+    plt.ylabel('Latitude (degrees)')
+    plt.title('Gravitational Potential at 500 km Altitude (Coarse Resolution)')
+    plt.savefig("output/DensityInversion/GravitationalPotential.png")
 if __name__ == "__main__":
     main()

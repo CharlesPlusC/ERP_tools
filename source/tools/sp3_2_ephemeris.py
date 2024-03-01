@@ -144,7 +144,7 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
     df.reset_index(drop=True, inplace=True)
     return df
 
-def main():
+def main(sat_name = None):
     sat_list_path = "misc/sat_list.json"
     sp3_files_path = "external/sp3_files"
     with open(sat_list_path, 'r') as file:
@@ -155,9 +155,7 @@ def main():
 
     sp3_dataframes = process_sp3_files(sp3_files_path, sat_dict)
 
-    # Assuming 'concatenated_dfs' is your dictionary of DataFrames
     for satellite, df in sp3_dataframes.items():
-        # Convert the index to datetime if it's not already
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
 
