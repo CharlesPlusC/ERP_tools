@@ -549,6 +549,48 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
 
     return eme2000_pos, eme2000_vel
 
+def EME2000_to_ITRF(eme2000_pos, eme2000_vel, mjds):
+    # Orekit Frames
+    frame_CTS = FramesFactory.getITRF(ITRFVersion.ITRF_2014, IERSConventions.IERS_2010, False)
+    frame_EME2000 = FramesFactory.getEME2000()
+
+    # Prepare output arrays
+    itrs_pos = np.empty_like(eme2000_pos)
+    itrs_vel = np.empty_like(eme2000_vel)
+
+    # Iterate over each row of position, velocity, and corresponding MJD
+    for i in range(len(eme2000_pos)):
+        # Convert MJD to Julian Date and then to UTC datetime
+        mjd = mjds.iloc[i]
+        jd = mjd + 2400000.5
+        days_since_epoch = jd - 2400000.5
+        base_date = datetime(1858, 11, 17)
+        seconds_since_epoch = round(days_since_epoch * 86400)
+        dt = base_date + timedelta(seconds=seconds_since_epoch)
+        dt = dt.replace(tzinfo=timezone.utc)
+
+        # Convert datetime to AbsoluteDate
+        absolute_date = datetime_to_absolutedate(dt)
+
+        # Convert inputs to Orekit's Vector3D and PVCoordinates (and convert from km to m)
+        eme2000_pos_vector = Vector3D(float(eme2000_pos[i, 0] * 1000), float(eme2000_pos[i, 1] * 1000), float(eme2000_pos[i, 2] * 1000))
+        eme2000_vel_vector = Vector3D(float(eme2000_vel[i, 0] * 1000), float(eme2000_vel[i, 1] * 1000), float(eme2000_vel[i, 2] * 1000))
+        pv_eme2000 = PVCoordinates(eme2000_pos_vector, eme2000_vel_vector)
+
+        # Transform Coordinates
+        eme2000_to_cts = frame_EME2000.getTransformTo(frame_CTS, absolute_date)
+        pv_itrs = eme2000_to_cts.transformPVCoordinates(pv_eme2000)
+
+        # Extract position and velocity from transformed coordinates
+        itrs_pos[i] = [pv_itrs.getPosition().getX(), pv_itrs.getPosition().getY(), pv_itrs.getPosition().getZ()]
+        itrs_vel[i] = [pv_itrs.getVelocity().getX(), pv_itrs.getVelocity().getY(), pv_itrs.getVelocity().getZ()]
+
+        # Convert back from m to km
+        itrs_pos[i] = itrs_pos[i] / 1000
+        itrs_vel[i] = itrs_vel[i] / 1000
+
+    return itrs_pos, itrs_vel
+
     # Function to download file and return a java.io.File object
 def download_file_url(url, local_filename):
     from java.io import File

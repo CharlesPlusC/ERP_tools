@@ -71,7 +71,7 @@ def main():
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]
-        #slice the ephemeris to start 15 arcs past the beginning
+        #slice the ephemeris to start 12 arcs past the beginning
         ephemeris_df = ephemeris_df.iloc[12*arc_length:]
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         time_step_seconds = time_step * 60.0
