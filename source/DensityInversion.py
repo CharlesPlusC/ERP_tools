@@ -135,8 +135,8 @@ def main():
     # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        #slice the dataframe to keep only the first 100 rows
-        ephemeris_df = ephemeris_df.head(200)
+        #slice the dataframe 
+        ephemeris_df = ephemeris_df.head(10000)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
