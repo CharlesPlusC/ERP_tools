@@ -6,17 +6,21 @@ vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
 from orekit.pyhelpers import datetime_to_absolutedate
-from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.frames import FramesFactory
-from org.orekit.utils import PVCoordinates
 from org.orekit.orbits import CartesianOrbit, KeplerianOrbit, PositionAngleType
 from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
-from org.orekit.orbits import OrbitType
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation.analytical import KeplerianPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
+from org.orekit.orbits import PositionAngleType, OrbitType
+from org.orekit.utils import IERSConventions, PVCoordinates
+from org.hipparchus.linear import MatrixUtils
+from org.orekit.propagation import StateCovariance
+from org.hipparchus.geometry.euclidean.threed import Vector3D
+from org.orekit.ssa.collision.shorttermencounter.probability.twod import Patera2005
+
 
 import os
 from tools.utilities import build_boxwing, HCL_diff,build_boxwing, get_satellite_info, pos_vel_from_orekit_ephem
@@ -29,16 +33,70 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
+
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 60.0
 POSITION_TOLERANCE = 1e-2 # 1 cm
 
+def plot_tca_dca(merged_df, sp3_to_opt_distances, sp3_to_kep_distances, opt_to_kep_distances, sat_name, force_model_config, min_sp3_to_kep_distance, time_of_closest_approach_sp3_to_kep, min_opt_to_kep_distance, time_of_closest_approach_opt_to_kep):
+    fig, ax = plt.subplots(3, 1, figsize=(10, 15))
+
+    # First subplot
+    ax[0].plot(merged_df['UTC'], sp3_to_opt_distances, label='Distance of optimized orbit to true trajectory')
+    ax[0].set_xlabel('UTC')
+    ax[0].set_ylabel('Distance (m)')
+    ax[0].set_title(f"{sat_name} - {force_model_config}")
+    ax[0].legend()
+    ax[0].grid(True)
+
+    # Second subplot
+    ax[1].plot(merged_df['UTC'], sp3_to_kep_distances, label='Distance of true trajectory to secondary trajectory')
+    ax[1].axhline(y=min_sp3_to_kep_distance, color='r', linestyle='--', label=f'Closest Approach: {min_sp3_to_kep_distance} m')
+    ax[1].axvline(x=time_of_closest_approach_sp3_to_kep, color='g', linestyle='--', label=f'Time of Closest Approach: {time_of_closest_approach_sp3_to_kep}')
+    ax[1].set_yscale('log')
+    ax[1].grid(which='both')
+    ax[1].set_xlabel('UTC')
+    ax[1].set_ylabel('Distance (m)')
+    ax[1].legend()
+
+    # Third subplot
+    ax[2].plot(merged_df['UTC'], opt_to_kep_distances, label='Optimized to secondary trajectory distance')
+    ax[2].axhline(y=min_opt_to_kep_distance, color='r', linestyle='--', label=f'Closest Approach: {min_opt_to_kep_distance} m')
+    ax[2].axvline(x=time_of_closest_approach_opt_to_kep, color='g', linestyle='--', label=f'Time of Closest Approach: {time_of_closest_approach_opt_to_kep}')
+    ax[2].set_yscale('log')
+    ax[2].grid(which='both')
+    ax[2].set_xlabel('UTC')
+    ax[2].set_ylabel('Distance (m)')
+    ax[2].legend()
+
+    plt.tight_layout()
+    plt.show()
+
+
+good_covariance = [
+    [4.7440894789163000000000, -1.2583279067770000000000, -1.2583279067770000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [-1.2583279067770000000000,6.1279552605419000000000, 2.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [-1.2583279067770000000000, 2.1279552605419000000000, 6.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000010000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, 0.0000010000000000000000, -0.0000000000000000000001],
+    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, -0.0000000000000000000001, 0.0000010000000000000000]
+]
+
+def symmetrize(matrix):
+    # Make the matrix symmetric if it isn't already
+    nrows, ncols = matrix.getRowDimension(), matrix.getColumnDimension()
+    for i in range(nrows):
+        for j in range(i+1, ncols):
+            value = (matrix.getEntry(i, j) + matrix.getEntry(j, i)) / 2.0
+            matrix.setEntry(i, j, value)
+            matrix.setEntry(j, i, value)
+
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_arcs = 6
     arc_length = 10 #mins
-    prop_length = 60 * 60 * 6 #seconds
+    prop_length = 60 * 60 * 1.5 #seconds
     prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [
         # {'gravity': True},
@@ -161,75 +219,86 @@ def main():
                 sp3_to_opt_distances = np.sqrt((merged_df['x'] - merged_df['x_opt'])**2 + (merged_df['y'] - merged_df['y_opt'])**2 + (merged_df['z'] - merged_df['z_opt'])**2)
                 #now calculate the opt to kep distances
                 opt_to_kep_distances = np.sqrt((merged_df['x_opt'] - merged_df['x_kep'])**2 + (merged_df['y_opt'] - merged_df['y_kep'])**2 + (merged_df['z_opt'] - merged_df['z_kep'])**2)
-                print(f"min opt_to_kep_distances distance: {min(opt_to_kep_distances)}")
-                print(f"min sp3_to_opt_distances distance: {min(sp3_to_opt_distances)}")
+                # print(f"min opt_to_kep_distances distance: {min(opt_to_kep_distances)}")
+                # print(f"min sp3_to_opt_distances distance: {min(sp3_to_opt_distances)}")
 
                 # Calculate the minimum distance and the corresponding time for both cases
                 min_sp3_to_kep_distance = min(sp3_to_kep_distances)
                 time_of_closest_approach_sp3_to_kep = merged_df['UTC'][sp3_to_kep_distances.idxmin()]
-                print(f"min sp3_to_kep_distances distance: {min_sp3_to_kep_distance}")
-                print(f"time_of_closest_approach_sp3_to_kep: {time_of_closest_approach_sp3_to_kep}")
+                # print(f"min sp3_to_kep_distances distance: {min_sp3_to_kep_distance}")
+                # print(f"time_of_closest_approach_sp3_to_kep: {time_of_closest_approach_sp3_to_kep}")
 
                 min_opt_to_kep_distance = min(opt_to_kep_distances)
                 time_of_closest_approach_opt_to_kep = merged_df['UTC'][opt_to_kep_distances.idxmin()]
-                print(f"min opt_to_kep_distances distance: {min_opt_to_kep_distance}")
-                print(f"time_of_closest_approach_opt_to_kep: {time_of_closest_approach_opt_to_kep}")
+                # print(f"min opt_to_kep_distances distance: {min_opt_to_kep_distance}")
+                # print(f"time_of_closest_approach_opt_to_kep: {time_of_closest_approach_opt_to_kep}")
 
                 # now propagate the covariance matrix
                 # Initialize the STM at t0 as an identity matrix
                 phi_i = np.identity(len(optimized_state_cov))
                 # Propagate the STM to the final time
                 phi_t1 = propagate_STM(optimized_state, initial_t, final_prop_t - initial_t, phi_i, cr, cd, cross_section, mass, estimate_drag=False, **force_model_config)
-                print(f"phi_t1: {phi_t1}")
+                # print(f"phi_t1: {phi_t1}")
                 # Propagate the covariance matrix
                 optimized_state_cov_t1 = phi_t1 @ optimized_state_cov @ phi_t1.T
-                print(f"optimized_state_cov_t1: {optimized_state_cov_t1}")
-                print(f"initial_state_cov: {np.diag(optimized_state_cov)}")
+                # print(f"optimized_state_cov_t1: {optimized_state_cov_t1}")
+                # print(f"initial_state_cov: {np.diag(optimized_state_cov)}")
                 
-                fig, ax = plt.subplots(3, 1, figsize=(10, 15))
-
-                # First subplot
-                ax[0].plot(merged_df['UTC'], sp3_to_opt_distances, label='Distance of optimized orbit to true trajectory')
-                ax[0].set_xlabel('UTC')
-                ax[0].set_ylabel('Distance (m)')
-                ax[0].set_title(f"{sat_name} - {force_model_config}")
-                ax[0].legend()
-                ax[0].grid(True)
-
-                # Second subplot
-                ax[1].plot(merged_df['UTC'], sp3_to_kep_distances, label='Distance of true trajectory to secondary trajectory')
-                # Add horizontal line for Distance of Closest Approach
-                ax[1].axhline(y=min_sp3_to_kep_distance, color='r', linestyle='--', label=f'Closest Approach: {min_sp3_to_kep_distance} m')
-                # Add vertical line for Time of Closest Approach
-                ax[1].axvline(x=time_of_closest_approach_sp3_to_kep, color='g', linestyle='--', label=f'Time of Closest Approach: {time_of_closest_approach_sp3_to_kep}')
-                ax[1].set_yscale('log')
-                ax[1].grid(which='both')
-                ax[1].set_xlabel('UTC')
-                ax[1].set_ylabel('Distance (m)')
-                ax[1].legend()
-
-                # Third subplot
-                ax[2].plot(merged_df['UTC'], opt_to_kep_distances, label='Optimized to secondary trajectory distance')
-                # Add horizontal line for Distance of Closest Approach
-                ax[2].axhline(y=min_opt_to_kep_distance, color='r', linestyle='--', label=f'Closest Approach: {min_opt_to_kep_distance} m')
-                # Add vertical line for Time of Closest Approach
-                ax[2].axvline(x=time_of_closest_approach_opt_to_kep, color='g', linestyle='--', label=f'Time of Closest Approach: {time_of_closest_approach_opt_to_kep}')
-                ax[2].set_yscale('log')
-                ax[2].grid(which='both')
-                ax[2].set_xlabel('UTC')
-                ax[2].set_ylabel('Distance (m)')
-                ax[2].legend()
-
-                plt.tight_layout()
-                plt.show()
+                plot_tca_dca(merged_df, sp3_to_opt_distances, sp3_to_kep_distances, opt_to_kep_distances, sat_name, force_model_config, min_sp3_to_kep_distance, time_of_closest_approach_sp3_to_kep, min_opt_to_kep_distance, time_of_closest_approach_opt_to_kep)
 
                 #select the state and covariance matrix that corresponds to the iteration with the lowest RMS
-                #check the optimized state is in the format the initial_state_vector wants it
-                #set start_date to t0, then set end_date to t0_plus_24 (+10 mins so we have a bit of a buffer for plotting)
-                # set phi0 to the identity matrix?
 
-                # state_ti = propagate_state(start_date=ti_minus1, end_date=ti, initial_state_vector=state_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,boxwing=None, **force_model_config)
-                # phi_ti = propagate_STM(state_ti_minus1, ti, dt, phi_ti_minus1, cr=cr, cd=cd, cross_section=cross_section,mass=mass,boxwing=None, **force_model_config)
+                # Convert the Python list to a Java double[][]
+
+                #this is the covariance matrix for the optimized state
+                jarray_optimized_cov = MatrixUtils.createRealMatrix(len(optimized_state_cov), len(optimized_state_cov[0]))
+                #this is the "ideal" covariance matrix
+                jarray_good_cov = MatrixUtils.createRealMatrix(len(good_covariance), len(good_covariance[0]))
+                covariances_to_compare = [jarray_optimized_cov, jarray_good_cov]
+
+                for cov in covariances_to_compare:
+                    for i in range(len(cov)):
+                        for j in range(len(cov[i])):
+                            try:
+                                cov.setEntry(i, j, optimized_state_cov[i][j])
+                            except:
+                                print(i, j, optimized_state_cov[i][j])
+                                print(f"value: {optimized_state_cov[i][j]}")
+                                raise
+                
+                symmetrize(jarray_optimized_cov)
+                symmetrize(jarray_good_cov)
+
+                opt_cov = StateCovariance(jarray_optimized_cov, datetime_to_absolutedate(time_of_closest_approach_opt_to_kep), 
+                                          FramesFactory.getITRF(IERSConventions.IERS_2010, False), OrbitType.CARTESIAN, PositionAngleType.TRUE)
+                kep_cov = StateCovariance(jarray_good_cov, datetime_to_absolutedate(time_of_closest_approach_opt_to_kep), 
+                                          FramesFactory.getITRF(IERSConventions.IERS_2010, False), OrbitType.CARTESIAN, PositionAngleType.TRUE)
+
+
+                #find the index of merged array that corresponds to the time of closest approach
+                closest_approach_index = merged_df.index[merged_df['UTC'] == time_of_closest_approach_opt_to_kep].tolist()[0]
+                #find the state vector at of both the optimized and true orbits at the time of closest approach
+                opt_state_TCA = np.array(merged_df.iloc[closest_approach_index][['x_opt', 'y_opt', 'z_opt', 'xv_opt', 'yv_opt', 'zv_opt']])
+                kep_state_TCA = np.array(merged_df.iloc[closest_approach_index][['x_kep', 'y_kep', 'z_kep', 'xv_kep', 'yv_kep', 'zv_kep']])
+
+                #make them into PVCoordinates
+                opt_pv_TCA = PVCoordinates(Vector3D(opt_state_TCA[0], opt_state_TCA[1], opt_state_TCA[2]),
+                                                            Vector3D(opt_state_TCA[3], opt_state_TCA[4], opt_state_TCA[5]))
+                
+                kep_pv_TCA = PVCoordinates(Vector3D(kep_state_TCA[0], kep_state_TCA[1], kep_state_TCA[2]),
+                                                            Vector3D(kep_state_TCA[3], kep_state_TCA[4], kep_state_TCA[5]))
+                
+                opt_TCA_orbit = CartesianOrbit(opt_pv_TCA, FramesFactory.getEME2000(), datetime_to_absolutedate(time_of_closest_approach_opt_to_kep), Constants.WGS84_EARTH_MU)
+                kep_tca_orbit = CartesianOrbit(kep_pv_TCA, FramesFactory.getEME2000(), datetime_to_absolutedate(time_of_closest_approach_opt_to_kep), Constants.WGS84_EARTH_MU)
+
+                radius1 = 1.0 #TODO: get from sat_list.json
+                radius2 = 1.0
+
+                # Patera2005.compute(Orbit primaryAtTCA, StateCovariance primaryCovariance, double primaryRadius, Orbit secondaryAtTCA, StateCovariance secondaryCovariance, double secondaryRadius)
+                patera2005 = Patera2005() 
+                poc_result = patera2005.compute(orbit1, covariance1, orbit2, covariance2, radius2, 1e-10)
+                print(f"Probability of collision: {poc_result.getValue()}")
+
 
 if __name__ == "__main__":
     main()
