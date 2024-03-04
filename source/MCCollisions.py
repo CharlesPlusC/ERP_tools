@@ -77,7 +77,7 @@ def main():
     num_arcs = 1
     prop_length = 60 * 60 * 1.5  # around 2 orbital periods
     prop_length_days = prop_length / (60 * 60 * 24)
-    force_model_configs = [{'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}]
+    force_model_configs = [{'120x120gravity': True, '3BP': True}]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -122,9 +122,13 @@ def main():
             primary_states_perturbed_ephem = []
             perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state)
             for primary_state in perturbed_states_primary:
+                print(f"propagating primary_state: {primary_state}")
+                print(f"force_model_config: {force_model_config}")
+                print(f"from t0: {t0}")
+                print(f"to t_end: {t_end}")
                 primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None, **force_model_config)
                 primary_states_perturbed_ephem.append(primary_state_perturbed_df)
-            print(f"perturbed primary states: {primary_states_perturbed_ephem}")
+            print(f"prop perturbed primary states: {primary_states_perturbed_ephem}")
 
             secondary_state = collision_df.iloc[0][["x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col"]].values
             secondary_states_perturbed_ephem = []
