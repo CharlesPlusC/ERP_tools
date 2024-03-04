@@ -46,8 +46,9 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
     all_xbar_0s = []
     all_covs = []
 
+    print(f"Starting Batch Least Squares Orbit Determination")
     while not converged and iteration < max_iterations:
-        print(f"Iteration: {iteration}")
+        print(f"Iteration: {iteration} in progress...")
         N = np.zeros(len(x_bar_0))
         lamda = np.linalg.inv(P_0)
         y_all = np.empty((0, len(x_bar_0)))
@@ -111,13 +112,13 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
                 no_times_diff_increased += 1
                 print(f"RMS increased {no_times_diff_increased} times in a row.")
                 if no_times_diff_increased >= max_patience:
-                    print("Stopping iteration.")
+                    print("Stopping.")
                     break
             else:
                 no_times_diff_increased = 0
             weighted_rms_last = weighted_rms
             x_bar_0 += xhat  # Update nominal trajectory
-            print("updated x_bar_0: ", x_bar_0)
+            # print("updated x_bar_0: ", x_bar_0)
 
         all_residuals.append(y_all)
         all_rms.append(weighted_rms)
@@ -125,5 +126,6 @@ def OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag
         all_covs.append(np.linalg.inv(lamda))
         iteration += 1
 
+    print(f"BLS Done. Iterations: {iteration-1}")
     return all_xbar_0s, all_covs, all_residuals, all_rms
 
