@@ -39,6 +39,16 @@ INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 60.0
 POSITION_TOLERANCE = 1e-2 # 1 cm
 
+#covariance associated with the collision trajectory (assuming good covariance)
+secondary_covariance = [
+    [4.7440894789163000000000, -1.2583279067770000000000, -1.2583279067770000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [-1.2583279067770000000000,6.1279552605419000000000, 2.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [-1.2583279067770000000000, 2.1279552605419000000000, 6.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000010000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
+    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, 0.0000010000000000000000, -0.0000000000000000000001],
+    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, -0.0000000000000000000001, 0.0000010000000000000000]
+]
+
 def generate_random_vectors(eigenvalues):
     random_vectors = []
     for lambda_val in eigenvalues:
@@ -54,15 +64,11 @@ def apply_perturbations(states, vectors, rotation_matrices):
             perturbed_states.append(state + perturbation)
     return perturbed_states
 
-#covariance associated with the collision trajectory (assuming good covariance)
-secondary_covariance = [
-    [4.7440894789163000000000, -1.2583279067770000000000, -1.2583279067770000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [-1.2583279067770000000000,6.1279552605419000000000, 2.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [-1.2583279067770000000000, 2.1279552605419000000000, 6.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000010000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, 0.0000010000000000000000, -0.0000000000000000000001],
-    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, -0.0000000000000000000001, 0.0000010000000000000000]
-]
+def generate_perturbed_states(optimized_state_cov, state):
+    eig_vals, rotation_matrix = np.linalg.eigh(optimized_state_cov)
+    random_vectors = generate_random_vectors(eig_vals)
+    perturbed_states = apply_perturbations([state], [random_vectors], [rotation_matrix])
+    return perturbed_states
 
 def main():
     p_o_c_list = []
@@ -71,9 +77,7 @@ def main():
     num_arcs = 1
     prop_length = 60 * 60 * 1.5  # around 2 orbital periods
     prop_length_days = prop_length / (60 * 60 * 24)
-    force_model_configs = [
-        {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True}]
+    force_model_configs = [{'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -87,9 +91,9 @@ def main():
         # find the time of the first time step
         t0 = ephemeris_df['UTC'].iloc[0]
         print(f't0: {t0}')
-        t0_plus_24 = t0 + datetime.timedelta(days=prop_length_days) #this is the time at which the collision will occur
-        print(f"t0_plus_24: {t0_plus_24}")
-        collision_df = generate_collision_trajectory(ephemeris_df, t0_plus_24)
+        t_end = t0 + datetime.timedelta(days=prop_length_days) #this is the time at which the collision will occur
+        print(f"t0_plus_24: {t_end}")
+        collision_df = generate_collision_trajectory(ephemeris_df, t_end)
 
         arc_step = int(arc_length / time_step)
         for arc in range(num_arcs):
@@ -113,24 +117,44 @@ def main():
 
             print("optimized_state_cov: ", optimized_state_cov)
 
-            ##### Perturb the estimated state
-            # Diagonalizing covariance matrices and generating perturbations
-            eig_vals_primary, rotation_matrix_primary = np.linalg.eigh(optimized_state_cov)
-            random_vectors_primary = generate_random_vectors(eig_vals_primary)
-            print(f"random_vectors_primary: {random_vectors_primary}")
-            # Perturbing the states and converting them back to the ECI frame
-            perturbed_states_primary = apply_perturbations([optimized_state], [random_vectors_primary], [rotation_matrix_primary])
-            print(f"perturbed_states_primary: {perturbed_states_primary}")
+            ##### Perturb the estimated state ("primary state") and propagate those perturbed states
+            #make a list of dataframes for each perturbed state
+            primary_states_perturbed_ephem = []
+            perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state)
+            for primary_state in perturbed_states_primary:
+                primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None, **force_model_config)
+                primary_states_perturbed_ephem.append(primary_state_perturbed_df)
+            print(f"perturbed primary states: {primary_states_perturbed_ephem}")
 
-            #### Perturb the secondary state
-            eig_vals_secondary, rotation_matrix_secondary = np.linalg.eigh(secondary_covariance)
-            random_vectors_secondary = generate_random_vectors(eig_vals_secondary)
-            print(f"random_vectors_secondary: {random_vectors_secondary}")
-            #first state in collision_df is columns "x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col
             secondary_state = collision_df.iloc[0][["x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col"]].values
-            perturbed_states_secondary = apply_perturbations([secondary_state], [random_vectors_secondary], [rotation_matrix_secondary])
+            secondary_states_perturbed_ephem = []
+            perturbed_states_secondary = generate_perturbed_states(secondary_covariance, secondary_state)
+            for secondary_state in perturbed_states_secondary:
+                secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None, **force_model_config)
+                secondary_states_perturbed_ephem.append(secondary_states_perturbed_df)
+            print(f"perturbed secondary states: {secondary_states_perturbed_ephem}")
 
-            print(f"perturbed_states_secondary: {perturbed_states_secondary}")
+            #go through the list of dataframes and calculate the distance between every combination of primary and secondary states
+            #make a dataframe of the n1 by n2 distances
+            distances = []
+            for primary_state_perturbed_df in primary_states_perturbed_ephem:
+                for secondary_state_perturbed_df in secondary_states_perturbed_ephem:
+                    distances.append(np.linalg.norm(primary_state_perturbed_df - secondary_state_perturbed_df))
+            distances_df = pd.DataFrame(distances)
+            print(f"distances_df: {distances_df}")
+
+                # calculate the DCA between the collision_df and the perturbed states
+                # plot the DCA for each perturbed state
+
+                #calculate the distance between every combination of primary and secondary states
+                # calculate the DCA between the collision_df and the perturbed states
+                # plot the DCA for each perturbed state
+            #calculate the distance between every combination of primary and secondary states
+
+
+                
+                # calculate the DCA between the collision_df and the perturbed states
+                # plot the DCA for each perturbed state
 
             # propagate all the perturbed states
             # calculate the DCA between the collision_df and the perturbed states
