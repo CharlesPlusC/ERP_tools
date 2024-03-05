@@ -49,8 +49,6 @@ def compute_hcl_differences(state_vector_data):
         HCL_diffs[name] = (H_diffs, C_diffs, L_diffs)
     return HCL_diffs
 
-#TODO: move the plotting functions to the plotting module
-
 def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_step):
     state_vector_data = {}
 

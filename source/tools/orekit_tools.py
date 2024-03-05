@@ -29,10 +29,9 @@ from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00
 from org.orekit.data import DataSource
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
-
 from tools.utilities import extract_acceleration, download_file_url, pos_vel_from_orekit_ephem
-# from tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
-# from tools.CERES_ERP import CERES_ERP_ForceModel
+from source.tools.ceres_data_processing import extract_hourly_ceres_data, extract_hourly_ceres_data ,combine_lw_sw_data
+from tools.CERES_ERP import CERES_ERP_ForceModel
 
 import numpy as np
 import netCDF4 as nc
@@ -129,9 +128,14 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         propagator.addForceModel(relativity)
 
-    # if config_flags.get('ceres_erp', False):
-    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
-    #     propagator.addForceModel(ceres_erp_force_model)
+    if config_flags.get('ceres_erp', False):
+        data = nc.Dataset('external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20181201-20190228.nc')
+        # data = nc.Dataset('external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc')
+        ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
+        combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
+        mass = 600.2 #TODO: get from satellite info. Imputing for GRACE-FO for now.
+        ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
+        propagator.addForceModel(ceres_erp_force_model)
 
     if config_flags.get('jb08drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
@@ -152,6 +156,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        sun = CelestialBodyFactory.getSun()
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
@@ -162,43 +167,12 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        sun = CelestialBodyFactory.getSun()
         atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
     return propagator
-
-# def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass,boxwing, **config_flags):
-
-#     x, y, z, vx, vy, vz = initial_state_vector
-
-#     frame = FramesFactory.getEME2000() # j2000 frame by default
-#     # Propagation using the configured propagator
-#     initial_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(x), float(y), float(z)),
-#                                                 Vector3D(float(vx), float(vy), float(vz))),
-#                                     frame,
-#                                     datetime_to_absolutedate(start_date),
-#                                     Constants.WGS84_EARTH_MU)
-    
-#     tolerances = NumericalPropagator.tolerances(POSITION_TOLERANCE, initial_orbit, initial_orbit.getType())
-#     integrator = DormandPrince853Integrator(INTEGRATOR_MIN_STEP, INTEGRATOR_MAX_STEP, JArray_double.cast_(tolerances[0]), JArray_double.cast_(tolerances[1]))
-#     integrator.setInitialStepSize(INTEGRATOR_INIT_STEP)
-#     initialState = SpacecraftState(initial_orbit, float(mass))
-#     propagator = NumericalPropagator(integrator)
-#     propagator.setOrbitType(OrbitType.CARTESIAN)
-#     propagator.setInitialState(initialState)
-#     eci = FramesFactory.getGCRF()
-#     nadirPointing = NadirPointing(eci, ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False)))
-#     propagator.setAttitudeProvider(nadirPointing)
-
-#     configured_propagator = configure_force_models(propagator,cr,cross_section,cd,boxwing,**config_flags)
-#     final_state = configured_propagator.propagate(datetime_to_absolutedate(end_date))
-
-#     pv_coordinates = final_state.getPVCoordinates()
-#     position = [pv_coordinates.getPosition().getX(), pv_coordinates.getPosition().getY(), pv_coordinates.getPosition().getZ()]
-#     velocity = [pv_coordinates.getVelocity().getX(), pv_coordinates.getVelocity().getY(), pv_coordinates.getVelocity().getZ()]
-
-#     return position + velocity
 
 def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass, boxwing, ephem=False,dt=None, **config_flags):
     """Propagate the state of a spacecraft from a start date to an end date using DP853 integrator.
@@ -417,6 +391,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        sun = CelestialBodyFactory.getSun()
         atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
@@ -430,6 +405,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         msafe = MarshallSolarActivityFutureEstimation(
             MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
             MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        sun = CelestialBodyFactory.getSun()
         atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
@@ -473,9 +449,9 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
             # if boxwing:
             #     drag_sensitive = boxwing
             # else:
-            drag_sensitive = IsotropicDrag(float(cross_section), float(cd_perturbed))
-            dragForce = DragForce(atmosphere, drag_sensitive)
-            force_models[-1] = dragForce  # Update the drag force model
+                drag_sensitive = IsotropicDrag(float(cross_section), float(cd_perturbed))
+                dragForce = DragForce(atmosphere, drag_sensitive)
+                force_models[-1] = dragForce  # Update the drag force model
 
         for force_model in force_models:
             acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, mass, force_model)
