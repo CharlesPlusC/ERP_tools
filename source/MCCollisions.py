@@ -73,11 +73,11 @@ def generate_perturbed_states(optimized_state_cov, state):
 def main():
     p_o_c_list = []
     sat_names_to_test = ["GRACE-FO-A"]
-    arc_length = 5  # mins
+    arc_length = 25  # mins
     num_arcs = 1
     prop_length = 60 * 60 * 1.5  # around 2 orbital periods
     prop_length_days = prop_length / (60 * 60 * 24)
-    force_model_configs = [{'120x120gravity': True, '3BP': True}]
+    force_model_configs = [{'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True}]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -91,10 +91,11 @@ def main():
         # find the time of the first time step
         t0 = ephemeris_df['UTC'].iloc[0]
         print(f't0: {t0}')
-        t_end = t0 + datetime.timedelta(days=prop_length_days) #this is the time at which the collision will occur
-        print(f"t0_plus_24: {t_end}")
-        collision_df = generate_collision_trajectory(ephemeris_df, t_end)
-
+        t_col = t0 + datetime.timedelta(days=prop_length_days) #this is the time at which the collision will occur
+        #end of propagation window is 15 minutes after the collision
+        t_end = t0 + datetime.timedelta(days=prop_length_days + 15/(60*24))
+        collision_df = generate_collision_trajectory(ephemeris_df, t_col)
+        
         arc_step = int(arc_length / time_step)
         for arc in range(num_arcs):
             
@@ -127,7 +128,6 @@ def main():
                 print(f"from t0: {t0}")
                 print(f"to t_end: {t_end}")
                 primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True, **force_model_config)
-                print(f"primary_state_perturbed_df: {primary_state_perturbed_df}")
                 primary_states_perturbed_ephem.append(primary_state_perturbed_df)
             print(f"prop perturbed primary states: {primary_states_perturbed_ephem}")
 
@@ -137,16 +137,63 @@ def main():
             for secondary_state in perturbed_states_secondary:
                 secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True, **force_model_config)
                 secondary_states_perturbed_ephem.append(secondary_states_perturbed_df)
-            print(f"perturbed secondary states: {secondary_states_perturbed_ephem}")
 
             #go through the list of dataframes and calculate the distance between every combination of primary and secondary states
             #make a dataframe of the n1 by n2 distances
-            distances = []
-            for primary_state_perturbed_df in primary_states_perturbed_ephem:
-                for secondary_state_perturbed_df in secondary_states_perturbed_ephem:
-                    distances.append(np.linalg.norm(primary_state_perturbed_df - secondary_state_perturbed_df))
-            distances_df = pd.DataFrame(distances)
-            print(f"distances_df: {distances_df}")
+            # Initialize a list to hold all distance dataframes
+            distance_dfs = []
+
+            # Iterate through each primary ephemeris dataframe
+            for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
+                # Iterate through each secondary ephemeris dataframe
+                for j, secondary_state_perturbed_df in enumerate(secondary_states_perturbed_ephem):
+                    # Calculate the Euclidean distance for the position vectors (x, y, z) at each time point
+                    distances = np.linalg.norm(primary_state_perturbed_df[['x', 'y', 'z']].values - secondary_state_perturbed_df[['x', 'y', 'z']].values, axis=1)
+                    # Create a dataframe with distances and corresponding UTC timestamps
+                    distance_df = pd.DataFrame({'UTC': primary_state_perturbed_df['UTC'], f'Distance_{i}_{j}': distances})
+                    distance_dfs.append(distance_df)
+
+            # Concatenate all individual distance dataframes to get a single dataframe with all distances
+            distances_df = pd.concat(distance_dfs, axis=1)
+
+            # Removing duplicate UTC columns if they exist
+            distances_df = distances_df.loc[:,~distances_df.columns.duplicated()]
+
+            #calculate the distance between unperturbed primary and secondary states
+            # get the subset of the ephemeris_df that is within the time window of the collision_df
+            ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= collision_df['UTC'].iloc[0]) & (ephemeris_df['UTC'] <= collision_df['UTC'].iloc[-1])]
+            collision_distances = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values - collision_df[['x_col', 'y_col', 'z_col']].values, axis=1)
+            #add it to a dataframe time stamped with the UTC
+            collision_df['distance'] = collision_distances
+
+            # Set the plot size
+            plt.figure(figsize=(10, 6))
+
+            # Loop through each distance column (ignoring the 'UTC' column) to plot
+            for column in distances_df.columns:
+                if column != 'UTC':
+                    plt.plot(distances_df['UTC'], distances_df[column], label=column)
+                    #print the minimum distance for each perturbed state
+                    min_distance = distances_df[column].min()
+                    print(f"min_distance: {min_distance}")
+
+            #add the original distance to the plot with dotted line
+            plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
+
+            # Set plot title and labels
+            plt.title('Distance Time Series')
+            plt.xlabel('Time')
+            plt.ylabel('Distance')
+            plt.yscale('log')
+            # Rotate date labels for better readability
+            plt.xticks(rotation=45)
+
+            # Enable legend
+            plt.legend()
+
+            # Show the plot
+            plt.tight_layout()  # Adjust layout to not cut off labels
+            plt.show()
 
                 # calculate the DCA between the collision_df and the perturbed states
                 # plot the DCA for each perturbed state
