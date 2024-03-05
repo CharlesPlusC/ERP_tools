@@ -200,7 +200,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
 
 #     return position + velocity
 
-def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass, boxwing, ephem=False, **config_flags):
+def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass, boxwing, ephem=False,dt=None, **config_flags):
     """Propagate the state of a spacecraft from a start date to an end date using DP853 integrator.
     Either returns the final state vector or an ephemeris.
 
@@ -231,6 +231,11 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
         The final state vector or the ephemeris of the spacecraft or the ephemeris of the spacecraft.
     """
 
+    if dt is None:
+        dt = 60.0
+    else:
+        dt = float(dt)
+
     x, y, z, vx, vy, vz = initial_state_vector
 
     frame = FramesFactory.getEME2000()
@@ -254,7 +259,7 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
         ephemGen = configured_propagator.getEphemerisGenerator()
         configured_propagator.propagate(datetime_to_absolutedate(start_date), datetime_to_absolutedate(end_date))
         ephemeris = ephemGen.getGeneratedEphemeris()
-        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(start_date), datetime_to_absolutedate(end_date), 60.0)
+        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(start_date), datetime_to_absolutedate(end_date), dt)
         optimized_times_df = pd.DataFrame({'UTC': pd.to_datetime([start_date + datetime.timedelta(seconds=sec) for sec in times])})
         optimized_states_df = pd.DataFrame(state_vectors, columns=['x', 'y', 'z', 'xv', 'yv', 'zv'])
         ephem_df = pd.concat([optimized_times_df, optimized_states_df], axis=1)
