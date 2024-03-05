@@ -126,7 +126,8 @@ def main():
                 print(f"force_model_config: {force_model_config}")
                 print(f"from t0: {t0}")
                 print(f"to t_end: {t_end}")
-                primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None, **force_model_config)
+                primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True, **force_model_config)
+                print(f"primary_state_perturbed_df: {primary_state_perturbed_df}")
                 primary_states_perturbed_ephem.append(primary_state_perturbed_df)
             print(f"prop perturbed primary states: {primary_states_perturbed_ephem}")
 
@@ -134,7 +135,7 @@ def main():
             secondary_states_perturbed_ephem = []
             perturbed_states_secondary = generate_perturbed_states(secondary_covariance, secondary_state)
             for secondary_state in perturbed_states_secondary:
-                secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None, **force_model_config)
+                secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True, **force_model_config)
                 secondary_states_perturbed_ephem.append(secondary_states_perturbed_df)
             print(f"perturbed secondary states: {secondary_states_perturbed_ephem}")
 
