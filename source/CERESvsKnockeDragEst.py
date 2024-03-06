@@ -35,7 +35,7 @@ import pandas as pd
 import uuid
 
 INTEGRATOR_MIN_STEP = 0.001
-INTEGRATOR_MAX_STEP = 15.0
+INTEGRATOR_MAX_STEP = 60.0
 INTEGRATOR_INIT_STEP = 15.0
 POSITION_TOLERANCE = 1e-2 # 1 cm
 
@@ -45,18 +45,18 @@ def generate_config_name(config_dict, arc_number):
 
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    num_arcs = 6
+    num_arcs = 1
     arc_length = 60 #mins
     estimate_drag = True
     boxwing = False
     force_model_configs = [
 
-        {'36x36gravity': True, 'knocke_erp': True, 'SRP': True, 'nrlmsise00drag': True},
-        {'36x36gravity': True, 'ceres_erp': True, 'SRP': True, 'nrlmsise00drag': True},
-        {'36x36gravity': True, 'SRP': True, 'jb08_drag': True},
-        {'36x36gravity': True, 'SRP': True, 'jb08_drag': True},
-        {'36x36gravity': True, 'knocke_erp': True,'SRP': True, 'jb08_drag': True},
-        {'36x36gravity': True, 'ceres_erp': True, 'SRP': True, 'jb08_drag': True}]
+        {'120x120gravity': True, 'knocke_erp': True, 'SRP': True, 'nrlmsise00drag': True},
+        {'120x120gravity': True, 'ceres_erp': True, 'SRP': True, 'nrlmsise00drag': True},
+        {'120x120gravity': True, 'knocke_erp': True,'SRP': True, 'jb08drag': True},
+        {'120x120gravity': True, 'ceres_erp': True, 'SRP': True, 'jb08drag': True},
+        {'120x120gravity': True, 'SRP': True, 'jb08drag': True},
+        {'120x120gravity': True, 'SRP': True, 'jb08drag': True}]
 
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)

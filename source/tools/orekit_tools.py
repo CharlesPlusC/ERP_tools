@@ -143,6 +143,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
                                             dtcfile_data_source)
 
         utc = TimeScalesFactory.getUTC()
+        sun = CelestialBodyFactory.getSun()
         atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
         if boxwing:
             drag_sensitive = boxwing
@@ -375,6 +376,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
                                             dtcfile_data_source)
         utc = TimeScalesFactory.getUTC()
+        sun = CelestialBodyFactory.getSun()
         atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
         # if boxwing:
         #     drag_sensitive = boxwing
@@ -449,9 +451,9 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
             # if boxwing:
             #     drag_sensitive = boxwing
             # else:
-                drag_sensitive = IsotropicDrag(float(cross_section), float(cd_perturbed))
-                dragForce = DragForce(atmosphere, drag_sensitive)
-                force_models[-1] = dragForce  # Update the drag force model
+            drag_sensitive = IsotropicDrag(float(cross_section), float(cd_perturbed))
+            dragForce = DragForce(atmosphere, drag_sensitive)
+            force_models[-1] = dragForce  # Update the drag force model
 
         for force_model in force_models:
             acc_perturbed = extract_acceleration(state_ti_perturbed, epochDate, mass, force_model)
