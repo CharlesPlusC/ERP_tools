@@ -217,7 +217,7 @@ def main():
                 plt.ylabel('Frequency')
                 plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{j}_{timenow}.png")
                 # plt.show()
-
+#TODO: what was wrong with the patera2005 model?
 #TODO: Interpolation around TCA to get more accurate distance and time of closest approach
 #TODO: plot of spread of initial conditions
 #TODO: plot of spread of final conditions

@@ -45,8 +45,8 @@ def generate_config_name(config_dict, arc_number):
 
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    num_arcs = 1
-    arc_length = 60 #mins
+    num_arcs = 3
+    arc_length = 90 #mins
     estimate_drag = True
     boxwing = False
     force_model_configs = [
@@ -108,16 +108,32 @@ def main():
             all_cd_values = [cd for sublist in cd_estimates.values() for cd in sublist]
 
             plt.figure(figsize=(10, 6))
-            plt.hist(all_cd_values, bins=20, color='blue', alpha=0.7)
-            plt.title('Histogram of Estimated CD Values')
-            plt.xlabel('CD Value')
-            plt.ylabel('Frequency')
+
+            # Sort the keys to maintain consistent order
+            sorted_config_names = sorted(cd_estimates.keys())
+            values = [np.mean(cd_estimates[config]) for config in sorted_config_names]
+            errors = [np.std(cd_estimates[config]) for config in sorted_config_names]
+
+            bars = plt.bar(range(len(sorted_config_names)), values, yerr=errors, alpha=0.7, color='blue')
+
+            # Adding the text on top of each bar
+            for bar, value in zip(bars, values):
+                yval = bar.get_height()
+                plt.text(bar.get_x() + bar.get_width()/2, yval + 0.05, round(yval, 2), ha='center', va='bottom')
+
+            plt.xticks(range(len(sorted_config_names)), sorted_config_names, rotation=45, ha='right')
+            plt.title('Bar Chart of Estimated CD Values')
+            plt.xlabel('Force Model Configuration')
+            plt.ylabel('Average Estimated CD Value')
             plt.grid(True)
-            plt.show()
-            # Output directory for each arc
-            output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc + 1}"
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
+
+            # Save the plot
+            timenow = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = f"output/OD_BLS/Tapley/estimation_experiment/{sat_name}/CD_bar_chart{timenow}.png"
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            plt.tight_layout()  # Adjust layout to not cut off labels
+            plt.savefig(filepath)
+            plt.close()
 
 #TODO: gravity, drag and SRP and ERP models
 #TODO: use percentage forcing difference from Ray paper as basis for comparison
