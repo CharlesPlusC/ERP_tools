@@ -5,26 +5,10 @@ from orekit.pyhelpers import setup_orekit_curdir
 vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
-from orekit.pyhelpers import datetime_to_absolutedate
-from org.orekit.frames import FramesFactory
-from org.orekit.orbits import CartesianOrbit, PositionAngleType
-from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
-from orekit import JArray_double
-from org.orekit.propagation.numerical import NumericalPropagator
-from org.orekit.propagation.analytical import KeplerianPropagator
-from org.orekit.propagation import SpacecraftState
-from org.orekit.utils import Constants
-from org.orekit.orbits import PositionAngleType, OrbitType
-from org.orekit.utils import IERSConventions, PVCoordinates
-from org.hipparchus.linear import MatrixUtils
-from org.orekit.propagation import StateCovariance
-from org.hipparchus.geometry.euclidean.threed import Vector3D
-from org.orekit.ssa.collision.shorttermencounter.probability.twod import Patera2005
-
 import os
-from tools.utilities import get_satellite_info, pos_vel_from_orekit_ephem
+from tools.utilities import get_satellite_info
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
-from tools.orekit_tools import configure_force_models, propagate_state, propagate_STM
+from tools.orekit_tools import propagate_state
 from tools.BatchLeastSquares import OD_BLS
 from tools.collision_tools import generate_collision_trajectory
 import numpy as np
@@ -50,13 +34,23 @@ secondary_covariance = [
     [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, -0.0000000000000000000001, 0.0000010000000000000000]
 ]
 
-def interpolate_ephemeris(df, start_time, end_time, freq='0.1S'):
+def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S'):
+    #at 7.5km/s, 0.001s is 7.5m 
     df_resampled = df.set_index('UTC').resample(freq).asfreq()
     interp_funcs = {col: interp1d(df['UTC'].astype(int), df[col], fill_value='extrapolate') for col in ['x', 'y', 'z']}
     for col in ['x', 'y', 'z']:
+        print(f"interpolating {col}")
         df_resampled[col] = interp_funcs[col](df_resampled.index.astype(int))
     df_filtered = df_resampled.loc[(df_resampled.index >= start_time) & (df_resampled.index <= end_time)]
     return df_filtered.reset_index()
+
+from concurrent.futures import ProcessPoolExecutor
+
+def parallel_interpolate(df_list, start_time, end_time, freq='0.0001S'):
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(interpolate_ephemeris, df, start_time, end_time, freq) for df in df_list]
+        results = [f.result() for f in futures]
+    return results
 
 def generate_random_vectors(eigenvalues, num_samples):
     random_vectors = []
@@ -82,9 +76,9 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
 
 def main():
     sat_names_to_test = ["GRACE-FO-A"]
-    arc_length = 45  # mins
+    arc_length = 25  # mins
     num_arcs = 1
-    prop_length = 60 * 60 * 6  
+    prop_length = 60 * 60 * 6  # 6 hours
     prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [{'120x120gravity': True, '3BP': True},
                            {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
@@ -126,22 +120,29 @@ def main():
                 optimized_state_cov = cov_mats[min_RMS_index]
 
                 print("optimized_state_cov: ", optimized_state_cov)
-
                 ##### Perturb the estimated state ("primary state") and propagate those perturbed states
                 #make a list of dataframes for each perturbed state
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 8)
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 4)
                 for primary_state in perturbed_states_primary:
                     print(f"propagating primary_state: {primary_state}")
-                    primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=0.5, **force_model_config)
+                    primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
                     primary_states_perturbed_ephem.append(primary_state_perturbed_df)
 
                 secondary_state = collision_df.iloc[0][["x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col"]].values
                 secondary_states_perturbed_ephem = []
-                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 8)
+                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 4)
                 for secondary_state in perturbed_states_secondary:
-                    secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=0.5, **force_model_config)
+                    print(f"propagating secondary_state: {secondary_state}")
+                    secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
                     secondary_states_perturbed_ephem.append(secondary_states_perturbed_df)
+
+                #same as above but make the time delta only 30 seconds
+                print(f"interpolating primary ephemeris dataframes around TCA")
+                #use parallel interpolation
+                primary_states_perturbed_ephem = parallel_interpolate(primary_states_perturbed_ephem, t_col - datetime.timedelta(seconds=10), t_col + datetime.timedelta(seconds=10))
+                print(f"interpolating secondary ephemeris dataframes around TCA")
+                secondary_states_perturbed_ephem = parallel_interpolate(secondary_states_perturbed_ephem, t_col - datetime.timedelta(seconds=10), t_col + datetime.timedelta(seconds=10))
 
                 #go through the list of dataframes and calculate the distance between every combination of primary and secondary states
                 distance_dfs = []
@@ -174,8 +175,14 @@ def main():
                 #also slice collision_df to only contain data 1 hour before and after the collision time (t_col)
                 collision_df = collision_df[(collision_df['UTC'] >= t_col - datetime.timedelta(minutes=60)) & (collision_df['UTC'] <= t_col + datetime.timedelta(minutes=60))]
 
+                #TODO: stitch the interpolated and non interpolated to get higher resolution around TCA
+                #TODO: use the interpolated to get a better estimate fo the TCA (find DCA and invert for TCA)
+                #TODO: get the plot from the Patera script of propagated orbit to SP3 orbit
+
                 # Set the plot size
                 plt.figure(figsize=(10, 6))
+                #plot only 2min before and after the collision time
+                plt.xlim(t_col - datetime.timedelta(minutes=2), t_col + datetime.timedelta(minutes=2))
                 # Loop through each distance column (ignoring the 'UTC' column) to plot
                 for column in distances_df.columns:
                     if column != 'UTC':
@@ -189,6 +196,7 @@ def main():
                 print(f"simulation end. Total trajectories: {len(min_distances)}")
 
                 #add the original distance to the plot with dotted line
+
                 plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
 
                 # Set plot title and labels
@@ -196,6 +204,8 @@ def main():
                 plt.xlabel('Time')
                 plt.ylabel('Distance')
                 plt.yscale('log')
+                #make the y axis start at 0m
+                plt.ylim(0.01, 10e7)
                 # Rotate date labels for better readability
                 plt.xticks(rotation=45)
 
@@ -215,9 +225,22 @@ def main():
                 plt.title('Minimum Distance Histogram')
                 plt.xlabel('Minimum Distance')
                 plt.ylabel('Frequency')
+                #in text write how many out of how many were below 1km, 100m, 10m, 5m and 1m
+                num_below_1km = len([d for d in min_distances if d < 1000])
+                num_below_100m = len([d for d in min_distances if d < 100])
+                num_below_10m = len([d for d in min_distances if d < 10])
+                num_below_5m = len([d for d in min_distances if d < 5])
+                num_below_1m = len([d for d in min_distances if d < 1])
+                plt.text(0.5, 0.9, f"Below 1km: {num_below_1km}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.85, f"Below 100m: {num_below_100m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.8, f"Below 10m: {num_below_10m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.75, f"Below 5m: {num_below_5m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.7, f"Below 1m: {num_below_1m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                
                 plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{j}_{timenow}.png")
                 # plt.show()
-#TODO: what was wrong with the patera2005 model?
+                
+#TODO: what was wrong with the patera2005 model? -> covariance propagation
 #TODO: Interpolation around TCA to get more accurate distance and time of closest approach
 #TODO: plot of spread of initial conditions
 #TODO: plot of spread of final conditions
