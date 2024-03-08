@@ -111,17 +111,13 @@ def energy(ephemeris_df, degree, order):
     zv = ephemeris_df['zv_ecef']
     vvec = np.linalg.norm([xv, yv, zv], axis=0)
     rvec = np.linalg.norm([x, y, z], axis=0)
-    # kinetic_energy = satellite_mass*(vvec**2)/2
-    # earth_rotational_energy = omega_earth**2 * ((x**2 + y**2)/2)
-    kinetic_energy = 0
-    earth_rotational_energy = 0
-    monopole = -mu / rvec # that should probs be negative?
-    # ephemeris_df['U_spherical'] = kinetic_energy - earth_rotational_energy - monopole
+    kinetic_energy = satellite_mass*(vvec**2)/2
+    earth_rotational_energy = omega_earth**2 * ((x**2 + y**2)/2)
+    monopole = -mu / rvec
+    ephemeris_df['U_spherical'] = kinetic_energy - earth_rotational_energy - monopole
 
-    # ephemeris_df['kinetic_energy'] = kinetic_energy
-    ephemeris_df['kinetic_energy'] = 0
-    # ephemeris_df['earth_rotational_energy'] = earth_rotational_energy
-    ephemeris_df['earth_rotational_energy'] = 0
+    ephemeris_df['kinetic_energy'] = kinetic_energy
+    ephemeris_df['earth_rotational_energy'] = earth_rotational_energy
     ephemeris_df['monopole'] = monopole
     
     #now get the non-spherical potential energy
@@ -139,16 +135,15 @@ def energy(ephemeris_df, degree, order):
         potential = compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, P_nm_all, date)
         potentials.append(potential)
     ephemeris_df['U_grav_field'] = potentials
-    # Calculate total energy
-    ephemeris_df['U_non_spherical'] = ephemeris_df['U_grav_field'] - ephemeris_df['monopole']
-    # ephemeris_df['energy'] = ephemeris_df['U_spherical'] - ephemeris_df['U_grav_field']
-    ephemeris_df['energy'] = ephemeris_df['U_non_spherical']
+    # ephemeris_df['U_non_spherical'] = ephemeris_df['U_grav_field'] - ephemeris_df['monopole']
+    ephemeris_df['U_spherical'] = kinetic_energy - earth_rotational_energy + monopole
+    ephemeris_df['U_non_spherical'] = kinetic_energy - earth_rotational_energy + potentials
 
     # energy_diff is the difference between the energy at the first point and the energy at the current point
-    ephemeris_df['energy_diff'] = ephemeris_df['energy'] - ephemeris_df['energy'].iloc[0]
     ephemeris_df['energy_diff_kinetic'] = ephemeris_df['kinetic_energy'] - ephemeris_df['kinetic_energy'].iloc[0]
     ephemeris_df['energy_diff_rotational'] = ephemeris_df['earth_rotational_energy'] - ephemeris_df['earth_rotational_energy'].iloc[0]
     ephemeris_df['energy_diff_monopole'] = ephemeris_df['monopole'] - ephemeris_df['monopole'].iloc[0]
+    ephemeris_df['energy_diff_spherical'] = ephemeris_df['U_spherical'] - ephemeris_df['U_spherical'].iloc[0]
     ephemeris_df['energy_diff_non_spherical'] = ephemeris_df['U_non_spherical'] - ephemeris_df['U_non_spherical'].iloc[0]
     ephemeris_df['energy_diff_grav_field'] = ephemeris_df['U_grav_field'] - ephemeris_df['U_grav_field'].iloc[0]
     return ephemeris_df
@@ -184,13 +179,15 @@ def main():
         ephemeris_df['yv_ecef'] = yv_ecef
         ephemeris_df['zv_ecef'] = zv_ecef
 
-        plt.figure()
         ephemeris_df= energy(ephemeris_df, 6, 6)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff'], label=f'Net Energy Diff', linestyle='dotted')
+
+        plt.figure()
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_non_spherical'], label='Total Energy Difference')
         plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_kinetic'], label='Kinetic only')
         plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_rotational'], label='Rotational only')
         plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_monopole'], label='Monopole only')
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_grav_field'], label='Non-Spherical only')
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_spherical'], label='With Monopole')
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_non_spherical'], label='With Gravity Field')
         plt.xlabel('MJD')
         plt.ylabel('Energy (J/kg)')
         plt.title(f'Energy Comparison for {sat_name}')
@@ -223,7 +220,7 @@ def main():
         plt.grid(True)
 
         plt.subplot(2, 3, 4)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='Point Mass Related Potential Energy')
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_spherical'], label='Point Mass Potential Energy')
         plt.xlabel('MJD')
         plt.ylabel('Energy (J/kg)')
         plt.title(f'Spherical Potential Energy for {sat_name}')
@@ -237,7 +234,7 @@ def main():
         plt.grid(True)
 
         plt.subplot(2, 3, 6)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='monopole-gravity field')
+        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='Total Energy')
         plt.xlabel('MJD')
         plt.ylabel('Energy (J/kg)')
         plt.title(f'Total Energy')
