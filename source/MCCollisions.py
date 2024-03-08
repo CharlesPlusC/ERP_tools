@@ -67,13 +67,16 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     return perturbed_states
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     arc_length = 25  # mins
     num_arcs = 1
-    prop_length = 60 * 60 * 6  # 6 hours
+    prop_length = 60 * 60 * 3  # 6 hours
     prop_length_days = prop_length / (60 * 60 * 24)
-    force_model_configs = [{'120x120gravity': True, '3BP': True},
-                           {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
+    force_model_configs = [
+                        {'36x36gravity': True, '3BP': True},
+                        {'120x120gravity': True, '3BP': True},
+                        {'120x120gravity': True, '3BP': True, 'SRP': True, 'nrlmsise00drag': True},
+                        {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
     
     MC_ephem_folder = "output/Collisions/MC/interpolated_MC_ephems" #folder to save the interpolated ephemeris dataframes
     if not os.path.exists(MC_ephem_folder):
@@ -118,7 +121,19 @@ def main():
                 ##### Perturb the estimated state ("primary state") and propagate those perturbed states
                 #make a list of dataframes for each perturbed state
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 10)
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 4)
+                #3D plot of the original and perturbed states
+                # figure = plt.figure()
+                # ax = figure.add_subplot(111, projection='3d')
+                # ax.scatter(0,0, 0, color='r', s=10)
+                # print(f"optimized_state: {optimized_state}")
+                # for state in perturbed_states_primary:
+                #     print(f"perturbed state: {state}")
+                #     # ax.scatter(state[0], state[1], state[2], color='b', s=2)
+                #     #iinstead of plottiung the raw values, plot the deviation from the optimized state
+                #     ax.scatter(state[0] - optimized_state[0], state[1] - optimized_state[1], state[2] - optimized_state[2], color='b', s=2)
+                # plt.show()
+                
                 for primary_state in perturbed_states_primary:
                     print(f"propagating primary_state: {primary_state}")
                     primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
@@ -130,7 +145,8 @@ def main():
 
                 secondary_state = collision_df.iloc[0][["x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col"]].values
                 secondary_states_perturbed_ephem = []
-                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 10)
+                #TODO: maybe i dont need to perturb the secondary state for this analysis
+                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 4)
                 for secondary_state in perturbed_states_secondary:
                     print(f"propagating secondary_state: {secondary_state}")
                     secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
@@ -140,11 +156,11 @@ def main():
                     df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
 
                 for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
-                    primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=5), t_col + datetime.timedelta(seconds=5))
+                    primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7))
                     #save the interpolated ephemeris dataframes to a folder
                     primary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
                 for i, secondary_state_perturbed_df in enumerate(secondary_states_perturbed_ephem):
-                    secondary_states_perturbed_ephem[i] = interpolate_ephemeris(secondary_state_perturbed_df, t_col - datetime.timedelta(seconds=5), t_col + datetime.timedelta(seconds=5))
+                    secondary_states_perturbed_ephem[i] = interpolate_ephemeris(secondary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7))
                     #save the interpolated ephemeris dataframes to a folder
                     secondary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
 
