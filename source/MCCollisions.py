@@ -44,14 +44,6 @@ def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S'):
     df_filtered = df_resampled.loc[(df_resampled.index >= start_time) & (df_resampled.index <= end_time)]
     return df_filtered.reset_index()
 
-from concurrent.futures import ProcessPoolExecutor
-
-def parallel_interpolate(df_list, start_time, end_time, freq='0.0001S'):
-    with ProcessPoolExecutor() as executor:
-        futures = [executor.submit(interpolate_ephemeris, df, start_time, end_time, freq) for df in df_list]
-        results = [f.result() for f in futures]
-    return results
-
 def generate_random_vectors(eigenvalues, num_samples):
     random_vectors = []
     for lambda_val in eigenvalues:
@@ -82,7 +74,10 @@ def main():
     prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [{'120x120gravity': True, '3BP': True},
                            {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
-
+    
+    MC_ephem_folder = "output/Collisions/MC/interpolated_MC_ephems" #folder to save the interpolated ephemeris dataframes
+    if not os.path.exists(MC_ephem_folder):
+        os.makedirs(MC_ephem_folder)
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         sat_info = get_satellite_info(sat_name)
@@ -123,26 +118,35 @@ def main():
                 ##### Perturb the estimated state ("primary state") and propagate those perturbed states
                 #make a list of dataframes for each perturbed state
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 4)
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 10)
                 for primary_state in perturbed_states_primary:
                     print(f"propagating primary_state: {primary_state}")
                     primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
                     primary_states_perturbed_ephem.append(primary_state_perturbed_df)
 
+                #save the perturbed ephemeris dataframes to a folder
+                for i, df in enumerate(primary_states_perturbed_ephem):
+                    df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
+
                 secondary_state = collision_df.iloc[0][["x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col"]].values
                 secondary_states_perturbed_ephem = []
-                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 4)
+                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 10)
                 for secondary_state in perturbed_states_secondary:
                     print(f"propagating secondary_state: {secondary_state}")
                     secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
                     secondary_states_perturbed_ephem.append(secondary_states_perturbed_df)
 
-                #same as above but make the time delta only 30 seconds
-                print(f"interpolating primary ephemeris dataframes around TCA")
-                #use parallel interpolation
-                primary_states_perturbed_ephem = parallel_interpolate(primary_states_perturbed_ephem, t_col - datetime.timedelta(seconds=10), t_col + datetime.timedelta(seconds=10))
-                print(f"interpolating secondary ephemeris dataframes around TCA")
-                secondary_states_perturbed_ephem = parallel_interpolate(secondary_states_perturbed_ephem, t_col - datetime.timedelta(seconds=10), t_col + datetime.timedelta(seconds=10))
+                for i, df in enumerate(secondary_states_perturbed_ephem):
+                    df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
+
+                for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
+                    primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=5), t_col + datetime.timedelta(seconds=5))
+                    #save the interpolated ephemeris dataframes to a folder
+                    primary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
+                for i, secondary_state_perturbed_df in enumerate(secondary_states_perturbed_ephem):
+                    secondary_states_perturbed_ephem[i] = interpolate_ephemeris(secondary_state_perturbed_df, t_col - datetime.timedelta(seconds=5), t_col + datetime.timedelta(seconds=5))
+                    #save the interpolated ephemeris dataframes to a folder
+                    secondary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
 
                 #go through the list of dataframes and calculate the distance between every combination of primary and secondary states
                 distance_dfs = []
@@ -152,14 +156,12 @@ def main():
                     for j, secondary_state_perturbed_df in enumerate(secondary_states_perturbed_ephem):
                         # Calculate the Euclidean distance for the position vectors (x, y, z) at each time point
                         distances = np.linalg.norm(primary_state_perturbed_df[['x', 'y', 'z']].values - secondary_state_perturbed_df[['x', 'y', 'z']].values, axis=1)
-                        # Create a dataframe with distances and corresponding UTC timestamps
                         distance_df = pd.DataFrame({'UTC': primary_state_perturbed_df['UTC'], f'Distance_{i}_{j}': distances})
                         distance_dfs.append(distance_df)
 
                 # Concatenate all individual distance dataframes to get a single dataframe with all distances
                 distances_df = pd.concat(distance_dfs, axis=1)
-
-                # Removing duplicate UTC columns if they exist
+                # Removing duplicate UTC
                 distances_df = distances_df.loc[:,~distances_df.columns.duplicated()]
 
                 #calculate the distance between unperturbed primary and secondary states
@@ -175,14 +177,15 @@ def main():
                 #also slice collision_df to only contain data 1 hour before and after the collision time (t_col)
                 collision_df = collision_df[(collision_df['UTC'] >= t_col - datetime.timedelta(minutes=60)) & (collision_df['UTC'] <= t_col + datetime.timedelta(minutes=60))]
 
+                #TODO: make the interpolation be a function of the rate of change of the distance between the two states
                 #TODO: stitch the interpolated and non interpolated to get higher resolution around TCA
                 #TODO: use the interpolated to get a better estimate fo the TCA (find DCA and invert for TCA)
-                #TODO: get the plot from the Patera script of propagated orbit to SP3 orbit
+                #TODO: make the plot from the Patera script of propagated orbit to SP3 orbit
 
                 # Set the plot size
                 plt.figure(figsize=(10, 6))
                 #plot only 2min before and after the collision time
-                plt.xlim(t_col - datetime.timedelta(minutes=2), t_col + datetime.timedelta(minutes=2))
+                plt.xlim(t_col - datetime.timedelta(minutes=1), t_col + datetime.timedelta(minutes=1))
                 # Loop through each distance column (ignoring the 'UTC' column) to plot
                 for column in distances_df.columns:
                     if column != 'UTC':
@@ -194,11 +197,7 @@ def main():
                 print("DCAs: ", min_distances)
                 print(f"closest distance: {min(min_distances)}")
                 print(f"simulation end. Total trajectories: {len(min_distances)}")
-
-                #add the original distance to the plot with dotted line
-
                 plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
-
                 # Set plot title and labels
                 plt.title('Distance Time Series')
                 plt.xlabel('Time')
@@ -208,7 +207,6 @@ def main():
                 plt.ylim(0.01, 10e7)
                 # Rotate date labels for better readability
                 plt.xticks(rotation=45)
-
                 # Show the plot
                 plt.tight_layout()  # Adjust layout to not cut off labels
         
@@ -231,19 +229,126 @@ def main():
                 num_below_10m = len([d for d in min_distances if d < 10])
                 num_below_5m = len([d for d in min_distances if d < 5])
                 num_below_1m = len([d for d in min_distances if d < 1])
+                smallest_distance = min(min_distances)
                 plt.text(0.5, 0.9, f"Below 1km: {num_below_1km}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.text(0.5, 0.85, f"Below 100m: {num_below_100m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.text(0.5, 0.8, f"Below 10m: {num_below_10m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.text(0.5, 0.75, f"Below 5m: {num_below_5m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.text(0.5, 0.7, f"Below 1m: {num_below_1m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
-                
+                plt.text(0.5, 0.65, f"Smallest Distance: {smallest_distance}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{j}_{timenow}.png")
                 # plt.show()
-                
-#TODO: what was wrong with the patera2005 model? -> covariance propagation
-#TODO: Interpolation around TCA to get more accurate distance and time of closest approach
-#TODO: plot of spread of initial conditions
-#TODO: plot of spread of final conditions
+
+                fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+                # Plotting x-y scatter for primary states
+                for df in primary_states_perturbed_ephem:
+                    axs[0, 0].scatter(df['x'], df['y'], alpha=0.5)
+                axs[0, 0].set_title('Primary States X-Y')
+                axs[0, 0].set_xlabel('X')
+                axs[0, 0].set_ylabel('Y')
+
+                # Plotting x-z scatter for primary states
+                for df in primary_states_perturbed_ephem:
+                    axs[0, 1].scatter(df['x'], df['z'], alpha=0.5)
+                axs[0, 1].set_title('Primary States X-Z')
+                axs[0, 1].set_xlabel('X')
+                axs[0, 1].set_ylabel('Z')
+
+                # Plotting x-y scatter for secondary states
+                for df in secondary_states_perturbed_ephem:
+                    axs[1, 0].scatter(df['x'], df['y'], alpha=0.5)
+                axs[1, 0].set_title('Secondary States X-Y')
+                axs[1, 0].set_xlabel('X')
+                axs[1, 0].set_ylabel('Y')
+
+                # Plotting x-z scatter for secondary states
+                for df in secondary_states_perturbed_ephem:
+                    axs[1, 1].scatter(df['x'], df['z'], alpha=0.5)
+                axs[1, 1].set_title('Secondary States X-Z')
+                axs[1, 1].set_xlabel('X')
+                axs[1, 1].set_ylabel('Z')
+
+                plt.tight_layout()
+                plt.savefig(f"{folder}/scatter_initsample_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
+                plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num)
+                plot_minimum_distance_histogram(min_distances, sat_name, arc, fm_num)
+                plot_scatter_initsample(primary_states_perturbed_ephem, secondary_states_perturbed_ephem, sat_name, arc, fm_num)
+
+def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, folder="output/Collisions/MC"):
+    plt.figure(figsize=(10, 6))
+    sns.set_theme(style="whitegrid")
+    plt.xlim(t_col - datetime.timedelta(minutes=1), t_col + datetime.timedelta(minutes=1))
+    for column in distances_df.columns:
+        if column != 'UTC':
+            plt.plot(distances_df['UTC'], distances_df[column], label=column)
+    plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
+    plt.title('Distance Time Series')
+    plt.xlabel('Time')
+    plt.ylabel('Distance')
+    plt.yscale('log')
+    plt.ylim(0.01, 10e7)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+    plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
+
+def plot_minimum_distance_histogram(min_distances, sat_name, arc, fm_num, folder="output/Collisions/MC"):
+    plt.figure(figsize=(10, 6))
+    sns.set_theme(style="whitegrid")
+    plt.hist(min_distances, bins=20, color='blue', edgecolor='black')
+    plt.title('Minimum Distance Histogram')
+    plt.xlabel('Minimum Distance')
+    plt.ylabel('Frequency')
+    thresholds = [1000, 100, 10, 5, 1]
+    for i, threshold in enumerate(thresholds, start=1):
+        num_below_threshold = len([d for d in min_distances if d < threshold])
+        plt.text(0.5, 1 - 0.05*i, f"Below {threshold}m: {num_below_threshold}/{len(min_distances)}", ha='center', transform=plt.gca().transAxes)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+    plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
+
+def plot_scatter_initsample(primary_states_perturbed_ephem, secondary_states_perturbed_ephem, sat_name, arc, fm_num, folder="output/Collisions/MC"):
+    fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+    sns.set(style="whitegrid")
+
+    # Extracting initial conditions for primary and secondary states
+    primary_initials = [df.iloc[0] for df in primary_states_perturbed_ephem]
+    secondary_initials = [df.iloc[0] for df in secondary_states_perturbed_ephem]
+
+    # Plotting X-Y and X-Z for primary initial conditions
+    for initial in primary_initials:
+        axs[0, 0].scatter(initial['x'], initial['y'], alpha=0.5)
+        axs[0, 1].scatter(initial['x'], initial['z'], alpha=0.5)
+
+    # Plotting X-Y and X-Z for secondary initial conditions
+    for initial in secondary_initials:
+        axs[1, 0].scatter(initial['x'], initial['y'], alpha=0.5)
+        axs[1, 1].scatter(initial['x'], initial['z'], alpha=0.5)
+
+    # Setting titles and labels
+    axs[0, 0].set_title('Primary States X-Y')
+    axs[0, 1].set_title('Primary States X-Z')
+    axs[1, 0].set_title('Secondary States X-Y')
+    axs[1, 1].set_title('Secondary States X-Z')
+
+    # Setting equal axes
+    for ax in axs.flat:
+        ax.set_aspect('equal', 'box')
+
+    for i in range(2):
+        axs[i, 0].set_xlabel('X')
+        axs[i, 0].set_ylabel('Y')
+        axs[i, 1].set_xlabel('X')
+        axs[i, 1].set_ylabel('Z')
+
+    plt.tight_layout()
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+    plt.savefig(f"{folder}/scatter_initsample_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
 
 if __name__ == "__main__":
     main()
