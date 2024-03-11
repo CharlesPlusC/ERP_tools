@@ -78,7 +78,7 @@ def main():
                         {'120x120gravity': True, '3BP': True, 'SRP': True, 'nrlmsise00drag': True},
                         {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
     
-    MC_ephem_folder = "output/Collisions/MC/interpolated_MC_ephems" #folder to save the interpolated ephemeris dataframes
+    MC_ephem_folder = "output/Collisions/MC/interpolated_MC_ephems" #folder to save the interpolated ephemeris dataframes  
     if not os.path.exists(MC_ephem_folder):
         os.makedirs(MC_ephem_folder)
     for sat_name in sat_names_to_test:
