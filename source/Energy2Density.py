@@ -6,19 +6,9 @@ vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
 from orekit.pyhelpers import datetime_to_absolutedate
-from org.hipparchus.geometry.euclidean.threed import Vector3D
-from org.orekit.frames import FramesFactory
-from org.orekit.utils import PVCoordinates
-from org.orekit.orbits import CartesianOrbit
-from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
-from org.orekit.forces.gravity.potential import GravityFieldFactory, TideSystem
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, OceanTides, ThirdBodyAttraction, Relativity, NewtonianAttraction
-from orekit import JArray_double
-from org.orekit.orbits import OrbitType
-from org.orekit.propagation.numerical import NumericalPropagator
-from org.orekit.time import TimeScalesFactory   
-from org.orekit.propagation import SpacecraftState
+from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
+
 import os
 from tools.utilities import utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
@@ -30,230 +20,51 @@ import pandas as pd
 import numpy as np
 import math
 from scipy.special import lpmn
-from org.orekit.forces.gravity.potential import GravityFieldFactory
-from org.orekit.utils import Constants
+
 
 mu = Constants.WGS84_EARTH_MU
 R_earth = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
+J2 =Constants.EGM96_EARTH_C20
 
-def associated_legendre_polynomials(n, m, sin_phi):
-    pnm = np.zeros((n + 1, m + 1))
-    pnm_unnorm, _ = lpmn(m, n, sin_phi)
-    pnm_unnorm = pnm_unnorm.T
-    for ni in range(n + 1):
-        for mi in range(min(ni, m) + 1):
-            normalization_factor = np.sqrt(((2 * ni + 1) * math.factorial(ni - mi)) / (2 * math.factorial(ni + mi)))
-            pnm[ni, mi] = normalization_factor * pnm_unnorm[ni, mi]
-    return pnm  # Use the normalized pnm for calculations.
-
-# def compute_gravitational_potential(r, phi, lambda_, degree, order, P_nm_all, date):
-#     provider = GravityFieldFactory.getNormalizedProvider(degree, order)
-#     harmonics = provider.onDate(date)
-
-#     # Initialize gravitational potential deviation (V_dev) as 0.0, not including the central term mu/r
-#     V_dev = 0.0
-#     for n in range(1, degree + 1):  # Start from n = 1 to exclude the central potential
-#         radial_term = (R_earth / r)**n
-#         for m in range(0, n + 1):
-#             C_nm = harmonics.getNormalizedCnm(n, m)
-#             S_nm = harmonics.getNormalizedSnm(n, m)
-#             P_nm_sinphi = P_nm_all[n][m]
-
-#             if m == 0:
-#                 sectorial_term = P_nm_sinphi * C_nm  # cos(0) = 1 implicitly used
-#             else:
-#                 sectorial_term = P_nm_sinphi * (C_nm * np.cos(m * lambda_) + S_nm * np.sin(m * lambda_))
-
-#             # Accumulate the deviation from spherical potential
-#             V_dev = mu / r * radial_term * sectorial_term
-            
-#             # Print J2, J3, and J4 energies inside the loop
-#             #Sanity checks
-#             # if n == 2 and m == 0:
-#             #     J2_energy_inside = -mu / r * radial_term * sectorial_term
-#             #     print(f"J2 energy inside the loop: {J2_energy_inside} J/kg")
-#             # if n == 3 and m == 0:
-#             #     J3_energy_inside = -mu / r * radial_term * sectorial_term
-#             #     print(f"J3 energy inside the loop: {J3_energy_inside} J/kg")
-#             # if n == 4 and m == 0:
-#             #     J4_energy_inside = -mu / r * radial_term * sectorial_term
-#             #     print(f"J4 energy inside the loop: {J4_energy_inside} J/kg")
-
-#     V_total = -mu / r + V_dev
-#     # print(f"for degree {degree} and order {order}, the total gravitational potential is {V_total} J/kg")
-
-#     return V_total
-
-def compute_gravitational_potential(r, phi, lambda_, degree, order, P_nm_all, date):
-    # Compute the J2 perturbation term, assuming phi is latitude in radians
-    J2 = 1.08262668e-3
+def U_J2(r, phi, lambda_):
     theta = np.pi / 2 - phi  # Convert latitude to colatitude
+    # J2 potential term calculation, excluding the monopole term
+    V_j2 = -mu / r * J2 * (R_earth / r)**2 * (3 * np.cos(theta)**2 - 1) / 2
+    return V_j2
 
-    # J2 potential term and monopole potential
-    V_m = -mu / r
-    V_j2 = -mu / r * (1 - J2 * (R_earth / r)**2 * (3 * np.cos(theta)**2 - 1) / 2)
+def associated_legendre_polynomials(degree, order, x):
+    for n in range(degree + 1):
+        for m in range(min(n, order) + 1):
+            P_nm, _ = lpmn(m, n, x)
+    return P_nm[0][-1]
 
-    # The total gravitational potential includes J2 contribution
-    V_total = V_j2
+def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
+    # provider = GravityFieldFactory.getNormalizedProvider(degree, order)
+    provider = GravityFieldFactory.getUnnormalizedProvider(degree, order)
+    harmonics = provider.onDate(date)
+    mu = 3.986004418e14  # Earth's gravitational constant
+    R_earth = 6378137  # Earth's radius in meters
+    V_dev = 0.0
 
+    for n in range(degree + 1):
+        for m in range(min(n, order) + 1):
+            C_nm = harmonics.getUnnormalizedCnm(n, m)
+            S_nm = harmonics.getUnnormalizedSnm(n, m)
+            P_nm = associated_legendre_polynomials(n, m, np.sin(phi))
+            sectorial_term = P_nm * (C_nm * np.cos(m * lambda_) + S_nm * np.sin(m * lambda_))
+            contribution = (mu / r) * (R_earth / r)**n * sectorial_term
+            if not (n == 0 and m == 0):  # Skip the central term in V_dev
+                V_dev += contribution
+    V_total = -V_dev
     return V_total
-
-# def energy(ephemeris_df, degree, order):
-#     mu = Constants.WGS84_EARTH_MU
-#     x = ephemeris_df['x_ecef']
-#     y = ephemeris_df['y_ecef']
-#     z = ephemeris_df['z_ecef']
-#     rvec = np.linalg.norm([x, y, z], axis=0)
-#     kinetic_energy = ephemeris_df['kinetic_energy']
-#     earth_rotational_energy = ephemeris_df['earth_rotational_energy']
-#     monopole = -mu / rvec
-#     ephemeris_df['monopole'] = monopole
-#     #now get the non-spherical potential energy
-#     converted_coords = np.vectorize(ecef_to_lla, signature='(),(),()->(),(),()')(ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef'])
-#     ephemeris_df[['lat', 'lon', 'alt']] = np.column_stack(converted_coords)
-#     legendre_cache = {phi: associated_legendre_polynomials(degree, order, np.sin(phi)) for phi in np.unique(np.radians(ephemeris_df['lat']))}
-
-#     potentials = []
-#     for _, row in ephemeris_df.iterrows():
-#         print(f"computing potential for {row['lat']}, {row['lon']}, {row['alt']}")
-#         phi_rad = np.radians(row['lat'])
-#         P_nm_all = legendre_cache[phi_rad]
-#         lambda_rad = np.radians(row['lon'])
-#         r = row['alt']
-#         date = datetime_to_absolutedate(row['UTC'])
-#         potential = compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, P_nm_all, date)
-#         #difference between the monopole and the non-spherical potential
-#         potentials.append(potential)
-
-#     #plot the difference between the monopole and the non-spherical potential as a function of latitude
-#     grav_diff = ephemeris_df['monopole'] - potentials
-#     plt.figure()
-#     plt.plot(ephemeris_df['lat'], grav_diff, label='Deviation from Monopole')
-#     plt.xlabel('Latitude (degrees)')
-#     plt.ylabel('Energy (J/kg)')
-#     plt.title('Non-Spherical Potential Energy vs Monopole Energy')
-#     plt.grid(True)
-#     plt.legend()
-#     plt.show()
-
-#     print(f"first five values of monopole: {ephemeris_df['monopole'].head()}")
-#     print(f"first five values of potentials: {potentials[:5]}")
-#     ephemeris_df['U_grav_field'] =  monopole - potentials
-#     ephemeris_df['deviations'] = ephemeris_df['U_grav_field'] - ephemeris_df['monopole']
-
-#     ephemeris_df['U_spherical'] = kinetic_energy - earth_rotational_energy - monopole
-#     ephemeris_df['U_non_spherical'] = kinetic_energy - earth_rotational_energy  - monopole + potentials
-
-#     #plot U_grav_field and monopole difference
-#     plt.figure()
-#     plt.plot(ephemeris_df['MJD'], ephemeris_df['deviations'], label='Deviation from Monopole')
-#     plt.xlabel('MJD')
-#     plt.ylabel('Energy (J/kg)')
-#     plt.title('Non-Spherical Potential Energy vs Monopole Energy')
-#     plt.grid(True)
-#     plt.legend()
-#     plt.savefig("output/DensityInversion/OrbitEnergy/NonSphericalPotentialEnergy.png")
-#     # plt.show()
-
-#     #plot difference between kinetic and monopole
-#     plt.figure()
-#     plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='Non Spherical Potential Energy')
-#     plt.plot(ephemeris_df['MJD'], ephemeris_df['U_spherical'], label='Spherical Potential Energy')
-#     plt.xlabel('MJD')
-#     plt.ylabel('Energy (J/kg)')
-#     plt.title('Kinetic Energy vs Monopole Energy')
-#     plt.grid(True)
-#     plt.legend()
-#     plt.savefig("output/DensityInversion/OrbitEnergy/KineticEnergy.png")
-#     # plt.show()
-
-#     print(f"first five values of monopole: {ephemeris_df['monopole'].head()}")
-#     print(f"first five values of potentials: {potentials[:5]}")
-#     print(f'first five monopole vs potentials difference: {ephemeris_df["monopole"].head() - potentials[:5]}')
-
-#     # energy_diff is the difference between the energy at the first point and the energy at the current point
-#     ephemeris_df['energy_diff_kinetic'] = ephemeris_df['kinetic_energy'] - ephemeris_df['kinetic_energy'].iloc[0]
-#     ephemeris_df['energy_diff_rotational'] = ephemeris_df['earth_rotational_energy'] - ephemeris_df['earth_rotational_energy'].iloc[0]
-#     ephemeris_df['energy_diff_monopole'] = ephemeris_df['monopole'] - ephemeris_df['monopole'].iloc[0]
-#     ephemeris_df['energy_diff_spherical'] = ephemeris_df['U_spherical'] - ephemeris_df['U_spherical'].iloc[0]
-#     ephemeris_df['energy_diff_non_spherical'] = ephemeris_df['U_non_spherical'] - ephemeris_df['U_non_spherical'].iloc[0]
-#     ephemeris_df['energy_diff_grav_field'] = ephemeris_df['U_grav_field'] - ephemeris_df['U_grav_field'].iloc[0]
-#     return ephemeris_df
-
-def energy(ephemeris_df, degree, order):
-    mu = Constants.WGS84_EARTH_MU
-    omega_earth = 7.2921159e-5  # Earth's angular velocity in rad/s
-
-    # Kinetic energy calculation
-    kinetic_energy = -np.linalg.norm([ephemeris_df['xv_ecef'], ephemeris_df['yv_ecef'], ephemeris_df['zv_ecef']], axis=0)**2
-    ephemeris_df['kinetic_energy'] = kinetic_energy
-
-    # Earth's rotational energy calculation
-    rotational_energy = 0.5 * omega_earth**2 * (ephemeris_df['x_ecef']**2 + ephemeris_df['y_ecef']**2)
-    ephemeris_df['earth_rotational_energy'] = rotational_energy
-
-    # Monopole gravitational potential energy
-    rvec = np.linalg.norm([ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef']], axis=0)
-    ephemeris_df['monopole'] = -mu / rvec
-
-    converted_coords = np.vectorize(ecef_to_lla, signature='(),(),()->(),(),()')(ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef'])
-    ephemeris_df[['lat', 'lon', 'alt']] = np.column_stack(converted_coords)
-
-    # Calculate the gravitational potential energy with J2 perturbation
-    potentials = []
-    for _, row in ephemeris_df.iterrows():
-        phi_rad = np.radians(row['lat'])
-        lambda_rad = np.radians(row['lon'])
-        r = np.linalg.norm([row['x_ecef'], row['y_ecef'], row['z_ecef']])
-        date = datetime_to_absolutedate(row['UTC'])
-        potential = compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, None, date)
-        potentials.append(potential)
-
-    ephemeris_df['U_grav_field'] = potentials
-
-    # Total energy with and without J2 contribution
-    print(f"first five values of monopole: {ephemeris_df['monopole'].head()}")
-    print(f"first five values of potentials: {potentials[:5]}")
-    print(f"first five values of kinetic energy: {ephemeris_df['kinetic_energy'].head()}")
-    print(f"first five values of rotational energy: {ephemeris_df['earth_rotational_energy'].head()}")
-    ephemeris_df['total_energy'] = ephemeris_df['kinetic_energy'] - ephemeris_df['earth_rotational_energy'] - ephemeris_df['U_grav_field'] 
-    ephemeris_df['total_energy_no_J2'] = ephemeris_df['kinetic_energy'] - ephemeris_df['earth_rotational_energy'] - ephemeris_df['monopole'] 
-
-    #plot change in energy from the first point
-    ephemeris_df["energy_diff_no_j2"] = ephemeris_df['total_energy_no_J2'] - ephemeris_df['total_energy_no_J2'].iloc[0]
-    ephemeris_df["energy_diff_all"] = ephemeris_df['total_energy'] - ephemeris_df['total_energy'].iloc[0]
-    
-    plt.figure()
-    plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_no_j2'], label='Total Energy Difference (No J2)')
-    plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_all'], label='Total Energy Difference (All)')
-    plt.xlabel('MJD')
-    plt.ylabel('Energy (J/kg)')
-    plt.title('Total Energy Difference')
-    plt.grid(True)
-    plt.legend()
-    plt.show()
-
-
-    # Plotting the total energy with and without J2 contribution
-    # plt.figure(figsize=(12, 6))
-    # plt.plot(ephemeris_df['MJD'], ephemeris_df['total_energy'], label='Total Energy (with J2)')
-    # plt.plot(ephemeris_df['MJD'], ephemeris_df['total_energy_no_J2'], label='Total Energy (without J2)', linestyle='--')
-    # plt.xlabel('MJD')
-    # plt.ylabel('Energy (J/kg)')
-    # plt.title('Total Energy Comparison')
-    # plt.legend()
-    # plt.grid(True)
-    # plt.show()
-
-    return ephemeris_df
 
 def main():
     # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    sat_names_to_test = ["CHAMP"]
+    sat_names_to_test = ["GRACE-FO-A"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        #take every 10th po
-        ephemeris_df = ephemeris_df.head(300)
+        #skip the first 45 points
+        ephemeris_df = ephemeris_df.head(180)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
@@ -278,81 +89,127 @@ def main():
         ephemeris_df['yv_ecef'] = yv_ecef
         ephemeris_df['zv_ecef'] = zv_ecef
 
+        #conver the ecef coordinates to lla
+        converted_coords = np.vectorize(ecef_to_lla, signature='(),(),()->(),(),()')(ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef'])
+        ephemeris_df[['lat', 'lon', 'alt']] = np.column_stack(converted_coords)
+
         kinetic_energy = (np.linalg.norm([ephemeris_df['xv'], ephemeris_df['yv'], ephemeris_df['zv']], axis=0))**2/2
+        print(f"first five values of kinetic energy: {kinetic_energy[:5]}")
         ephemeris_df['kinetic_energy'] = kinetic_energy
 
-        omega_earth = 7.2921159e-5
-        earth_rotational_energy = omega_earth**2 * ((ephemeris_df['x_ecef']**2 + ephemeris_df['y_ecef']**2)/2)
-        ephemeris_df['earth_rotational_energy'] = earth_rotational_energy
+        monopole_potential = mu / np.linalg.norm([ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef']], axis=0)
+        print(f"first five values of monopole potential: {monopole_potential[:5]}")
+        ephemeris_df['monopole'] = monopole_potential
 
-        ephemeris_df= energy(ephemeris_df, 2, 2)
+        #plot monopole potential
+        plt.figure()
+        plt.plot(ephemeris_df['MJD'], monopole_potential, label='Monopole Potential', color='r')
+        plt.legend()
+        plt.xlabel('MJD')
+        plt.ylabel('Potential Energy (J/kg)')
+        plt.title('Monopole Potential')
+        plt.grid(True)
+        plt.show()
+
+        earth_rotational_energy = (7.2921159e-5)**2 * ((ephemeris_df['x_ecef']**2 + ephemeris_df['y_ecef']**2)/2)
+        print(f"first five values of earth rotational energy: {earth_rotational_energy[:5]}")
+        ephemeris_df['earth_rotational_energy'] = 1
+
+        energy_spherical = kinetic_energy - earth_rotational_energy - monopole_potential
+
+        #plot the energy change from t0 to ti for energy spherical
+        energy_diff_spherical = energy_spherical[0] - energy_spherical
+        plt.figure()
+        plt.plot(ephemeris_df['MJD'], energy_diff_spherical, label='Spherical Potential Energy Change', color='r')
+        plt.legend()
+        plt.xlabel('MJD')
+        plt.ylabel('Energy Change (J/kg)')
+        plt.title('Spherical Potential Energy Change')
+        plt.grid(True)
+        plt.show()
+
+        U_non_sphericals = []
+        U_j2s = []
+        for _, row in ephemeris_df.iterrows():
+            print(f"computing potential for {row['lat']}, {row['lon']}, {row['alt']}")
+            phi_rad = np.radians(row['lat'])
+            lambda_rad = np.radians(row['lon'])
+            r = row['alt']
+            degree = 6
+            order = 6
+            date = datetime_to_absolutedate(row['UTC'])
+            U_non_spher =  compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
+            print(f"U_non_spher: {U_non_spher}")
+            U_j2 = U_J2(r, phi_rad, lambda_rad)
+            print(f"U_j2: {U_j2}")
+            U_j2s.append(U_j2)
+            U_non_sphericals.append(U_non_spher)
+
+            #####TODO: plot ground tracks and colour by J2 and by non-spherical potential
 
         plt.figure()
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_non_spherical'], label='Total Energy Difference')
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_kinetic'], label='Kinetic only')
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_rotational'], label='Rotational only')
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_monopole'], label='Monopole only')
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_grav_field'], label='Non-Spherical Potential only')
-        # plt.plot(ephemeris_df['MJD'], ephemeris_df['energy_diff_spherical'], label='With Monopole')
-        plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Energy Comparison for {sat_name}')
+        #plot lat, lon, J2
+        plt.scatter(ephemeris_df['lon'], ephemeris_df['lat'], c=U_j2s, cmap='viridis')
+        plt.colorbar()
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        #make sure the plot ranges from -180 to 180 for longitude and -90 to 90 for latitude
+        plt.xlim(-180, 180)
+        plt.ylim(-90, 90)
+        plt.title('J2 Potential Energy')
         plt.grid(True)
+        plt.show()
+        
+        #plot difference between U_j2 and U_non_spherical
+        grav_pot_diff = np.array(U_j2s) - np.array(U_non_sphericals)
+        plt.figure()
+        plt.plot(ephemeris_df['MJD'], grav_pot_diff, label='U_j2 - H.O.T', color='r')
         plt.legend()
-        timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        plt.savefig(f"output/DensityInversion/OrbitEnergy/Relative_Orbital_Energy_budget_{sat_name}_{timenow}.png")
-        # plt.show()
-
-        #now plot the raw energy values each in their own subplot
-        plt.figure(figsize=(20, 10))
-        plt.subplot(2, 3, 1)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['kinetic_energy'], label='Kinetic Energy')
         plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Kinetic Energy for {sat_name}')
+        plt.ylabel('Potential Energy (J/kg)')
+        plt.title('Difference between U_j2 and U_non_spherical')
         plt.grid(True)
+        plt.show()
 
-        plt.subplot(2, 3, 2)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['earth_rotational_energy'], label='Rotational Energy')
+        energy_non_spherical = energy_spherical - U_non_sphericals
+        energy_j2 = energy_spherical - U_j2s
+
+        #now plot the energy change from t0 to ti for energy spherical and energy non-spherical
+        energy_diff_non_spherical = energy_non_spherical[0] - energy_non_spherical
+        energy_diff_j2 = energy_j2[0] - energy_j2
+
+        plt.figure()
+        plt.plot(ephemeris_df['MJD'], energy_diff_spherical, label='Spherical Potential Energy Change', color='r')
+        plt.plot(ephemeris_df['MJD'], energy_diff_non_spherical, label='Non-Spherical Potential Energy Change', color='b')
+        plt.plot(ephemeris_df['MJD'], energy_diff_j2, label='J2 Potential Energy Change', color='g')
+        plt.legend()
         plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Rotational Energy for {sat_name}')
+        plt.ylabel('Energy Change (J/kg)')
+        plt.title('Spherical Potential Energy Change')
         plt.grid(True)
-
-        plt.subplot(2, 3, 3)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['monopole'], label='Monopole Energy')
-        plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Monopole Energy for {sat_name}')
-        plt.grid(True)
-
-        plt.subplot(2, 3, 4)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_spherical'], label='Point Mass Potential Energy')
-        plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Spherical Potential Energy for {sat_name}')
-        plt.grid(True)
-
-        plt.subplot(2, 3, 5)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['deviations'], label='Gravity Anomaly Energy')
-        plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Gravity Anomaly Energy')
-        plt.grid(True)
-
-        plt.subplot(2, 3, 6)
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['U_non_spherical'], label='Total Energy')
-        plt.xlabel('MJD')
-        plt.ylabel('Energy (J/kg)')
-        plt.title(f'Total Energy')
-        plt.grid(True)
-
-        plt.suptitle(f'Energy Budget for {sat_name}')
-        
-        plt.tight_layout()
-        
-        plt.savefig(f"output/DensityInversion/OrbitEnergy/Orbital_Energy_budget_{sat_name}.png")
-        # plt.show()
+        plt.show()
 
 if __name__ == "__main__":
+    latitudes = np.linspace(-90, 90, 100)
+    V_j2_values = []
+    V_all_values = []
+    for lat in latitudes:
+        phi_rad = np.radians(lat)
+        lambda_rad = 0  # Assuming longitude is 0 for simplicity
+        # Assuming altitude is at 1000km
+        r = 6378137 + 1000000
+        V_j2 = U_J2(r, phi_rad, lambda_rad)
+        V_j2_values.append(V_j2)
+        V_all = compute_gravitational_potential(r, phi_rad, lambda_rad, 6, 6, datetime_to_absolutedate(datetime.datetime.now()))
+        V_all_values.append(V_all)
+
+    plt.figure()
+    plt.plot(latitudes, V_j2_values, label='V_j2', color='r')
+    plt.plot(latitudes, V_all_values, label='V_all', color='b')
+    plt.xlabel('Latitude')
+    plt.ylabel('V_j2')
+    plt.title('V_j2 vs Latitude')
+    plt.grid(True)
+    plt.show()
+
     main()
