@@ -61,8 +61,7 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
 folder_save = "output/DensityInversion/OrbitEnergy"
 
 def main():
-    #TODO: 2023 ephemeris should show stronger drag effects
-    sat_names_to_test = ["CHAMP", "GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     # sat_names_to_test = ["CHAMP"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
