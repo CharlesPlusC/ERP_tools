@@ -65,7 +65,7 @@ def main():
     sat_names_to_test = ["CHAMP"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        ephemeris_df = ephemeris_df.head(400)
+        ephemeris_df = ephemeris_df.head(500)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
@@ -98,13 +98,9 @@ def main():
         print(f"first five values of kinetic energy: {kinetic_energy[:5]}")
         ephemeris_df['kinetic_energy'] = kinetic_energy
 
-        monopole_potential = mu / np.linalg.norm([ephemeris_df['x_ecef'], ephemeris_df['y_ecef'], ephemeris_df['z_ecef']], axis=0)
+        monopole_potential = mu / np.linalg.norm([ephemeris_df['x'], ephemeris_df['y'], ephemeris_df['z']], axis=0)
         print(f"first five values of monopole potential: {monopole_potential[:5]}")
         ephemeris_df['monopole'] = monopole_potential
-
-        earth_rotational_energy = (1/2) * (7.2921150e-5)**2 * (ephemeris_df['x_ecef']**2 + ephemeris_df['y_ecef']**2)
-        print(f"first five values of earth rotational energy: {earth_rotational_energy[:5]}")
-        ephemeris_df['earth_rotational_energy'] = earth_rotational_energy
 
         U_non_sphericals = []
         U_j2s = []
@@ -113,132 +109,72 @@ def main():
             phi_rad = np.radians(row['lat'])
             lambda_rad = np.radians(row['lon'])
             r = row['alt']
-            degree = 4
-            order = 4
+            degree = 6
+            order = 6
             date = datetime_to_absolutedate(row['UTC'])
-            # U_non_spher =  compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
+            U_non_spher =  compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
             # print(f"U_non_spher: {U_non_spher}")
             U_j2 = U_J2(r, phi_rad, lambda_rad)
-            print(f"U_j2: {U_j2}")
+            # print(f"U_j2: {U_j2}")
             U_j2s.append(U_j2)
-            # U_non_sphericals.append(U_non_spher)
+            U_non_sphericals.append(U_non_spher)
 
+        #total energies
+        energy_total_spherical = kinetic_energy  - monopole_potential
+        energy_total_J2 = kinetic_energy  - monopole_potential + U_j2s
+        energy_total_HOT = kinetic_energy  - monopole_potential + U_non_sphericals
 
-        #plot kinetic - monopole potential
-        plt.figure()
-        plt.plot(ephemeris_df['MJD'], kinetic_energy - monopole_potential, label='Kinetic - Monopole Potential', color='r')
-        plt.plot(ephemeris_df['MJD'], kinetic_energy - monopole_potential - earth_rotational_energy, label='Kinetic - Monopole Potential - Earth Rotational Energy', color='g')
-        plt.plot(ephemeris_df['MJD'], kinetic_energy - monopole_potential + earth_rotational_energy - U_j2s, label='Kinetic - Monopole Potential - Earth Rotational Energy - U_non_spherical', color='b')
-        plt.legend()
-        plt.xlabel('MJD')
-        plt.ylabel('Potential Energy Change (J/kg)')
-        plt.title('Potential Energy Change')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_kinetic_minus_monopole_potential_energy_change.png"))
-        plt.show()
-
-
-        energy_spherical = kinetic_energy - earth_rotational_energy - monopole_potential
-        energy_non_spherical = kinetic_energy - earth_rotational_energy - monopole_potential - U_non_sphericals
-
-        #plot monopole potential
-        plt.figure()
-        plt.plot(ephemeris_df['MJD'], monopole_potential, label='Monopole Potential', color='r')
-        monopole_potential_diff = monopole_potential - U_non_sphericals
-        plt.plot(ephemeris_df['MJD'], monopole_potential_diff, label='Monopole minus potential', color='g')
-        plt.legend()
-        plt.twinx()
-        plt.plot(ephemeris_df['MJD'], ephemeris_df['alt'], label='Altitude', color='b')
-        plt.legend()
-        plt.xlabel('MJD')
-        plt.ylabel('Potential Energy Change (J/kg)')
-        plt.title('Potential Energy Change')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_monopole_potential_energy_change.png"))
-        # plt.show()
-
-
-        #for monopole, J2, and U_non_spherical, plot the difference betyween the potential energy at t0 and ti
-        monopole_potential_diff = monopole_potential[0] - monopole_potential
-        u_non_spherical_diff = U_non_sphericals[0] - U_non_sphericals
-        kinetic_energy_diff = kinetic_energy[0] - kinetic_energy
-        earth_rotational_energy_diff = earth_rotational_energy[0] - earth_rotational_energy
-        spherical_total_diff = energy_spherical[0] - energy_spherical
-        non_spherical_total_diff = energy_non_spherical[0] - energy_non_spherical
-        plt.figure()
-        plt.plot(ephemeris_df['MJD'], monopole_potential_diff, label='Monopole Potential Energy Change', color='r')
-        plt.plot(ephemeris_df['MJD'], u_non_spherical_diff, label='U_non_spherical Potential Energy Change', color='g')
-        plt.plot(ephemeris_df['MJD'], kinetic_energy_diff, label='Kinetic Energy Change', color='y')
-        plt.plot(ephemeris_df['MJD'], earth_rotational_energy_diff, label='Earth Rotational Energy Change', color='m')
-        plt.plot(ephemeris_df['MJD'], spherical_total_diff, label='Spherical Total Energy Change', color='c')
-        plt.plot(ephemeris_df['MJD'], non_spherical_total_diff, label='Non-Spherical Total Energy Change', color='k')
-        plt.legend()
-        plt.xlabel('MJD')
-        plt.ylabel('Potential Energy Change (J/kg)')
-        plt.title('Potential Energy Change')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_change.png"))
-        # plt.show()
-
-        plt.figure()
-        #plot lat, lon, J2
-        plt.scatter(ephemeris_df['lon'], ephemeris_df['lat'], c=U_j2s, cmap='viridis')
-        plt.colorbar()
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        #make sure the plot ranges from -180 to 180 for longitude and -90 to 90 for latitude
-        plt.xlim(-180, 180)
-        plt.ylim(-90, 90)
-        plt.title('J2 Potential Energy')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_J2_potential_energy.png"))
-        # plt.show()
+        #difference between total energies
+        spherical_total_diff = energy_total_spherical[0] - energy_total_spherical
+        j2_total_diff = energy_total_J2[0] - energy_total_J2
+        HOT_total_diff = energy_total_HOT[0] - energy_total_HOT
         
-        #plot difference between U_j2 and U_non_spherical
-        grav_pot_diff = np.array(U_j2s) - np.array(U_non_sphericals)
-        plt.figure()
-        plt.plot(ephemeris_df['MJD'], grav_pot_diff, label='U_j2 - H.O.T', color='r') 
-        plt.legend()
-        plt.xlabel('MJD')
-        plt.ylabel('Potential Energy (J/kg)')
-        plt.title('Difference between U_j2 and U_non_spherical')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_U_j2_minus_U_non_spherical.png"))
-        # plt.show()
-        #first five energy spherical values
-        print(f"first five energy spherical values: {energy_spherical[:5]}")
-        #first five U_non_sphericals values
-        print(f"first five U_non_sphericals values: {U_non_sphericals[:5]}")
-        energy_non_spherical = energy_spherical - U_non_sphericals
-        energy_j2 = energy_spherical - U_j2s
+        #individual energy components diff
+        kinetic_energy_diff = kinetic_energy[0] - kinetic_energy
+        monopole_potential_diff = monopole_potential[0] - monopole_potential
+        j2_diff = U_j2s[0] - U_j2s
+        HOT_diff = U_non_sphericals[0] - U_non_sphericals
 
-        #now plot the energy change from t0 to ti for energy spherical and energy non-spherical
-        energy_diff_non_spherical = energy_non_spherical[0] - energy_non_spherical
-        energy_diff_j2 = energy_j2[0] - energy_j2
+        #make 3 subplots
+        #set sns style
+        sns.set_theme(style='whitegrid')
+        fig, axs = plt.subplots(3, 1, figsize=(10, 10))
+        #plot total energy differences
+        axs[0].plot(ephemeris_df['MJD'], spherical_total_diff, label='Spherical Total Energy Difference', color='xkcd:hot magenta')
+        axs[0].plot(ephemeris_df['MJD'], j2_total_diff, label='J2 Total Energy Difference', color='xkcd:tangerine')
+        axs[0].plot(ephemeris_df['MJD'], HOT_total_diff, label='HOT Total Energy Difference', color='xkcd:greenish', linestyle='--')
+        axs[0].grid(True)
+        axs[0].legend()
+        axs[0].set_xlabel('')
+        axs[0].set_ylabel('Energy_i - Energy_0 (J/kg)')
+        axs[0].set_title('Total Relative Energy Differences')
 
-        plt.figure()
-        # plt.plot(ephemeris_df['MJD'], energy_diff_spherical, label='Spherical Energy Change', color='r')
-        plt.plot(ephemeris_df['MJD'], energy_diff_non_spherical, label='Non-Spherical Energy Change', color='b')
-        plt.plot(ephemeris_df['MJD'], energy_diff_j2, label='Energy Change', color='g')
-        plt.legend()
-        plt.xlabel('MJD')
-        plt.ylabel('Energy Change (J/kg)')
-        plt.title('Spherical Potential Energy Change')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_spherical_vs_non_spherical_potential_energy_change.png"))
-        # plt.show()
+        #plot same as the top but only J2 and HOT
+        axs[1].plot(ephemeris_df['MJD'], j2_total_diff, label='J2 Total Energy Difference', color='xkcd:tangerine')
+        axs[1].plot(ephemeris_df['MJD'], HOT_total_diff, label='HOT Total Energy Difference', color='xkcd:greenish', linestyle='--')
+        axs[1].legend()
+        axs[1].grid(True)
+        axs[1].set_xlabel('')
+        axs[1].set_ylabel('Energy_i - Energy_0 (J/kg)')
+        axs[1].set_title('Total Relative Energy Differences (J2 and H.O.T only)')
+        
+        #plot individual energy differences
+        axs[2].plot(ephemeris_df['MJD'], kinetic_energy_diff, label='Kinetic Energy Difference', color='xkcd:minty green')
+        axs[2].plot(ephemeris_df['MJD'], monopole_potential_diff, label='Monopole Potential Difference', color='xkcd:easter purple')
+        axs[2].plot(ephemeris_df['MJD'], j2_diff, label='J2 Potential Difference', color='xkcd:tangerine')
+        axs[2].plot(ephemeris_df['MJD'], HOT_diff, label='HOT Potential Difference', color='xkcd:greenish', linestyle='--')
+        axs[2].legend()
+        axs[2].grid(True)
+        axs[2].set_xlabel('Modified Julian Date')
+        axs[2].set_ylabel('Energy_i - Energy_0 (J/kg)')
+        axs[2].set_title('Individual Relative Energy Differences')
 
-        #same plot as above but as a functon of latitude
-        plt.figure()
-        # plt.plot(ephemeris_df['lat'], energy_diff_spherical, label='Spherical Potential Energy Change', color='r')
-        plt.plot(ephemeris_df['lat'], energy_diff_non_spherical, label='Non-Spherical Potential Energy Change', color='b')
-        plt.plot(ephemeris_df['lat'], energy_diff_j2, label='J2 Potential Energy Change', color='g')
-        plt.legend()
-        plt.xlabel('Latitude')
-        plt.ylabel('Energy Change (J/kg)')
-        plt.title('Spherical Potential Energy Change')
-        plt.grid(True)
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_spherical_vs_non_spherical_potential_energy_change_lat.png"))
+        #main title with satellite name
+        fig.suptitle(f"{sat_name}: Energy Budget", fontsize=14)
+
+        plt.tight_layout()
+
+        plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_components.png"))
         # plt.show()
 
 
