@@ -61,13 +61,16 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
 folder_save = "output/DensityInversion/OrbitEnergy"
 
 def main():
-    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    sat_names_to_test = ["CHAMP"]
+    #TODO: 2023 ephemeris should show stronger drag effects
+    sat_names_to_test = ["CHAMP", "GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    # sat_names_to_test = ["CHAMP"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        ephemeris_df = ephemeris_df.head(500)
+        ephemeris_df = ephemeris_df.head(5000)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
+        start_date_utc = ephemeris_df['UTC'].iloc[0]
+        end_date_utc = ephemeris_df['UTC'].iloc[-1]
         x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
         # Convert EME2000 to ITRF for each point
         for _, row in ephemeris_df.iterrows():
@@ -109,8 +112,8 @@ def main():
             phi_rad = np.radians(row['lat'])
             lambda_rad = np.radians(row['lon'])
             r = row['alt']
-            degree = 6
-            order = 6
+            degree = 4
+            order = 4
             date = datetime_to_absolutedate(row['UTC'])
             U_non_spher =  compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
             # print(f"U_non_spher: {U_non_spher}")
@@ -174,32 +177,8 @@ def main():
 
         plt.tight_layout()
 
-        plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_components.png"))
+        plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.png"))
         # plt.show()
 
-
 if __name__ == "__main__":
-    # latitudes = np.linspace(-90, 90, 100)
-    # V_j2_values = []
-    # V_all_values = []
-    # for lat in latitudes:
-    #     phi_rad = np.radians(lat)
-    #     lambda_rad = 0  # Assuming longitude is 0 for simplicity
-    #     # Assuming altitude is at 1000km
-    #     r = 6378137 + 1000000
-    #     V_j2 = U_J2(r, phi_rad, lambda_rad)
-    #     V_j2_values.append(V_j2)
-    #     V_all = compute_gravitational_potential(r, phi_rad, lambda_rad, 6, 6, datetime_to_absolutedate(datetime.datetime.now()))
-    #     V_all_values.append(V_all)
-
-    # plt.figure()
-    # plt.plot(latitudes, V_j2_values, label='V_j2', color='r')
-    # plt.plot(latitudes, V_all_values, label='V_all', color='b')
-    # plt.xlabel('Latitude')
-    # plt.ylabel('V_j2')
-    # plt.title('V_j2 vs Latitude')
-    # plt.grid(True)
-    # plt.savefig(os.path.join(folder_save, "V_j2_vs_latitude.png"))
-    # # plt.show()
-
     main()
