@@ -125,8 +125,8 @@ def main():
             phi_rad = np.radians(row['lat'])
             lambda_rad = np.radians(row['lon'])
             r = row['alt']
-            degree = 4
-            order = 4
+            degree = 64
+            order = 64
             date = datetime_to_absolutedate(row['UTC'])
             U_non_spher =  compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
             # print(f"U_non_spher: {U_non_spher}")
