@@ -21,7 +21,6 @@ import numpy as np
 import math
 from scipy.special import lpmn
 
-
 mu = Constants.WGS84_EARTH_MU
 R_earth = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
 J2 =Constants.EGM96_EARTH_C20
@@ -33,39 +32,54 @@ def U_J2(r, phi, lambda_):
     return V_j2
 
 def associated_legendre_polynomials(degree, order, x):
+    # Precompute all needed Legendre polynomials at once
+    P = {}
     for n in range(degree + 1):
         for m in range(min(n, order) + 1):
             P_nm, _ = lpmn(m, n, x)
-    return P_nm[0][-1]
+            P[(n, m)] = P_nm[0][-1]
+    return P
 
 def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
-    # provider = GravityFieldFactory.getNormalizedProvider(degree, order)
     provider = GravityFieldFactory.getUnnormalizedProvider(degree, order)
     harmonics = provider.onDate(date)
-    mu = 3.986004418e14  # Earth's gravitational constant
-    R_earth = 6378137  # Earth's radius in meters
-    V_dev = 0.0
+    V_dev = np.zeros_like(phi)
+    
+    mu_over_r = mu / r
+    r_ratio = R_earth / r
+    sin_phi = np.sin(phi)
 
+    # Initialize coefficient arrays with zeros
+    max_order = max(order, degree) + 1
+    C_nm = np.zeros((degree + 1, max_order))
+    S_nm = np.zeros((degree + 1, max_order))
+
+    # Fill in the coefficient arrays
     for n in range(degree + 1):
         for m in range(min(n, order) + 1):
-            C_nm = harmonics.getUnnormalizedCnm(n, m)
-            S_nm = harmonics.getUnnormalizedSnm(n, m)
-            P_nm = associated_legendre_polynomials(n, m, np.sin(phi))
-            sectorial_term = P_nm * (C_nm * np.cos(m * lambda_) + S_nm * np.sin(m * lambda_))
-            contribution = (mu / r) * (R_earth / r)**n * sectorial_term
-            if not (n == 0 and m == 0):  # Skip the central term in V_dev
-                V_dev += contribution
-    V_total = -V_dev
-    return V_total
+            C_nm[n, m] = harmonics.getUnnormalizedCnm(n, m)
+            S_nm[n, m] = harmonics.getUnnormalizedSnm(n, m)
+
+    # Compute all necessary Legendre polynomials once
+    P = associated_legendre_polynomials(degree, order, sin_phi)
+
+    for n in range(1, degree + 1):
+        r_ratio_n = r_ratio ** n
+        for m in range(min(n, order) + 1):
+            P_nm = P[(n, m)]
+            sectorial_term = P_nm * (C_nm[n, m] * np.cos(m * lambda_) + S_nm[n, m] * np.sin(m * lambda_))
+            V_dev += mu_over_r * r_ratio_n * sectorial_term
+
+    return -V_dev
 
 folder_save = "output/DensityInversion/OrbitEnergy"
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    # sat_names_to_test = ["CHAMP"]
+    sat_names_to_test = [ "TerraSAR-X", "TanDEM-X"]
+    # sat_names_to_test = ["GRACE-FO-A", "CHAMP", "GRACE-FO-B"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        ephemeris_df = ephemeris_df.head(5000)
+        # ephemeris_df = ephemeris_df.head(100)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         start_date_utc = ephemeris_df['UTC'].iloc[0]
@@ -177,7 +191,41 @@ def main():
         plt.tight_layout()
 
         plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.png"))
+
+        import cartopy.crs as ccrs
+        import cartopy.feature as cfeature
+
+        # Plot a lat-lon map with landmasses outlined and the rest in light grey
+        fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+        ax.add_feature(cfeature.LAND, edgecolor='black', facecolor='lightgrey')
+        ax.add_feature(cfeature.OCEAN, facecolor='lightgrey')
+        ax.add_feature(cfeature.COASTLINE)
+        ax.add_feature(cfeature.BORDERS, linestyle=':')
+
+        # Ensure the colormap is centered at zero
+        max_abs_val = np.max(np.abs(HOT_total_diff))
+        norm = plt.Normalize(-max_abs_val, max_abs_val)
+
+        # Scatter plot for HOT total energy differences with 'seismic' colormap
+        sc = ax.scatter(ephemeris_df['lon'], ephemeris_df['lat'], c=HOT_total_diff, cmap='seismic', norm=norm, s=5, transform=ccrs.PlateCarree())
+
+        ax.set_title(f"{sat_name}: HOT Total Energy Differences")
+        cbar = plt.colorbar(sc)
+        cbar.set_label('Energy_i - Energy_0 (J/kg)')
+
+        plt.savefig(os.path.join(folder_save, f"{sat_name}_HOT_total_energy_diff_map_{start_date_utc}_{end_date_utc}.png"))
+        plt.show()
+
         # plt.show()
+
+        #in a dataframe save , x,y,z,u,v,w, lat, lon, alt, kinetic_energy, monopole, U_j2, U_non_spherical, j2_total_diff, HOT_total_diff
+        ephemeris_df['U_j2'] = U_j2s
+        ephemeris_df['U_non_spherical'] = U_non_sphericals
+        ephemeris_df['j2_total_diff'] = j2_total_diff
+        ephemeris_df['HOT_total_diff'] = HOT_total_diff
+        export_df = ephemeris_df[['MJD','x', 'y', 'z', 'xv', 'yv', 'zv', 'lat', 'lon', 'alt', 'kinetic_energy', 'monopole', 'U_j2', 'U_non_spherical', 'j2_total_diff', 'HOT_total_diff']]
+        #now export to .npy
+        export_df.to_csv(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.csv"), index=False)
 
 if __name__ == "__main__":
     main()
