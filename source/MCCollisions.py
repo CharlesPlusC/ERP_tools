@@ -26,24 +26,17 @@ POSITION_TOLERANCE = 1e-2 # 1 cm
 
 def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False):
     # Ensure UTC is the index and not duplicated
-    print(f"interpolating:{df.head()}")
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
-
     #sort by UTC
     df = df.sort_index()
-
     # Create a new DataFrame with resampled frequency between the specified start and end times
     df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
-    
     # Interpolate values using a linear method
     interp_funcs = {col: interp1d(df.index.astype(int), df[col], fill_value='extrapolate') for col in ['x', 'y', 'z']}
-    
     for col in ['x', 'y', 'z']:
         df_resampled[col] = interp_funcs[col](df_resampled.index.astype(int))
-    
     # Filter out the part of the resampled DataFrame within the start and end time
     df_filtered = df_resampled.loc[start_time:end_time].reset_index().rename(columns={'index': 'UTC'})
-
     if stitch:
         # Concatenate the original DataFrame with the filtered resampled DataFrame
         # This ensures that data outside the interpolation range is kept intact
@@ -52,9 +45,7 @@ def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False
             df_filtered.set_index('UTC'),
             df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
         ]).reset_index()
-
         return df_stitched
-
     return df_filtered
 
 def generate_random_vectors(eigenvalues, num_samples):
@@ -80,15 +71,16 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     return perturbed_states
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-A"]
+    # , "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"
     arc_length = 5  # min
     num_arcs = 1
     prop_length = 60 * 60 * 1
     prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [
                         {'36x36gravity': True, '3BP': True},
-                        {'120x120gravity': True, '3BP': True},
-                        {'120x120gravity': True, '3BP': True, 'SRP': True, 'nrlmsise00drag': True},
+                        # {'120x120gravity': True, '3BP': True},
+                        # {'120x120gravity': True, '3BP': True, 'SRP': True, 'nrlmsise00drag': True},
                         {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
     
     MC_ephem_folder = "output/Collisions/MC/interpolated_MC_ephems" #folder to save the interpolated ephemeris dataframes  
@@ -111,8 +103,6 @@ def main():
         collision_df = generate_collision_trajectory(ephemeris_df, t_col, dt=5.0, post_col_t=15.0) #Generate the collision trajectory with hi resolution for the interpolation
         # now make downsample collision_df to return only every minute (use the previous dt value to find how often the slice should be taken)
         collision_df_minute = collision_df.iloc[::12, :]
-        print(f"head of collision_df: {collision_df.head()}")
-        print(f"head of collision_df_minute: {collision_df_minute.head()}")
         collision_df_interp = interpolate_ephemeris(collision_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True) #interpolate the collision trajectory very finely around the TCA
         arc_step = int(arc_length / obs_time_step)
         for arc in range(num_arcs):
@@ -135,7 +125,7 @@ def main():
                 optimized_state_cov = cov_mats[min_RMS_index]
                 print("optimized_state_cov: ", optimized_state_cov)
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 1)
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 5)
 
                 for primary_state in perturbed_states_primary:
                     print(f"propagating primary_state: {primary_state}")
@@ -148,9 +138,6 @@ def main():
 
                 for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
                     primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True)
-                    print(f"interp df collision from {t_col - datetime.timedelta(seconds=7)} to {t_col + datetime.timedelta(seconds=7)}")
-                    print(f"first and last time in primary_states_perturbed_ephem[{i}]: {primary_states_perturbed_ephem[i]['UTC'].iloc[0]} and {primary_states_perturbed_ephem[i]['UTC'].iloc[-1]}")
-                    print(f"first and last time in collision_df_interp: {collision_df_interp['UTC'].iloc[0]} and {collision_df_interp['UTC'].iloc[-1]}")
                     #save the interpolated ephemeris dataframes to a folder
                     primary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
 
@@ -167,13 +154,10 @@ def main():
 
                 # Benchmark: calculate the distance between unperturbed primary and secondary states
                 # get the subset of the ephemeris_df that is within the time window of the collision_df
-                print(f"head of ephemeris_df: {ephemeris_df.head()}")
-                print(f"head of collision_df: {collision_df.head()}")
                 #make a new dataframe with the distance between ephemeris_df and collision_df (merge on UTC)
                 col_to_ephem_distances = pd.merge(ephemeris_df, collision_df, on='UTC', suffixes=('_ephem', '_col'))
                 #now take the diffeerence between the position vectors and put that in a new column called 'distance'
                 col_to_ephem_distances['distance'] = np.linalg.norm(col_to_ephem_distances[['x_ephem', 'y_ephem', 'z_ephem']].values - col_to_ephem_distances[['x_col', 'y_col', 'z_col']].values, axis=1)
-                print("first five rows of col_to_ephem_distances: ", col_to_ephem_distances.head())
 
                 #TODO: make the interpolation be a function of the rate of change of the distance between the two states
                 #TODO: stitch the interpolated and non interpolated to get higher resolution around TCA
@@ -206,6 +190,7 @@ def main():
                 plt.yscale('log')
                 #make the y axis start at 0m
                 plt.ylim(0.01, 10e7)
+                #put a horizontal line at 
                 # Rotate date labels for better readability
                 plt.xticks(rotation=45)
                 # Show the plot
@@ -240,22 +225,86 @@ def main():
                 plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{timenow}.png")
                 # plt.show()
                 plot_distance_time_series(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
-                plot_minimum_distance_histogram(min_distances, sat_name, arc, fm_num)
+                plot_distance_time_series_heatmap(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
 
-def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, folder="output/Collisions/MC"):
-    plt.figure(figsize=(10, 6))
+import matplotlib.dates as mdates
+import matplotlib.colors as colors
+def plot_distance_time_series_heatmap(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=20, hbr=12.0, folder="output/Collisions/MC"):
+    plt.figure(figsize=(7, 4))
     sns.set_theme(style="whitegrid")
-    plt.xlim(t_col - datetime.timedelta(minutes=1), t_col + datetime.timedelta(minutes=1))
-    for column in distances_df.columns:
-        if column != 'UTC':
-            plt.plot(distances_df['UTC'], distances_df[column], label=column)
-    plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
-    plt.title('Distance Time Series')
+
+    if isinstance(t_col, str):
+        t_col = pd.to_datetime(t_col)
+
+    time_lower = t_col - datetime.timedelta(seconds=t_window)
+    time_upper = t_col + datetime.timedelta(seconds=t_window)
+
+    filtered_df = distances_df[distances_df['UTC'].iloc[:, 0].between(time_lower, time_upper)]
+
+    x_flattened = []
+    y_flattened = []
+    utc_column = filtered_df['UTC'].iloc[:, 0]
+    x = mdates.date2num(utc_column)
+
+    for i in range((len(filtered_df.columns) - 1) // 2):
+        distance_column = filtered_df[f'Distance_{i}']
+        x_flattened.extend(x)
+        y_flattened.extend(distance_column)
+
+    x_bins = np.linspace(min(x_flattened), max(x_flattened), 1000)
+    y_bins = np.logspace(np.log10(min(y_flattened)), np.log10(max(y_flattened)), 1000)
+
+    H, xedges, yedges = np.histogram2d(x_flattened, y_flattened, bins=[x_bins, y_bins])
+    H[H == 0] = np.nan  # Set bins with zero count to NaN
+
+    X, Y = np.meshgrid(xedges, yedges)
+    pc = plt.pcolormesh(X, Y, H.T, cmap='plasma', shading='flat', rasterized=True)
+
+    cb = plt.colorbar(pc, label='Count of Lines')
+    plt.axhline(y=hbr, color='r', linestyle='--', label='HBR')
+    plt.text(0.5, hbr, f"HBR: {hbr}", horizontalalignment='center', transform=plt.gca().get_yaxis_transform())
+    plt.title(f'+/- {t_window} Seconds from TCA')
     plt.xlabel('Time')
     plt.ylabel('Distance')
     plt.yscale('log')
-    plt.ylim(0.01, 10e7)
+    plt.ylim(0.01, 10e6)
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+    plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}_heatmap.png")
+
+def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=20, hbr=12.0, folder="output/Collisions/MC"):
+    plt.figure(figsize=(7, 4))
+    sns.set_theme(style="whitegrid")
+    plt.xlim(t_col - datetime.timedelta(seconds=t_window), t_col + datetime.timedelta(seconds=t_window))
+    num_below_hbr = 0
+    for column in distances_df.columns:
+        if column != 'UTC':
+            plt.plot(distances_df['UTC'], distances_df[column], label=column, alpha=1, linewidth=0.2, c='xkcd:blue')
+            #if the minimum distance is below the HBR, increment the counter
+            if distances_df[column].min() < hbr:
+                num_below_hbr += 1
+    print(f"num_below_hbr: {num_below_hbr}")
+    plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
+    plt.title('+/- 2Min from TCA')
+    plt.xlabel('Time')
+    plt.ylabel('Distance')
+    plt.yscale('log')
+    plt.ylim(0.01, 10e6)
+    plt.axhline(y=hbr, color='r', linestyle='--', label='HBR')
+    #as text, on the HBR line, write the percentage of the time series that is below the HBR
+    below_hbr = num_below_hbr / (len(distances_df.columns) - 1)
+    percentage_below_hbr = round(below_hbr * 100, 2)
+    plt.text(0.25, 0.5, f" %collsion: {percentage_below_hbr}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+    plt.xticks(rotation=45)
+    #calculate the percentage of the time series that is below the HBR
+    num_below_hbr = len([d for d in collision_df['distance'] if d < hbr])
+    #plot the finer y axis ticks and lines
+    plt.yticks([1, 10, 100, 1000, 10000, 100000, 1000000, 10000000])
     plt.tight_layout()
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -280,3 +329,4 @@ def plot_minimum_distance_histogram(min_distances, sat_name, arc, fm_num, folder
 
 if __name__ == "__main__":
     main()
+    #TODO: add a functuion to use the exisiting interpolated ephemeris if available
