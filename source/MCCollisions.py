@@ -24,25 +24,38 @@ INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 60.0
 POSITION_TOLERANCE = 1e-2 # 1 cm
 
-#covariance associated with the collision trajectory (assuming good covariance)
-secondary_covariance = [
-    [4.7440894789163000000000, -1.2583279067770000000000, -1.2583279067770000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [-1.2583279067770000000000,6.1279552605419000000000, 2.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [-1.2583279067770000000000, 2.1279552605419000000000, 6.1279552605419000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000010000000000000000, 0.0000000000000000000000, 0.0000000000000000000000],
-    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, 0.0000010000000000000000, -0.0000000000000000000001],
-    [0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000000, 0.0000000000000000000001, -0.0000000000000000000001, 0.0000010000000000000000]
-]
+def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False):
+    # Ensure UTC is the index and not duplicated
+    print(f"interpolating:{df.head()}")
+    df = df.drop_duplicates(subset='UTC').set_index('UTC')
 
-def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S'):
-    #at 7.5km/s, 0.001s is 7.5m 
-    df_resampled = df.set_index('UTC').resample(freq).asfreq()
-    interp_funcs = {col: interp1d(df['UTC'].astype(int), df[col], fill_value='extrapolate') for col in ['x', 'y', 'z']}
+    #sort by UTC
+    df = df.sort_index()
+
+    # Create a new DataFrame with resampled frequency between the specified start and end times
+    df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+    
+    # Interpolate values using a linear method
+    interp_funcs = {col: interp1d(df.index.astype(int), df[col], fill_value='extrapolate') for col in ['x', 'y', 'z']}
+    
     for col in ['x', 'y', 'z']:
-        print(f"interpolating {col}")
         df_resampled[col] = interp_funcs[col](df_resampled.index.astype(int))
-    df_filtered = df_resampled.loc[(df_resampled.index >= start_time) & (df_resampled.index <= end_time)]
-    return df_filtered.reset_index()
+    
+    # Filter out the part of the resampled DataFrame within the start and end time
+    df_filtered = df_resampled.loc[start_time:end_time].reset_index().rename(columns={'index': 'UTC'})
+
+    if stitch:
+        # Concatenate the original DataFrame with the filtered resampled DataFrame
+        # This ensures that data outside the interpolation range is kept intact
+        df_stitched = pd.concat([
+            df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+            df_filtered.set_index('UTC'),
+            df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+        ]).reset_index()
+
+        return df_stitched
+
+    return df_filtered
 
 def generate_random_vectors(eigenvalues, num_samples):
     random_vectors = []
@@ -68,9 +81,9 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
 
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    arc_length = 25  # mins
+    arc_length = 5  # min
     num_arcs = 1
-    prop_length = 60 * 60 * 3  # 6 hours
+    prop_length = 60 * 60 * 1
     prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [
                         {'36x36gravity': True, '3BP': True},
@@ -95,8 +108,12 @@ def main():
         t_col = t0 + datetime.timedelta(days=prop_length_days) #this is the time at which the collision will occur
         #end of propagation window is 15 minutes after the collision
         t_end = t0 + datetime.timedelta(days=prop_length_days + 15/(60*24))
-        collision_df = generate_collision_trajectory(ephemeris_df, t_col)
-        
+        collision_df = generate_collision_trajectory(ephemeris_df, t_col, dt=5.0, post_col_t=15.0) #Generate the collision trajectory with hi resolution for the interpolation
+        # now make downsample collision_df to return only every minute (use the previous dt value to find how often the slice should be taken)
+        collision_df_minute = collision_df.iloc[::12, :]
+        print(f"head of collision_df: {collision_df.head()}")
+        print(f"head of collision_df_minute: {collision_df_minute.head()}")
+        collision_df_interp = interpolate_ephemeris(collision_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True) #interpolate the collision trajectory very finely around the TCA
         arc_step = int(arc_length / obs_time_step)
         for arc in range(num_arcs):
             
@@ -112,91 +129,77 @@ def main():
             a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
 
             for fm_num, force_model_config in enumerate(force_model_configs):
-                optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=False, max_patience=1)
+                optimized_states, cov_mats, _, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag=False, max_patience=1)
                 min_RMS_index = np.argmin(RMSs)
                 optimized_state = optimized_states[min_RMS_index]
                 optimized_state_cov = cov_mats[min_RMS_index]
-
                 print("optimized_state_cov: ", optimized_state_cov)
-                ##### Perturb the estimated state ("primary state") and propagate those perturbed states
-                #make a list of dataframes for each perturbed state
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 4)
-                #3D plot of the original and perturbed states
-                # figure = plt.figure()
-                # ax = figure.add_subplot(111, projection='3d')
-                # ax.scatter(0,0, 0, color='r', s=10)
-                # print(f"optimized_state: {optimized_state}")
-                # for state in perturbed_states_primary:
-                #     print(f"perturbed state: {state}")
-                #     # ax.scatter(state[0], state[1], state[2], color='b', s=2)
-                #     #iinstead of plottiung the raw values, plot the deviation from the optimized state
-                #     ax.scatter(state[0] - optimized_state[0], state[1] - optimized_state[1], state[2] - optimized_state[2], color='b', s=2)
-                # plt.show()
-                
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 1)
+
                 for primary_state in perturbed_states_primary:
                     print(f"propagating primary_state: {primary_state}")
                     primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
                     primary_states_perturbed_ephem.append(primary_state_perturbed_df)
 
                 #save the perturbed ephemeris dataframes to a folder
-                for i, df in enumerate(primary_states_perturbed_ephem):
-                    df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
-
-                secondary_state = collision_df.iloc[0][["x_col", "y_col", "z_col", "xv_col", "yv_col", "zv_col"]].values
-                secondary_states_perturbed_ephem = []
-                #TODO: maybe i dont need to perturb the secondary state for this analysis
-                perturbed_states_secondary = generate_perturbed_states(optimized_state_cov, secondary_state, 4)
-                for secondary_state in perturbed_states_secondary:
-                    print(f"propagating secondary_state: {secondary_state}")
-                    secondary_states_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=secondary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
-                    secondary_states_perturbed_ephem.append(secondary_states_perturbed_df)
-
-                for i, df in enumerate(secondary_states_perturbed_ephem):
-                    df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
+                # for i, df in enumerate(primary_states_perturbed_ephem):
+                #     df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
 
                 for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
-                    primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7))
+                    primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True)
+                    print(f"interp df collision from {t_col - datetime.timedelta(seconds=7)} to {t_col + datetime.timedelta(seconds=7)}")
+                    print(f"first and last time in primary_states_perturbed_ephem[{i}]: {primary_states_perturbed_ephem[i]['UTC'].iloc[0]} and {primary_states_perturbed_ephem[i]['UTC'].iloc[-1]}")
+                    print(f"first and last time in collision_df_interp: {collision_df_interp['UTC'].iloc[0]} and {collision_df_interp['UTC'].iloc[-1]}")
                     #save the interpolated ephemeris dataframes to a folder
                     primary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
-                for i, secondary_state_perturbed_df in enumerate(secondary_states_perturbed_ephem):
-                    secondary_states_perturbed_ephem[i] = interpolate_ephemeris(secondary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7))
-                    #save the interpolated ephemeris dataframes to a folder
-                    secondary_states_perturbed_ephem[i].to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}_interpolated.csv")
 
-                #go through the list of dataframes and calculate the distance between every combination of primary and secondary states
+                #go through the list of dataframes and calculate the distance between every combination of primary and secondary statesu8
                 distance_dfs = []
                 # Iterate through each primary ephemeris dataframe
+                #plot the time stamps of the interpolated ephemeris dataframes and the collision trajectory vs row number
+
                 for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
-                    # Iterate through each secondary ephemeris dataframe
-                    for j, secondary_state_perturbed_df in enumerate(secondary_states_perturbed_ephem):
-                        # Calculate the Euclidean distance for the position vectors (x, y, z) at each time point
-                        distances = np.linalg.norm(primary_state_perturbed_df[['x', 'y', 'z']].values - secondary_state_perturbed_df[['x', 'y', 'z']].values, axis=1)
-                        distance_df = pd.DataFrame({'UTC': primary_state_perturbed_df['UTC'], f'Distance_{i}_{j}': distances})
-                        distance_dfs.append(distance_df)
+                    # Align the primary and collision DataFrames by resampling both to a common time grid.
+                    distances = np.linalg.norm(primary_state_perturbed_df[['x', 'y', 'z']].values - collision_df_interp[['x', 'y', 'z']].values, axis=1)
+                    distance_df = pd.DataFrame({'UTC': primary_state_perturbed_df['UTC'], f'Distance_{i}': distances})
+                    distance_dfs.append(distance_df)
 
                 # Concatenate all individual distance dataframes to get a single dataframe with all distances
                 distances_df = pd.concat(distance_dfs, axis=1)
-                # Removing duplicate UTC
-                distances_df = distances_df.loc[:,~distances_df.columns.duplicated()]
 
-                #calculate the distance between unperturbed primary and secondary states
+                # Benchmark: calculate the distance between unperturbed primary and secondary states
                 # get the subset of the ephemeris_df that is within the time window of the collision_df
-                ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= collision_df['UTC'].iloc[0]) & (ephemeris_df['UTC'] <= collision_df['UTC'].iloc[-1])]
-                collision_distances = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values - collision_df[['x_col', 'y_col', 'z_col']].values, axis=1)
-                #add it to a dataframe time stamped with the UTC
-                collision_df['distance'] = collision_distances
+                print(f"head of ephemeris_df: {ephemeris_df.head()}")
+                print(f"head of collision_df: {collision_df.head()}")
+                #make a new dataframe with the distance between ephemeris_df and collision_df (merge on UTC)
+                col_to_ephem_distances = pd.merge(ephemeris_df, collision_df, on='UTC', suffixes=('_ephem', '_col'))
+                #now take the diffeerence between the position vectors and put that in a new column called 'distance'
+                col_to_ephem_distances['distance'] = np.linalg.norm(col_to_ephem_distances[['x_ephem', 'y_ephem', 'z_ephem']].values - col_to_ephem_distances[['x_col', 'y_col', 'z_col']].values, axis=1)
+                print("first five rows of col_to_ephem_distances: ", col_to_ephem_distances.head())
+                #plot the first 1000 points of the distance between the ephemeris and the collision trajectory
+                plt.figure(figsize=(10, 6))
+                plt.plot(col_to_ephem_distances['UTC'], col_to_ephem_distances['distance'])
+                plt.title('Distance Time Series')
+                plt.xlabel('Time')
+                plt.ylabel('Distance')
+                plt.yscale('log')
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                plt.show()
+
+
                 min_distances = []
 
                 #slice distances_df to only contain data 1 hour before and after the collision time (t_col)
-                distances_df = distances_df[(distances_df['UTC'] >= t_col - datetime.timedelta(minutes=60)) & (distances_df['UTC'] <= t_col + datetime.timedelta(minutes=60))]
+                distances_df = distances_df[(distances_df['UTC_ephem'] >= t_col - datetime.timedelta(minutes=60)) & (distances_df['UTC'] <= t_col + datetime.timedelta(minutes=60))]
                 #also slice collision_df to only contain data 1 hour before and after the collision time (t_col)
-                collision_df = collision_df[(collision_df['UTC'] >= t_col - datetime.timedelta(minutes=60)) & (collision_df['UTC'] <= t_col + datetime.timedelta(minutes=60))]
+                collision_df_minute = collision_df_minute[(collision_df_minute['UTC'] >= t_col - datetime.timedelta(minutes=60)) & (collision_df_minute['UTC'] <= t_col + datetime.timedelta(minutes=60))]
 
                 #TODO: make the interpolation be a function of the rate of change of the distance between the two states
                 #TODO: stitch the interpolated and non interpolated to get higher resolution around TCA
                 #TODO: use the interpolated to get a better estimate fo the TCA (find DCA and invert for TCA)
-                #TODO: make the plot from the Patera script of propagated orbit to SP3 orbit
+                #TODO: make the plot from the PateraCollision.py script of propagated orbit to SP3 orbit
 
                 # Set the plot size
                 plt.figure(figsize=(10, 6))

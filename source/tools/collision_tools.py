@@ -21,8 +21,7 @@ from org.orekit.orbits import PositionAngleType, OrbitType
 
 from tools.utilities import pos_vel_from_orekit_ephem
 
-
-def generate_collision_trajectory(ephemeris_df, t_col):
+def generate_collision_trajectory(ephemeris_df, t_col, dt, post_col_t=15.0):
     """Generate a trajectory of a satellite that will collide with another satellite at a given time.
 
     Parameters
@@ -32,6 +31,10 @@ def generate_collision_trajectory(ephemeris_df, t_col):
         Must contain columns 'UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv'.
     t_col : datetime.datetime
         The time of the collision.
+    dt : float, optional
+        The time step of the ephmeris that is returned, in seconds.
+    post_col_t : float, optional
+        The number of minutes after the collision to continue the ephemeris.
     Returns
     -------
     pandas.DataFrame
@@ -40,8 +43,7 @@ def generate_collision_trajectory(ephemeris_df, t_col):
     """
     #start of sim is the UTC value of the first row of the ephemeris
     start_of_sim = ephemeris_df['UTC'].iloc[0]
-    end_of_sim = t_col + datetime.timedelta(minutes=45) #continue the ephemeris for 45 minutes after the collision
-
+    end_of_sim = t_col + datetime.timedelta(minutes=post_col_t) #continue the ephemeris for 45 minutes after the collision
     #slice ephemeris_df so that it stops at t0_plus_24_plus_t
     ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= end_of_sim]
     
@@ -72,13 +74,17 @@ def generate_collision_trajectory(ephemeris_df, t_col):
     #propagate backwards from time of collision to t0 to get state vectors over the entire time window of interest
     propagator_col.propagate(datetime_to_absolutedate(end_of_sim), datetime_to_absolutedate(start_of_sim))
     ephemeris_col = ephemeris_generator_col.getGeneratedEphemeris()
-    prop_times_col, prop_state_vectors_col = pos_vel_from_orekit_ephem(ephemeris_col, datetime_to_absolutedate(t_col), datetime_to_absolutedate(start_of_sim), 60.0)
-    prop_times_col_dt = [t_col + datetime.timedelta(seconds=sec) for sec in prop_times_col]
+    prop_times_col, prop_state_vectors_col = pos_vel_from_orekit_ephem(ephemeris_col, datetime_to_absolutedate(end_of_sim), datetime_to_absolutedate(start_of_sim), dt)
+    prop_times_col_dt = [end_of_sim + datetime.timedelta(seconds=sec) for sec in prop_times_col]
     col_times_df = pd.DataFrame({'UTC': pd.to_datetime(prop_times_col_dt)})
-    col_states_df = pd.DataFrame(prop_state_vectors_col, columns=['x_col', 'y_col', 'z_col', 'xv_col', 'yv_col', 'zv_col'])
-    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-    collision_df = pd.merge_asof(ephemeris_df.sort_values('UTC'), col_times_df.sort_values('UTC').join(col_states_df), on='UTC')
-    return collision_df
+    col_states_df = pd.DataFrame(prop_state_vectors_col, columns=['x', 'y', 'z', 'xv', 'yv', 'zv'])
+
+    assert len(prop_times_col) == len(prop_state_vectors_col)
+    col_ephem_df = pd.concat([col_times_df, col_states_df], axis=1)    
+    assert start_of_sim in col_ephem_df['UTC'].values
+    assert end_of_sim in col_ephem_df['UTC'].values
+    
+    return col_ephem_df
 
 def patera05_poc(merged_df, object1_cov, object2_cov, tca, hbr_1, hbr_2):
     """Calculate the probability of collision between two objects using the Patera2005 algorithm.
