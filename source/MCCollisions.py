@@ -165,9 +165,6 @@ def main():
                     distance_df = pd.DataFrame({'UTC': primary_state_perturbed_df['UTC'], f'Distance_{i}': distances})
                     distance_dfs.append(distance_df)
 
-                # Concatenate all individual distance dataframes to get a single dataframe with all distances
-                distances_df = pd.concat(distance_dfs, axis=1)
-
                 # Benchmark: calculate the distance between unperturbed primary and secondary states
                 # get the subset of the ephemeris_df that is within the time window of the collision_df
                 print(f"head of ephemeris_df: {ephemeris_df.head()}")
@@ -177,30 +174,15 @@ def main():
                 #now take the diffeerence between the position vectors and put that in a new column called 'distance'
                 col_to_ephem_distances['distance'] = np.linalg.norm(col_to_ephem_distances[['x_ephem', 'y_ephem', 'z_ephem']].values - col_to_ephem_distances[['x_col', 'y_col', 'z_col']].values, axis=1)
                 print("first five rows of col_to_ephem_distances: ", col_to_ephem_distances.head())
-                #plot the first 1000 points of the distance between the ephemeris and the collision trajectory
-                plt.figure(figsize=(10, 6))
-                plt.plot(col_to_ephem_distances['UTC'], col_to_ephem_distances['distance'])
-                plt.title('Distance Time Series')
-                plt.xlabel('Time')
-                plt.ylabel('Distance')
-                plt.yscale('log')
-                plt.xticks(rotation=45)
-                plt.tight_layout()
-                plt.show()
-
-
-                min_distances = []
-
-                #slice distances_df to only contain data 1 hour before and after the collision time (t_col)
-                distances_df = distances_df[(distances_df['UTC_ephem'] >= t_col - datetime.timedelta(minutes=60)) & (distances_df['UTC'] <= t_col + datetime.timedelta(minutes=60))]
-                #also slice collision_df to only contain data 1 hour before and after the collision time (t_col)
-                collision_df_minute = collision_df_minute[(collision_df_minute['UTC'] >= t_col - datetime.timedelta(minutes=60)) & (collision_df_minute['UTC'] <= t_col + datetime.timedelta(minutes=60))]
 
                 #TODO: make the interpolation be a function of the rate of change of the distance between the two states
                 #TODO: stitch the interpolated and non interpolated to get higher resolution around TCA
                 #TODO: use the interpolated to get a better estimate fo the TCA (find DCA and invert for TCA)
                 #TODO: make the plot from the PateraCollision.py script of propagated orbit to SP3 orbit
 
+                # Concatenate all individual distance dataframes to get a single dataframe with all distances
+                distances_df = pd.concat(distance_dfs, axis=1)
+                min_distances = []
                 # Set the plot size
                 plt.figure(figsize=(10, 6))
                 #plot only 2min before and after the collision time
@@ -216,7 +198,7 @@ def main():
                 print("DCAs: ", min_distances)
                 print(f"closest distance: {min(min_distances)}")
                 print(f"simulation end. Total trajectories: {len(min_distances)}")
-                plt.plot(collision_df['UTC'], collision_df['distance'], label='Original Distance', linestyle='dotted')
+                plt.plot(col_to_ephem_distances['UTC'], col_to_ephem_distances['distance'], label='Original Distance', linestyle='dotted')
                 # Set plot title and labels
                 plt.title('Distance Time Series')
                 plt.xlabel('Time')
@@ -233,7 +215,7 @@ def main():
                 if not os.path.exists(folder):
                     os.makedirs(folder)
                 timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
-                plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{j}_{timenow}.png")
+                plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{timenow}.png")
                 # plt.show()
 
                 #plot a histogram of the minimum distances
@@ -255,43 +237,10 @@ def main():
                 plt.text(0.5, 0.75, f"Below 5m: {num_below_5m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.text(0.5, 0.7, f"Below 1m: {num_below_1m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.text(0.5, 0.65, f"Smallest Distance: {smallest_distance}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
-                plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{j}_{timenow}.png")
+                plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{timenow}.png")
                 # plt.show()
-
-                fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-                # Plotting x-y scatter for primary states
-                for df in primary_states_perturbed_ephem:
-                    axs[0, 0].scatter(df['x'], df['y'], alpha=0.5)
-                axs[0, 0].set_title('Primary States X-Y')
-                axs[0, 0].set_xlabel('X')
-                axs[0, 0].set_ylabel('Y')
-
-                # Plotting x-z scatter for primary states
-                for df in primary_states_perturbed_ephem:
-                    axs[0, 1].scatter(df['x'], df['z'], alpha=0.5)
-                axs[0, 1].set_title('Primary States X-Z')
-                axs[0, 1].set_xlabel('X')
-                axs[0, 1].set_ylabel('Z')
-
-                # Plotting x-y scatter for secondary states
-                for df in secondary_states_perturbed_ephem:
-                    axs[1, 0].scatter(df['x'], df['y'], alpha=0.5)
-                axs[1, 0].set_title('Secondary States X-Y')
-                axs[1, 0].set_xlabel('X')
-                axs[1, 0].set_ylabel('Y')
-
-                # Plotting x-z scatter for secondary states
-                for df in secondary_states_perturbed_ephem:
-                    axs[1, 1].scatter(df['x'], df['z'], alpha=0.5)
-                axs[1, 1].set_title('Secondary States X-Z')
-                axs[1, 1].set_xlabel('X')
-                axs[1, 1].set_ylabel('Z')
-
-                plt.tight_layout()
-                plt.savefig(f"{folder}/scatter_initsample_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
-                plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num)
+                plot_distance_time_series(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
                 plot_minimum_distance_histogram(min_distances, sat_name, arc, fm_num)
-                plot_scatter_initsample(primary_states_perturbed_ephem, secondary_states_perturbed_ephem, sat_name, arc, fm_num)
 
 def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, folder="output/Collisions/MC"):
     plt.figure(figsize=(10, 6))
@@ -328,46 +277,6 @@ def plot_minimum_distance_histogram(min_distances, sat_name, arc, fm_num, folder
         os.makedirs(folder)
     timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
     plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
-
-def plot_scatter_initsample(primary_states_perturbed_ephem, secondary_states_perturbed_ephem, sat_name, arc, fm_num, folder="output/Collisions/MC"):
-    fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-    sns.set(style="whitegrid")
-
-    # Extracting initial conditions for primary and secondary states
-    primary_initials = [df.iloc[0] for df in primary_states_perturbed_ephem]
-    secondary_initials = [df.iloc[0] for df in secondary_states_perturbed_ephem]
-
-    # Plotting X-Y and X-Z for primary initial conditions
-    for initial in primary_initials:
-        axs[0, 0].scatter(initial['x'], initial['y'], alpha=0.5)
-        axs[0, 1].scatter(initial['x'], initial['z'], alpha=0.5)
-
-    # Plotting X-Y and X-Z for secondary initial conditions
-    for initial in secondary_initials:
-        axs[1, 0].scatter(initial['x'], initial['y'], alpha=0.5)
-        axs[1, 1].scatter(initial['x'], initial['z'], alpha=0.5)
-
-    # Setting titles and labels
-    axs[0, 0].set_title('Primary States X-Y')
-    axs[0, 1].set_title('Primary States X-Z')
-    axs[1, 0].set_title('Secondary States X-Y')
-    axs[1, 1].set_title('Secondary States X-Z')
-
-    # Setting equal axes
-    for ax in axs.flat:
-        ax.set_aspect('equal', 'box')
-
-    for i in range(2):
-        axs[i, 0].set_xlabel('X')
-        axs[i, 0].set_ylabel('Y')
-        axs[i, 1].set_xlabel('X')
-        axs[i, 1].set_ylabel('Z')
-
-    plt.tight_layout()
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
-    plt.savefig(f"{folder}/scatter_initsample_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.png")
 
 if __name__ == "__main__":
     main()
