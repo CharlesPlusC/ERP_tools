@@ -125,16 +125,12 @@ def main():
                 optimized_state_cov = cov_mats[min_RMS_index]
                 print("optimized_state_cov: ", optimized_state_cov)
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 5)
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 25)
 
-                for primary_state in perturbed_states_primary:
-                    print(f"propagating primary_state: {primary_state}")
+                for i, primary_state in enumerate(perturbed_states_primary):
+                    print(f"propagating perturbed state {i} of {len(perturbed_states_primary)}")
                     primary_state_perturbed_df = propagate_state(start_date=t0, end_date=t_end, initial_state_vector=primary_state, cr=cr, cd=cd, cross_section=cross_section, mass=mass,boxwing=None,ephem=True,dt=5, **force_model_config)
                     primary_states_perturbed_ephem.append(primary_state_perturbed_df)
-
-                #save the perturbed ephemeris dataframes to a folder
-                # for i, df in enumerate(primary_states_perturbed_ephem):
-                #     df.to_csv(f"{MC_ephem_folder}/{sat_name}_arc_{arc}_FM_{fm_num}_sample_{i}.csv")
 
                 for i, primary_state_perturbed_df in enumerate(primary_states_perturbed_ephem):
                     primary_states_perturbed_ephem[i] = interpolate_ephemeris(primary_state_perturbed_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True)
@@ -166,6 +162,7 @@ def main():
 
                 # Concatenate all individual distance dataframes to get a single dataframe with all distances
                 distances_df = pd.concat(distance_dfs, axis=1)
+                print("number of columns in distances_df: ", len(distances_df.columns) - 1)
                 min_distances = []
                 # Set the plot size
                 plt.figure(figsize=(10, 6))
@@ -224,6 +221,7 @@ def main():
                 plt.text(0.5, 0.65, f"Smallest Distance: {smallest_distance}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
                 plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{timenow}.png")
                 # plt.show()
+                print(f"simulation end. Total trajectories: {len(min_distances)}")
                 plot_distance_time_series(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
                 plot_distance_time_series_heatmap(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
 
@@ -246,28 +244,33 @@ def plot_distance_time_series_heatmap(distances_df, collision_df, t_col, sat_nam
     utc_column = filtered_df['UTC'].iloc[:, 0]
     x = mdates.date2num(utc_column)
 
-    for i in range((len(filtered_df.columns) - 1) // 2):
+    # Calculate the number of Distance_i columns
+    num_distance_columns = sum('Distance' in col for col in filtered_df.columns)
+
+    for i in range(num_distance_columns):
         distance_column = filtered_df[f'Distance_{i}']
         x_flattened.extend(x)
         y_flattened.extend(distance_column)
 
-    x_bins = np.linspace(min(x_flattened), max(x_flattened), 1000)
-    y_bins = np.logspace(np.log10(min(y_flattened)), np.log10(max(y_flattened)), 1000)
+    # Plot using hexbin
+    hb = plt.hexbin(x_flattened, y_flattened, gridsize=1000, cmap='plasma', mincnt=1, xscale='linear', yscale='log')
+    cb = plt.colorbar(hb, label='Number of Data Points')
 
-    H, xedges, yedges = np.histogram2d(x_flattened, y_flattened, bins=[x_bins, y_bins])
-    H[H == 0] = np.nan  # Set bins with zero count to NaN
+    # Define the colorbar ticks based on the number of Distance_i columns
+    tick_interval = max(1, num_distance_columns // 5)  # Aim for up to 5 ticks
+    tick_values = range(0, num_distance_columns + 1, tick_interval)
+    cb.set_ticks(tick_values)
+    cb.set_ticklabels([str(val) for val in tick_values])
 
-    X, Y = np.meshgrid(xedges, yedges)
-    pc = plt.pcolormesh(X, Y, H.T, cmap='plasma', shading='flat', rasterized=True)
-
-    cb = plt.colorbar(pc, label='Count of Lines')
+    # Set other plot features
     plt.axhline(y=hbr, color='r', linestyle='--', label='HBR')
-    plt.text(0.5, hbr, f"HBR: {hbr}", horizontalalignment='center', transform=plt.gca().get_yaxis_transform())
+    plt.text(0.2, hbr, f"HBR: {hbr}", horizontalalignment='center', transform=plt.gca().get_yaxis_transform())
     plt.title(f'+/- {t_window} Seconds from TCA')
     plt.xlabel('Time')
     plt.ylabel('Distance')
     plt.yscale('log')
     plt.ylim(0.01, 10e6)
+
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     plt.xticks(rotation=45)
     plt.tight_layout()
@@ -275,7 +278,7 @@ def plot_distance_time_series_heatmap(distances_df, collision_df, t_col, sat_nam
     if not os.path.exists(folder):
         os.makedirs(folder)
     timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
-    plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}_heatmap.png")
+    plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}_heatmap.png", dpi=600)
 
 def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=20, hbr=12.0, folder="output/Collisions/MC"):
     plt.figure(figsize=(7, 4))
@@ -300,6 +303,7 @@ def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, 
     below_hbr = num_below_hbr / (len(distances_df.columns) - 1)
     percentage_below_hbr = round(below_hbr * 100, 2)
     plt.text(0.25, 0.5, f" %collsion: {percentage_below_hbr}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+    plt.text(0.25, 0.45, f"No. of Samples: {len(distances_df.columns) - 1}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
     plt.xticks(rotation=45)
     #calculate the percentage of the time series that is below the HBR
     num_below_hbr = len([d for d in collision_df['distance'] if d < hbr])
