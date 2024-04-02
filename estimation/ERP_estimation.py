@@ -11,155 +11,11 @@ import numpy as np
 import sys
 import scipy
 ###########################################################################################################################################
-def EKF_D(x0, xest0, Pest0, dt, T, Q, R, f, h, F=[], H=[], const=[]):
-
-    # Perform Discrete Extended Kalman Filter estimation given dynamics and measurement models
-
-    # Parameters:
-    #     x0:      Initial true state
-    #     xest0:   Initial estimate
-    #     Pest0:   Initial covariance
-    #     T:       Period of propagation
-    #     dt:      Time step or [True timestep, Measurement timestep]
-    #     Q:       Process noise matrix
-    #     R:       Measurement noise matrix
-    #     f:       Dynamics model
-    #     h:       Measurement model
-    #     F:       Dynamics Jacobian (optional, finite difference approximation if not included)
-    #     H:       Measurement Jacobian (optional, finite difference approximation if not included)
-    #     const:   Miscellaneous constants (optional)
-
-    # Outputs:
-    #     x:       True states
-    #     xest:    Estimated states
-    #     z:       Measurements
-    #     Pest:    Estimated covariances
-    #     tspan_x: True time span
-    #     tspan_z: Measurement time span
-
-    # Checks and Balances
-    [rows, columns] = np.shape(Q)
-    if(rows!=columns):
-        print("ERROR: Process noise matrix is not square.")
-        sys.exit()
-
-    if(len(xest0)!=len(x0)):
-        print("ERROR: Initial true state and initial estimate state dimensions do not match.")
-        sys.exit()
-
-    if(len(xest0)!=rows):
-        print("ERROR: State vector and process noise matrix are not compatible dimensions.")
-        sys.exit()
-
-    [rows, columns] = np.shape(R)
-    if(rows!=columns):
-        print("ERROR: Measurement noise matrix is not square.")
-        sys.exit()
-
-    [rows, columns] = np.shape(Pest0)
-    if(rows!=columns):
-        print("ERROR: Covariance matrix is not square.")
-        sys.exit()
-
-    if(len(xest0)!=rows):
-        print("ERROR: State vector and covariance matrix are not compatible dimensions.")
-        sys.exit()
-
-    if not(np.allclose(Pest0, Pest0.T, rtol=1e-05, atol=1e-05)):
-        print("ERROR: Covariance matrixx is not symmetric.")
-        sys.exit()
-
-    if not(callable(f)):
-        print("ERROR: Input f must be callable.")
-        sys.exit()
-
-    if not(callable(h)):
-        print("ERROR: Input h must be callable.")
-        sys.exit()
-
-    # Timespans
-    if(type(dt) is list)or(type(dt) is np.ndarray):
-        if(float(dt[1])/dt[0] % 1 != 0):
-            print("Measurement time step is not a multiple of true time step. Rounding to nearest multiple.")
-            dt[1] = round(dt[1]/dt[0])*dt[0]; 
-            
-        tspan_x = np.arange(0,T+dt[0],dt[0])
-        tspan_z = np.arange(dt[1],T+dt[1],dt[1])
-        dt_ratio = dt[1]/dt[0]
-        dt = dt[0]
-    else:
-        tspan_x = np.arange(0,T+dt,dt)  # Defining true state timespan
-        tspan_z = np.arange(dt,T+dt,dt) # Defining measurement timespan
-        dt_ratio = 1
-
-    # Approximating Jacobians 
-    if(F == []):
-        def F(x, dt, const):
-            dx = 1e-8
-            n = len(x)
-            func = f(x, dt, const)
-            jac = np.zeros((n, n))
-            for j in range(n):  
-                Dxj = (abs(x[j])*dx if x[j] != 0 else dx)
-                x_plus = [(xi if k != j else xi + Dxj) for k, xi in enumerate(x)]
-                jac[:, j] = (f(x_plus, dt, const) - func)/Dxj
-            return jac
-
-    if(H == []):
-        def H(x):
-            dx=1e-8
-            n = len(x)
-            func = h(x)
-            jac = np.zeros((n, n))
-            for j in range(n):  
-                Dxj = (abs(x[j])*dx if x[j] != 0 else dx)
-                x_plus = [(xi if k != j else xi + Dxj) for k, xi in enumerate(x)]
-                jac[:, j] = (h(x_plus) - func)/Dxj
-            return jac
-
-    d1      = len(Q)                      # Dimension of process noise matrix
-    d2      = len(R)                      # Dimension of measurement noise matrix
-    n1      = len(tspan_x)                # Length of true timespan
-    n2      = len(tspan_z)                # Length of measurement timespan
-    x       = np.full((n1,d1),np.nan)     # True states 
-    x[0]    = x0                          # Initializing first true state
-    xest    = np.full((n1,d1),np.nan)     # Estimated states
-    xest[0] = xest0                       # Initialized first estimated state
-    Pest    = np.full((n1,d1,d1),np.nan)  # Estimated covariance
-    Pest[0] = Pest0                       # Initializing first estimated covariance
-    z       = np.full((n2,d2),np.nan)     # Measurements
-    count   = 0
-    for i in range(1,n1):
-
-        # Initialization
-        w    = np.linalg.multi_dot([np.sqrt(Q),np.random.randn(d1)])    # Process noise
-        x[i] = f(x[i-1],dt,const) + w                                   # True state
-
-        # Prediction
-        xpred = f(xest[i-1],dt,const)                                                                             # Predicted state
-        Ppred = np.linalg.multi_dot([F(xest[i-1],dt,const),Pest[i-1],np.transpose(F(xest[i-1],dt,const))]) + Q    # Predicted covariance
-        zpred = h(xpred)                                                                                          # Predicted measurement
-
-        # Correction
-        if((i) % dt_ratio == 0):
-            v       = np.matmul(np.sqrt(R), np.random.randn(d2))                                                                   # Measurement noise
-            z[count]  = h(x[i]) + v                                                                                                # Actual measurement
-            K       = np.matmul(Ppred,np.transpose(H(xpred)),np.linalg.inv(np.matmul(H(xpred),Ppred,np.transpose(H(xpred)))+R))    # Kalman Gain
-            xest[i] = xpred + np.matmul(K,z[count]-zpred)                                                                          # Estimated state
-            Pest[i] = np.matmul((np.identity(d1)-np.matmul(K,H(xpred))),Ppred)                                                     # Estimated covariance
-            count += 1
-        else:
-            xest[i] = xpred                                                                
-            Pest[i] = Ppred       
-
-    return x, xest, z, Pest, tspan_x, tspan_z
-###########################################################################################################################################
-def EKF(xest0, Pest0, dt, z, Q, R, f, h = [], F=[], H=[], method = 'RK4', const=[]):
+def EKF(xest0, Pest0, dt, z, Q, R, f, time, h = [], F=[], H=[], method = 'RK4', const=[]):
 
     # Perform Extended Kalman Filter estimation given dynamics and measurement models
 
     # Parameters:
-    #     x0:      Initial true state (required)
     #     xest0:   Initial estimate (required)
     #     Pest0:   Initial covariance (required)
     #     dt:      Initial time step (required)
@@ -170,6 +26,7 @@ def EKF(xest0, Pest0, dt, z, Q, R, f, h = [], F=[], H=[], method = 'RK4', const=
     #     Q:       Process noise matrix (required)
     #     R:       Measurement noise matrix (required)
     #     f:       Dynamics model (continuous-time, required, function handle)
+    #     time:    Time frame of dynamics model, either "CT" or "DT" (required)
     #     h:       Measurement model (optional if no measurements, function handle)
     #     F:       Dynamics Jacobian (continuous-time, optional, function handle)
     #     H:       Measurement Jacobian (optional, function handle)
@@ -183,6 +40,8 @@ def EKF(xest0, Pest0, dt, z, Q, R, f, h = [], F=[], H=[], method = 'RK4', const=
     #     xest:    Estimated states
     #     Pest:    Estimated covariances
     #     tspan:   Time span
+    
+    # Note: RK45 does not work currently
         
     # Checks and Balances
     [rows, columns] = np.shape(Q)
@@ -225,13 +84,76 @@ def EKF(xest0, Pest0, dt, z, Q, R, f, h = [], F=[], H=[], method = 'RK4', const=
             sys.exit()
 
      # Estimating Dynamics Jacobian if not included based on time-marching scheme
-    if(method == 'EE'):
+    if(time == 'CT'):
+        if(method == 'EE'):
+            def df(f, x, dt, const):
+                if const == []:
+                    x1 = x + dt*f(x)
+                else:
+                    x1 = x + dt*f(x,const)
+                return x1, dt
+            if (F!=[]):
+                def dF(f, df, F, x, dt, const):
+                    if const == []:
+                        return np.identity(len(x)) + dt*np.array(F(x))
+                    else:
+                        return np.identity(len(x)) + dt*np.array(F(x,const))
+            else:
+                def dF(f, df, F, x, dt, const):
+                    dx = 1e-8
+                    n = len(x)
+                    df0, dx0 = df(f, x, dt, const)
+                    jac = np.zeros((n, n))
+                    for j in range(n):  
+                        Dxj = (abs(x[j])*dx if x[j] != 0 else dx)
+                        x_plus = [(xi if k != j else xi + Dxj) for k, xi in enumerate(x)]
+                        dfi, dti = df(f,x_plus, dt, const)
+                        jac[:, j] = (dfi - df0)/Dxj
+                    return jac
+        elif(method == 'RK4'):
+            def df(f, x, dt, const):
+                if const == []:
+                    f1 = f(x)
+                    f2 = f(x+(dt/2)*f1)
+                    f3 = f(x+(dt/2)*f2)
+                    f4 = f(x+dt*f3)
+                else:
+                    f1 = f(x,const)
+                    f2 = f(x+(dt/2)*f1,const)
+                    f3 = f(x+(dt/2)*f2,const)
+                    f4 = f(x+dt*f3,const)
+                x1 = x + dt*((f1/6)+(f2/3)+(f3/3)+(f4/6))
+                return x1, dt
+            def dF(f, df, F, x, dt, const):
+                dx = 1e-8
+                n = len(x)
+                df0, dx0 = df(f, x, dt, const)
+                jac = np.zeros((n, n))
+                for j in range(n):  
+                    Dxj = (abs(x[j])*dx if x[j] != 0 else dx)
+                    x_plus = [(xi if k != j else xi + Dxj) for k, xi in enumerate(x)]
+                    dfi, dti = df(f,x_plus, dt, const)
+                    jac[:, j] = (dfi - df0)/Dxj
+                return jac
+        elif(method == 'RK45'):
+            print("ERROR: RK45 is not working yet.")
+            sys.exit()
+        else:
+            print("ERROR: Invalid time-marching scheme.")
+            sys.exit()
+    elif(time == 'DT'):
         def df(f, x, dt, const):
-            x1 = x + dt*f(x,const)
+            if const == []:
+                x1 = f(x,dt)
+            else:
+                x1 = f(x,dt,const)
             return x1, dt
         if (F!=[]):
             def dF(f, df, F, x, dt, const):
-                return np.identity(len(x)) + dt*np.array(F(x,const))
+                if const == []:
+                    return F(x,dt)
+                else:
+                    return F(x,dt,const)
         else:
             def dF(f, df, F, x, dt, const):
                 dx = 1e-8
@@ -244,31 +166,6 @@ def EKF(xest0, Pest0, dt, z, Q, R, f, h = [], F=[], H=[], method = 'RK4', const=
                     dfi, dti = df(f,x_plus, dt, const)
                     jac[:, j] = (dfi - df0)/Dxj
                 return jac
-    elif(method == 'RK4'):
-        def df(f, x, dt, const):
-            f1 = f(x,const)
-            f2 = f(x+(dt/2)*f1,const)
-            f3 = f(x+(dt/2)*f2,const)
-            f4 = f(x+dt*f3,const)
-            x1 = x + dt*((f1/6)+(f2/3)+(f3/3)+(f4/6))
-            return x1, dt
-        def dF(f, df, F, x, dt, const):
-            dx = 1e-8
-            n = len(x)
-            df0, dx0 = df(f, x, dt, const)
-            jac = np.zeros((n, n))
-            for j in range(n):  
-                Dxj = (abs(x[j])*dx if x[j] != 0 else dx)
-                x_plus = [(xi if k != j else xi + Dxj) for k, xi in enumerate(x)]
-                dfi, dti = df(f,x_plus, dt, const)
-                jac[:, j] = (dfi - df0)/Dxj
-            return jac
-    elif(method == 'RK45'):
-        print("ERROR: RK45 is not working yet.")
-        sys.exit()
-    else:
-        print("ERROR: Invalid time-marching scheme.")
-        sys.exit()
 
     # Estimating Measurement Jacobian if not included
     if(H == [])and(h!=[]):
@@ -314,169 +211,7 @@ def EKF(xest0, Pest0, dt, z, Q, R, f, h = [], F=[], H=[], method = 'RK4', const=
 
     return xest, Pest, tspan
 ###########################################################################################################################################
-def UKF_D(x0, xest0, Pest0, dt, T, Q, R, f, h, const=[], alpha = 1e-3, beta = 2, kappa = 0):
-
-    # Perform Discrete Unscented Kalman Filter estimation given dynamics and measurement models
-
-    # Parameters:
-    #     x0:      Initial true state
-    #     xest0:   Initial estimate
-    #     Pest0:   Initial covariance
-    #     T:       Period of propagation
-    #     dt:      Time step or [True timestep, Measurement timestep]
-    #     Q:       Process noise matrix
-    #     R:       Measurement noise matrix
-    #     f:       Dynamics model
-    #     h:       Measurement model
-    #     const:   Miscellaneous constants (optional)
-    #     alpha:   Alpha, spread of the sigma points around x0 (optional)
-    #     beta:    Beta, incorporates prior knowledge (optional)
-    #     kappa:   Kappa, secondary scaling parameter (optional)
-
-
-    # Outputs:
-    #     x:       True states
-    #     xest:    Estimated states
-    #     z:       Measurements
-    #     Pest:    Estimated covariances
-    #     tspan_x: True time span
-    #     tspan_z: Measurement time span
-
-    # Checks and Balances
-    [rows, columns] = np.shape(Q)
-    if(rows!=columns):
-        print("ERROR: Process noise matrix is not square.")
-        sys.exit()
-
-    if(len(xest0)!=len(x0)):
-        print("ERROR: Initial true state and initial estimate state dimensions do not match.")
-        sys.exit()
-
-    if(len(xest0)!=rows):
-        print("ERROR: State vector and process noise matrix are not compatible dimensions.")
-        sys.exit()
-
-    [rows, columns] = np.shape(R)
-    if(rows!=columns):
-        print("ERROR: Measurement noise matrix is not square.")
-        sys.exit()
-
-    [rows, columns] = np.shape(Pest0)
-    if(rows!=columns):
-        print("ERROR: Covariance matrix is not square.")
-        sys.exit()
-
-    if(len(xest0)!=rows):
-        print("ERROR: State vector and covariance matrix are not compatible dimensions.")
-        sys.exit()
-
-    if not(np.allclose(Pest0, Pest0.T, rtol=1e-05, atol=1e-05)):
-        print("ERROR: Covariance matrixx is not symmetric.")
-        sys.exit()
-
-    if not(callable(f)):
-        print("ERROR: Input f must be callable.")
-        sys.exit()
-
-    if not(callable(h)):
-        print("ERROR: Input h must be callable.")
-        sys.exit()
-
-    # Timespans
-    if(type(dt) is list)or(type(dt) is np.ndarray):
-        if(float(dt[1])/dt[0] % 1 != 0):
-            print("Measurement time step is not a multiple of true time step. Rounding to nearest multiple.")
-            dt[1] = round(dt[1]/dt[0])*dt[0]; 
-            
-        tspan_x = np.arange(0,T+dt[0],dt[0])
-        tspan_z = np.arange(dt[1],T+dt[1],dt[1])
-        dt_ratio = dt[1]/dt[0]
-        dt = dt[0]
-    else:
-        tspan_x = np.arange(0,T+dt,dt) # Defining true state timespan
-        tspan_z = np.arange(dt,T+dt,dt) # Defining measurement timespan
-        dt_ratio = 1
-
-    d1      = len(Q)                      # Dimension of process noise matrix
-    d2      = len(R)                      # Dimension of measurement noise matrix
-    n1      = len(tspan_x)                # Length of true timespan
-    n2      = len(tspan_z)                # Length of measurement timespan
-    x       = np.full((n1,d1),np.nan)     # True states 
-    x[0]    = x0                          # Initializing first true state
-    xest    = np.full((n1,d1),np.nan)     # Estimated states
-    xest[0] = xest0                       # Initialized first estimated state
-    Pest    = np.full((n1,d1,d1),np.nan)  # Estimated covariance
-    Pest[0] = Pest0                       # Initializing first estimated covariance
-    z       = np.full((n2,d2),np.nan)     # Measurements
-    count   = 0
-
-    # Weights and Sigma Points
-    n   = len(x0)                  # Dimension of x0          
-    lam = alpha**2*(n+kappa)-n     # Lambda
-    Wm  = np.full(2*n+1,np.nan)    # Weights, m
-    Wc  = np.full(2*n+1,np.nan)    # Weights, c
-
-    Wm[0] = lam/(n + lam)
-    Wc[0] = (lam/(n + lam)) + (1-alpha**2+beta)
-    for i in range(1,2*n+1):
-        Wm[i] = 1/(2*(n + lam))
-        Wc[i] = Wm[i]
-
-    for i in range(1,n1):
-        # Initialization
-        w    = np.linalg.multi_dot([np.sqrt(Q),np.random.randn(d1)])    # Process noise
-        x[i] = f(x[i-1],dt,const) + w                                   # True state
-
-        # Calculate Sigma Points
-        A = np.full((2*n+1,n),np.nan)
-        L = scipy.linalg.sqrtm((n + lam) * Pest[i-1])
-        A[0] = xest[i-1]
-        for j in range(1,n+1):
-            A[j] = xest[i-1] + L[j-1]
-        for j in range(n+1, 2*n+1):
-            A[j] = xest[i-1] - L[j-1-n]
-
-        # Prediction
-        for j in range(0,2*n+1):
-            A[j] = f(A[j], dt, const)                                 # Sigma Points
-        xpred = np.zeros(d1)
-        for j in range(0, 2*n+1):
-            xpred += Wm[j]*A[j]                                       # Mean
-        Ppred = Q  
-        for j in range(0,2*n+1):
-            Ppred = Ppred + Wc[j]*np.outer((A[j]-xpred),(A[j]-xpred)) # Covariance
-        Z = np.full((2*n+1,d2),np.nan)                  
-        for j in range(0,2*n+1):
-            Z[j] = h(A[j])                                            # Sigma measurements
-        zpred = np.zeros(d2)
-        for j in range(0,2*n+1):
-            zpred += Wm[j]*Z[j]                                       # Measurement
-        
-        # Correction
-        if((i) % dt_ratio == 0):
-            v        = np.matmul(np.sqrt(R), np.random.randn(d2))   # Measurement noise
-            z[count] = h(x[i]) + v                                  # Actual measurement
-
-            P_zz = np.zeros([d2,d2])
-            for j in range(0,2*n+1):
-                P_zz += Wc[j]*np.outer((Z[j]-zpred),(Z[j]-zpred))
-
-            P_xz = np.zeros([d1,d2])
-            for j in range(0,2*n+1):
-                P_xz += Wc[j]*np.outer((A[j]-xpred),(Z[j]-zpred))
-
-            S = R + P_zz
-            K = np.linalg.multi_dot([P_xz,np.linalg.inv(S)])
-            xest[i] = xpred + np.linalg.multi_dot([K,(z[count]-zpred)])
-            Pest[i] = Ppred - np.linalg.multi_dot([K,S,np.transpose(K)])
-            count += 1
-        else:
-            xest[i] = xpred                                                                
-            Pest[i] = Ppred  
-
-    return x, xest, z, Pest, tspan_x, tspan_z
-###########################################################################################################################################
-def UKF(xest0, Pest0, dt, z, Q, R, f, h = [], alpha = 1e-3, beta = 2, kappa = 0, method = 'RK4', const=[]):
+def UKF(xest0, Pest0, dt, z, Q, R, f, time, h = [], alpha = 1e-3, beta = 2, kappa = 0, method = 'RK4', const=[]):
 
     # Perform Extended Kalman Filter estimation given dynamics and measurement models
 
@@ -492,6 +227,7 @@ def UKF(xest0, Pest0, dt, z, Q, R, f, h = [], alpha = 1e-3, beta = 2, kappa = 0,
     #     Q:       Process noise matrix (required)
     #     R:       Measurement noise matrix (required)
     #     f:       Dynamics model (continuous-time, required, function handle)
+    #     time:    Time frame of dynamics model, either "CT" or "DT" (required)
     #     h:       Measurement model (optional if no measurements, function handle)
     #     alpha:   Alpha, spread of the sigma points around x0 (optional)
     #     beta:    Beta, incorporates prior knowledge (optional)
@@ -548,24 +284,32 @@ def UKF(xest0, Pest0, dt, z, Q, R, f, h = [], alpha = 1e-3, beta = 2, kappa = 0,
             sys.exit()
 
      # Estimating Dynamics Jacobian if not included based on time-marching scheme
-    if(method == 'EE'):
-        def df(f, x, dt, const):
-            x1 = x + dt*f(x,const)
+    if(time == 'CT'):
+        if(method == 'EE'):
+            def df(f, x, dt, const):
+                x1 = x + dt*f(x,const)
+                return x1, dt
+        elif(method == 'RK4'):
+            def df(f, x, dt, const):
+                f1 = f(x,const)
+                f2 = f(x+(dt/2)*f1,const)
+                f3 = f(x+(dt/2)*f2,const)
+                f4 = f(x+dt*f3,const)
+                x1 = x + dt*((f1/6)+(f2/3)+(f3/3)+(f4/6))
+                return x1, dt
+        elif(method == 'RK45'):
+            print("ERROR: RK45 is not working yet.")
+            sys.exit()
+        else:
+            print("ERROR: Invalid time-marching scheme.")
+            sys.exit()
+    elif(time == 'DT'):
+         def df(f, x, dt, const):
+            if const == []:
+                x1 = f(x,dt)
+            else:
+                x1 = f(x,dt,const)
             return x1, dt
-    elif(method == 'RK4'):
-        def df(f, x, dt, const):
-            f1 = f(x,const)
-            f2 = f(x+(dt/2)*f1,const)
-            f3 = f(x+(dt/2)*f2,const)
-            f4 = f(x+dt*f3,const)
-            x1 = x + dt*((f1/6)+(f2/3)+(f3/3)+(f4/6))
-            return x1, dt
-    elif(method == 'RK45'):
-        print("ERROR: RK45 is not working yet.")
-        sys.exit()
-    else:
-        print("ERROR: Invalid time-marching scheme.")
-        sys.exit()
 
     # Weights and Sigma Points
     n   = len(xest0)               # Dimension of x0    
@@ -722,7 +466,7 @@ def plot_gaussian_ellipsoid(m, C, sd, p, ax):
 
     return
 ###########################################################################################################################################
-def get_measurements(x0, dt, t, f, h, Q, R, method = 'RK4', const = []):
+def get_measurements(x0, dt, t, f, h, Q, R, time, method = 'RK4', const = []):
 
     # Given a dynamics model, initial state, and time parameters, return the
     # true states and measurements over time.
@@ -738,6 +482,7 @@ def get_measurements(x0, dt, t, f, h, Q, R, method = 'RK4', const = []):
     #    h:       Measurement model (required, function handle)
     #    Q:       Process noise matrix (required)
     #    R:       Measurement noise matrix (required)
+    #    time:    Time frame of dynamics model, either "CT" or "DT" (required)
     #    method:  Time-marching method (optional)
     #        - 'EE':    Explicit Euler
     #        - 'RK4':   Runge-Kutta 4 (default)
@@ -747,27 +492,44 @@ def get_measurements(x0, dt, t, f, h, Q, R, method = 'RK4', const = []):
     #  Outputs:
     #    x:       True states
     #    z:       Measurements
-    #    tx: True time span
-    #    tz: Measurement time span
+    #    tx:      True time span
+    #    tz:      Measurement time span
 
-    if(method == 'EE'):
+    if(time == 'CT'):
+        if(method == 'EE'):
+            def df(f, x, dt, const):
+                if const == []:
+                    x1 = x + dt*f(x)
+                else:
+                    x1 = x + dt*f(x,const)
+                return x1, dt
+        elif(method == 'RK4'):
+            def df(f, x, dt, const):
+                if const == []:
+                    f1 = f(x)
+                    f2 = f(x+(dt/2)*f1)
+                    f3 = f(x+(dt/2)*f2)
+                    f4 = f(x+dt*f3)
+                else:
+                    f1 = f(x,const)
+                    f2 = f(x+(dt/2)*f1,const)
+                    f3 = f(x+(dt/2)*f2,const)
+                    f4 = f(x+dt*f3,const)
+                x1 = x + dt*((f1/6)+(f2/3)+(f3/3)+(f4/6))
+                return x1, dt
+        elif(method == 'RK45'):
+            print("ERROR: RK45 is not working yet.")
+            sys.exit()
+        else:
+            print("ERROR: Invalid time-marching scheme.")
+            sys.exit()
+    elif(time == 'DT'):
         def df(f, x, dt, const):
-            x1 = x + dt*f(x,const)
+            if const == []:
+                x1 = f(x,dt)
+            else:
+                x1 = f(x,dt,const)
             return x1, dt
-    elif(method == 'RK4'):
-        def df(f, x, dt, const):
-            f1 = f(x,const)
-            f2 = f(x+(dt/2)*f1,const)
-            f3 = f(x+(dt/2)*f2,const)
-            f4 = f(x+dt*f3,const)
-            x1 = x + dt*((f1/6)+(f2/3)+(f3/3)+(f4/6))
-            return x1, dt
-    elif(method == 'RK45'):
-        print("ERROR: RK45 is not working yet.")
-        sys.exit()
-    else:
-        print("ERROR: Invalid time-marching scheme.")
-        sys.exit()
 
     dtz = dt
     if len(t)==1:
