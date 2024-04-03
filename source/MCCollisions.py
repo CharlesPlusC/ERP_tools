@@ -73,14 +73,14 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
 def main():
     sat_names_to_test = ["GRACE-FO-A"]
     # , "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"
-    arc_length = 5  # min
+    arc_length = 25  # min
     num_arcs = 1
-    prop_length = 60 * 60 * 1
+    prop_length = 60 * 60 * 6  # 6 hours
     prop_length_days = prop_length / (60 * 60 * 24)
     force_model_configs = [
-                        {'36x36gravity': True, '3BP': True},
-                        # {'120x120gravity': True, '3BP': True},
-                        # {'120x120gravity': True, '3BP': True, 'SRP': True, 'nrlmsise00drag': True},
+                        # {'36x36gravity': True, '3BP': True},
+                        {'120x120gravity': True, '3BP': True},
+                        {'120x120gravity': True, '3BP': True, 'SRP': True, 'nrlmsise00drag': True},
                         {'120x120gravity': True, '3BP': True,'SRP': True, 'jb08drag': True}]
     
     MC_ephem_folder = "output/Collisions/MC/interpolated_MC_ephems" #folder to save the interpolated ephemeris dataframes  
@@ -125,7 +125,7 @@ def main():
                 optimized_state_cov = cov_mats[min_RMS_index]
                 print("optimized_state_cov: ", optimized_state_cov)
                 primary_states_perturbed_ephem = []
-                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 5)
+                perturbed_states_primary = generate_perturbed_states(optimized_state_cov, optimized_state, 10)
 
                 for i, primary_state in enumerate(perturbed_states_primary):
                     print(f"propagating perturbed state {i} of {len(perturbed_states_primary)}")
@@ -162,191 +162,77 @@ def main():
 
                 # Concatenate all individual distance dataframes to get a single dataframe with all distances
                 distances_df = pd.concat(distance_dfs, axis=1)
+                print("number of columns in distances_df: ", len(distances_df.columns) - 1)
+                min_distances = []
+                # Set the plot size
+                plt.figure(figsize=(10, 6))
+                #plot only 2min before and after the collision time
+                plt.xlim(t_col - datetime.timedelta(minutes=1), t_col + datetime.timedelta(minutes=1))
+                # Loop through each distance column (ignoring the 'UTC' column) to plot
+                for column in distances_df.columns:
+                    if column != 'UTC':
+                        plt.plot(distances_df['UTC'], distances_df[column], label=column)
+                        #print the minimum distance for each perturbed state
+                        min_distance = distances_df[column].min()
+                        min_distances.append(min_distance)
 
-                print(f"simulation end. Total trajectories: {len(primary_states_perturbed_ephem)}")
+                print("DCAs: ", min_distances)
+                print(f"closest distance: {min(min_distances)}")
+                print(f"simulation end. Total trajectories: {len(min_distances)}")
+                plt.plot(col_to_ephem_distances['UTC'], col_to_ephem_distances['distance'], label='Original Distance', linestyle='dotted')
+                # Set plot title and labels
+                plt.title('Distance Time Series')
+                plt.xlabel('Time')
+                plt.ylabel('Distance')
+                plt.yscale('log')
+                #make the y axis start at 0m
+                plt.ylim(0.01, 10e7)
+                #put a horizontal line at 
+                # Rotate date labels for better readability
+                plt.xticks(rotation=45)
+                # Show the plot
+                plt.tight_layout()  # Adjust layout to not cut off labels
+        
+                folder = "output/Collisions/MC"
+                if not os.path.exists(folder):
+                    os.makedirs(folder)
+                timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+                plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{timenow}.png")
+                # plt.show()
 
-                # plot_distance_time_series_heatmap_bokeh(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
-                plot_distance_time_series_bokeh_datashader(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
-                # plot_distance_time_series(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
-                # plot_distance_time_series_heatmap(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
-                # plot_minimum_distance_histogram(distances_df.min(axis=1), sat_name, arc, fm_num)
+                #plot a histogram of the minimum distances
+                plt.figure(figsize=(10, 6))
+                plt.hist(min_distances, bins=20)
+                plt.title('Minimum Distance Histogram')
+                plt.xlabel('Minimum Distance')
+                plt.ylabel('Frequency')
+                #in text write how many out of how many were below 1km, 100m, 10m, 5m and 1m
+                num_below_1km = len([d for d in min_distances if d < 1000])
+                num_below_100m = len([d for d in min_distances if d < 100])
+                num_below_10m = len([d for d in min_distances if d < 10])
+                num_below_5m = len([d for d in min_distances if d < 5])
+                num_below_1m = len([d for d in min_distances if d < 1])
+                smallest_distance = min(min_distances)
+                plt.text(0.5, 0.9, f"Below 1km: {num_below_1km}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.85, f"Below 100m: {num_below_100m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.8, f"Below 10m: {num_below_10m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.75, f"Below 5m: {num_below_5m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.7, f"Below 1m: {num_below_1m}/{len(min_distances)}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.text(0.5, 0.65, f"Smallest Distance: {smallest_distance}", horizontalalignment='center', verticalalignment='center', transform=plt.gca().transAxes)
+                plt.savefig(f"{folder}/hist_TCA_{sat_name}_arc_{arc}_FM_{fm_num}_sample_{timenow}.png")
+                # plt.show()
+                print(f"simulation end. Total trajectories: {len(min_distances)}")
+                plot_distance_time_series(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
+                plot_distance_time_series_heatmap(distances_df, col_to_ephem_distances, t_col, sat_name, arc, fm_num)
 
-# num_distance_columns = len([col for col in filtered_df.columns if 'Distance' in col])
-
-import pandas as pd
-import numpy as np
-import datetime
-import os
-import holoviews as hv
-from holoviews.operation.datashader import datashade, dynspread
-import datashader as ds
-from bokeh.plotting import output_file, save
-
-hv.extension('bokeh')
-
-import pandas as pd
-import numpy as np
-import datetime
-import os
-import holoviews as hv
-from holoviews.operation.datashader import datashade, dynspread
-from bokeh.plotting import output_file, save
-
-hv.extension('bokeh')
-
-
-
-def validate_lengths(df):
-    # Ensure all columns have the same length
-    utc_len = len(df['UTC'])
-    for col in df.columns:
-        if 'Distance' in col and len(df[col]) != utc_len:
-            raise ValueError(f"Length mismatch in column {col}")
-
-import pandas as pd
-import numpy as np
-import datetime
-import os
-import holoviews as hv
-from holoviews.operation.datashader import datashade, dynspread
-from bokeh.plotting import output_file, save
-
-hv.extension('bokeh')
-
-def plot_distance_time_series_bokeh_datashader(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=10, hbr=12.0, folder="output/Collisions/MC"):
-    # Check and convert 'UTC' column to datetime format
-    if not pd.to_datetime(distances_df['UTC'], errors='coerce').isnull().all():
-        distances_df['UTC'] = pd.to_datetime(distances_df['UTC'], errors='coerce')
-    else:
-        raise ValueError("UTC column cannot be converted to datetime format")
-
-    if not pd.to_datetime(collision_df['UTC'], errors='coerce').isnull().all():
-        collision_df['UTC'] = pd.to_datetime(collision_df['UTC'], errors='coerce')
-    else:
-        raise ValueError("UTC column in collision_df cannot be converted to datetime format")
-
-    t_col = pd.to_datetime(t_col)
-    time_lower = t_col - datetime.timedelta(seconds=t_window)
-    time_upper = t_col + datetime.timedelta(seconds=t_window)
-
-    # Filter data within the time window
-    distances_df_filtered = distances_df[(distances_df['UTC'] >= time_lower) & (distances_df['UTC'] <= time_upper)]
-    collision_df_filtered = collision_df[(collision_df['UTC'] >= time_lower) & (collision_df['UTC'] <= time_upper)]
-
-    # Melt the DataFrame for easier plotting with Datashader
-    distances_df_melted = distances_df_filtered.melt(id_vars=['UTC'], var_name='Simulation', value_name='Distance')
-    hv_dist = hv.Dataset(distances_df_melted, ['UTC', 'Simulation'], 'Distance')
-    hv_collision = hv.Dataset(collision_df_filtered, ['UTC'], ['distance'])
-
-    # Datashading
-    curve = datashade(hv.Curve(hv_dist, 'UTC', 'Distance'), dynamic=False)
-    collision_curve = datashade(hv.Curve(hv_collision, 'UTC', 'distance'), dynamic=False, color='green')
-
-    # Create and combine plots
-    hline = hv.HLine(hbr).opts(color='red', line_dash='dashed')
-    plot = curve * collision_curve * hline
-
-    # Render and save the plot
-    renderer = hv.renderer('bokeh').instance(mode='server')
-    plot_state = renderer.get_plot(plot).state
-
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
-    output_file(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}_datashader.html")
-    save(plot_state)
-def plot_distance_time_series_bokeh(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=10, hbr=12.0, folder="output/Collisions/MC"):
-    print(f"Plotting time series for {sat_name} arc {arc} FM {fm_num}")
-
-    # Ensure the correct attributes are used: width and height
-    p = figure(title=f"+/- {t_window} Seconds from TCA for {sat_name} arc {arc} FM {fm_num}",
-               x_axis_label='Time', y_axis_label='Distance', x_axis_type='datetime',
-               y_axis_type="log", width=700, height=400)
-    
-    # Set the x-range to display around t_col
-    p.x_range = Range1d(t_col - datetime.timedelta(seconds=t_window), t_col + datetime.timedelta(seconds=t_window))
-
-    time_lower = t_col - datetime.timedelta(seconds=t_window)
-    time_upper = t_col + datetime.timedelta(seconds=t_window)
-    # Filter distances_df to the specified time window around t_col
-    distances_df = distances_df[distances_df['UTC'].iloc[:, 0].between(time_lower, time_upper)]
-    
-    num_below_hbr = 0
-    for column in distances_df.columns:
-        if column != 'UTC':
-            print(f"Plotting {column}")
-            p.line(distances_df['UTC'], distances_df[column], legend_label=column, line_width=0.2, color='blue', alpha=1)
-            if distances_df[column].min() < hbr:
-                num_below_hbr += 1
-    
-    # Plot original distance data from collision_df
-    p.line(collision_df['UTC'], collision_df['distance'], legend_label='Original Distance', line_dash='dotted', line_color='green')
-    
-    # Horizontal line for HBR
-    hbr_line = Span(location=hbr, dimension='width', line_color='red', line_dash='dashed', line_width=1)
-    p.add_layout(hbr_line)
-
-    # Add labels for HBR and number of samples
-    below_hbr_percentage = round((num_below_hbr / (len(distances_df.columns) - 1)) * 100, 2)
-    collision_label = Label(x=0.25, y=0.5, text=f'% collision: {below_hbr_percentage}%', x_units='data', y_units='data')
-    sample_label = Label(x=0.25, y=0.45, text=f'No. of Samples: {len(distances_df.columns) - 1}', x_units='data', y_units='data')
-    p.add_layout(collision_label)
-    p.add_layout(sample_label)
-
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
-    output_file(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}.html")
-    # export_png(p, filename=f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}_bokeh.png")
-    show(p)
-
-def plot_distance_time_series_heatmap_bokeh(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=20, hbr=12.0, folder="output/Collisions/MC"):
-    print(f'Plotting heatmap for {sat_name} arc {arc} FM {fm_num}')
-    t_col = pd.to_datetime(t_col) if isinstance(t_col, str) else t_col
-    time_lower = t_col - datetime.timedelta(seconds=t_window)
-    time_upper = t_col + datetime.timedelta(seconds=t_window)
-    filtered_df = distances_df[distances_df['UTC'].iloc[:, 0].between(time_lower, time_upper)]
-
-    utc_seconds = (filtered_df['UTC'].iloc[:, 0] - t_col).dt.total_seconds().to_numpy()
-
-    x_flattened = []
-    y_flattened = []
-    colors = []
-    num_distance_columns = len([col for col in filtered_df.columns if 'Distance' in col])
-
-    for i, row in filtered_df.iterrows():
-        utc_second = utc_seconds[i - filtered_df.index[0]]  # Adjust index offset
-        for j in range(num_distance_columns):  
-            column_name = f'Distance_{j}'
-            if pd.notnull(row[column_name]):
-                x_flattened.append(float(utc_second))
-                y_flattened.append(float(row[column_name]))
-                colors.append(float(row[column_name]))
-
-    mapper = LinearColorMapper(palette="Plasma256", low=min(colors), high=max(colors))
-    p = figure(title=f"+/- {t_window} Seconds from TCA", x_axis_label='Time (s from TCA)', y_axis_label='Distance', y_axis_type="log", width=700, height=400, tools="pan,wheel_zoom,box_zoom,reset", toolbar_location="above")
-    p.hexbin(x=np.array(x_flattened), y=np.array(y_flattened), size=0.1, fill_color={'field': 'colors', 'transform': mapper}, line_color=None)
-
-    color_bar = ColorBar(color_mapper=mapper, label_standoff=12, location=(0,0), ticker=LogTicker())
-    p.add_layout(color_bar, 'right')
-
-    hbr_line_x = [min(x_flattened), max(x_flattened)]
-    p.line(hbr_line_x, [hbr, hbr], line_color="red", line_dash="dashed", legend_label="HBR")
-
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    output_file(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_heatmap.html")
-    export_png(column(p), filename=f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_heatmap.png")
-    show(p)
-
-
+import matplotlib.dates as mdates
+import matplotlib.colors as colors
 def plot_distance_time_series_heatmap(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=20, hbr=12.0, folder="output/Collisions/MC"):
-    print(f'Plotting heatmap for {sat_name} arc {arc} FM {fm_num}')
-    print(f"Memory usage before plotting (in MB): {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024}")
     plt.figure(figsize=(7, 4))
     sns.set_theme(style="whitegrid")
 
-    t_col = pd.to_datetime(t_col) if isinstance(t_col, str) else t_col
+    if isinstance(t_col, str):
+        t_col = pd.to_datetime(t_col)
 
     time_lower = t_col - datetime.timedelta(seconds=t_window)
     time_upper = t_col + datetime.timedelta(seconds=t_window)
@@ -355,25 +241,36 @@ def plot_distance_time_series_heatmap(distances_df, collision_df, t_col, sat_nam
 
     x_flattened = []
     y_flattened = []
-    utc_column = filtered_df['UTC']
+    utc_column = filtered_df['UTC'].iloc[:, 0]
     x = mdates.date2num(utc_column)
 
-    for column in filtered_df.columns:
-        if 'Distance' in column:
-            distance_values = filtered_df[column].values
-            x_flattened.extend(x)
-            y_flattened.extend(distance_values)
+    # Calculate the number of Distance_i columns
+    num_distance_columns = sum('Distance' in col for col in filtered_df.columns)
 
-    # Reduced gridsize for less memory usage
-    hb = plt.hexbin(x_flattened, y_flattened, gridsize=300, cmap='plasma', mincnt=1, xscale='linear', yscale='log')
+    for i in range(num_distance_columns):
+        distance_column = filtered_df[f'Distance_{i}']
+        x_flattened.extend(x)
+        y_flattened.extend(distance_column)
+
+    # Plot using hexbin
+    hb = plt.hexbin(x_flattened, y_flattened, gridsize=1000, cmap='plasma', mincnt=1, xscale='linear', yscale='log')
     cb = plt.colorbar(hb, label='Number of Data Points')
 
+    # Define the colorbar ticks based on the number of Distance_i columns
+    tick_interval = max(1, num_distance_columns // 5)  # Aim for up to 5 ticks
+    tick_values = range(0, num_distance_columns + 1, tick_interval)
+    cb.set_ticks(tick_values)
+    cb.set_ticklabels([str(val) for val in tick_values])
+
+    # Set other plot features
     plt.axhline(y=hbr, color='r', linestyle='--', label='HBR')
+    plt.text(0.2, hbr, f"HBR: {hbr}", horizontalalignment='center', transform=plt.gca().get_yaxis_transform())
     plt.title(f'+/- {t_window} Seconds from TCA')
     plt.xlabel('Time')
     plt.ylabel('Distance')
     plt.yscale('log')
     plt.ylim(0.01, 10e6)
+
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     plt.xticks(rotation=45)
     plt.tight_layout()
@@ -382,20 +279,14 @@ def plot_distance_time_series_heatmap(distances_df, collision_df, t_col, sat_nam
         os.makedirs(folder)
     timenow = datetime.datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
     plt.savefig(f"{folder}/MC_{sat_name}_arc_{arc}_FM_{fm_num}_{timenow}_heatmap.png", dpi=600)
-    plt.close()
-    print(f"Memory usage after plotting (in MB): {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024}")
 
-def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=10, hbr=12.0, folder="output/Collisions/MC"):
-    print(f"Plotting time series for {sat_name} arc {arc} FM {fm_num}")
+def plot_distance_time_series(distances_df, collision_df, t_col, sat_name, arc, fm_num, t_window=20, hbr=12.0, folder="output/Collisions/MC"):
     plt.figure(figsize=(7, 4))
     sns.set_theme(style="whitegrid")
     plt.xlim(t_col - datetime.timedelta(seconds=t_window), t_col + datetime.timedelta(seconds=t_window))
-    #slice the dataframe to only include the time window around the TCA
-    distances_df = distances_df[distances_df['UTC'].between(t_col - datetime.timedelta(seconds=t_window), t_col + datetime.timedelta(seconds=t_window))]
     num_below_hbr = 0
     for column in distances_df.columns:
         if column != 'UTC':
-            print(f"Plotting {column}")
             plt.plot(distances_df['UTC'], distances_df[column], label=column, alpha=1, linewidth=0.2, c='xkcd:blue')
             #if the minimum distance is below the HBR, increment the counter
             if distances_df[column].min() < hbr:
