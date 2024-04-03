@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from scipy.interpolate import interp1d
+from mpi4py import MPI
 
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
@@ -71,6 +72,12 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     return perturbed_states
 
 def main():
+
+    comm = MPI.COMM_WORLD
+    print(f"Rank: {comm.Get_rank()}, Size: {comm.Get_size()}")
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
     sat_names_to_test = ["GRACE-FO-A"]
     # , "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"
     arc_length = 25  # min
