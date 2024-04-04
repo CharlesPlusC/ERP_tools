@@ -26,6 +26,10 @@ from org.orekit.forces import ForceModel, BoxAndSolarArraySpacecraft, Panel
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 
+def load_force_model_configs(json_file):
+    with open(json_file, 'r') as file:
+        return json.load(file)
+
 def ecef_to_lla(x, y, z):
     """
     Convert Earth-Centered, Earth-Fixed (ECEF) coordinates to Latitude, Longitude, Altitude (LLA).
