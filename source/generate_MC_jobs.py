@@ -89,13 +89,12 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed
 
         cd $TMPDIR
         
-        cp {user_home_dir}/ERP_tools/source/individual_MC_job.py $TMPDIR
+        cp {user_home_dir}/mc_collisions/ERP_tools/source/individual_MC_job.py $TMPDIR
         cp {user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems/{sat_name}/{sat_name}_nominal_collision.csv $TMPDIR
 
-        cp {perturbed_states_file} $TMPDIR/{perturbed_states_file}
+        cp {user_home_dir}/mc_collisions/ERP_tools/{perturbed_states_file} $TMPDIR
 
-        cd ERP_tools
-        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} 2>&1 | tee {user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}/${{JOB_NAME}}.o${{JOB_ID}}
+        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id}
         """
         with open(script_filename, 'w') as file:
             file.write(script_content)
