@@ -63,33 +63,40 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     return perturbed_states
 
 def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed_states_file):
+    import os
+
+    user_home_dir = os.path.expanduser("~")
+
+    folder_for_jobs = f"{user_home_dir}/Scratch/MCCollisions/sge_jobs"
+    logs_dir = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs_fm{fm_num}"
+    os.makedirs(folder_for_jobs, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
 
     for perturbed_state_id in range(num_perturbations):
-        script_content = f"""#!/bin/bash -l
-#$ -l h_rt=2:0:0
-#$ -l mem=2G
-#$ -l tmpfs=15G
-#$ -N Prop_fm{fm_num}_{sat_name}_{perturbed_state_id}
-#$ -wd /home/$USER/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}
-
-module load python/miniconda/4.10.3
-source $UCL_CONDA_PATH/etc/profile.d/conda.sh
-cp /home/$USER/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/
-conda env create -f $TMPDIR/erp_tools_env.yml
-
-cd $TMPDIR
-cp /home/$USER/source/individual_MC_job.py $TMPDIR
-cp /home/$USER/Scratch/MCCollisions/MC/interpolated_MC_ephems/{sat_name}/nominal_collision.csv $TMPDIR
-cp {perturbed_states_file} $TMPDIR
-
-# Execute the Python script
-/home/$USER/miniconda3/envs/erp_tools_env/bin/python individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id}
-
-# Ensure results are saved back to the user's directory
-cp * /home/$USER/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}/
-"""
-        folder_for_jobs = "/home/$USER/Scratch/MCCollisions/sge_jobs"
         script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}_{perturbed_state_id}.sh"
+        
+        script_content = f"""#!/bin/bash -l
+        #$ -l h_rt=2:0:0
+        #$ -l mem=2G
+        #$ -l tmpfs=15G
+        #$ -N Prop_fm{fm_num}_{sat_name}_{perturbed_state_id}
+        #$ -wd {user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}
+
+        module load python/miniconda3/4.10.3
+        source $UCL_CONDA_PATH/etc/profile.d/conda.sh
+        cp {user_home_dir}/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
+        cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR/ERP_tools
+
+        cd $TMPDIR
+        
+        cp {user_home_dir}/ERP_tools/source/individual_MC_job.py $TMPDIR
+        cp {user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems/{sat_name}/{sat_name}_nominal_collision.csv $TMPDIR
+
+        cp {perturbed_states_file} $TMPDIR/{perturbed_states_file}
+
+        cd ERP_tools
+        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} 2>&1 | tee {user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}/${{JOB_NAME}}.o${{JOB_ID}}
+        """
         with open(script_filename, 'w') as file:
             file.write(script_content)
         os.system(f"qsub {script_filename}")
@@ -109,7 +116,7 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
     t0 = ephemeris_df['UTC'].iloc[0]
 
     ## Generate Collision Trajectory and Interpolate around nominal TCA
-    t_col = t0 + datetime.timedelta(hours=12)  # Example prop length
+    t_col = t0 + datetime.timedelta(hours=12)  
     collision_df = generate_collision_trajectory(ephemeris_df, t_col, dt=5.0, post_col_t=15.0)
     collision_df_interp = interpolate_ephemeris(collision_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True) #interpolate the collision trajectory very finely around the TCA
     output_folder = f"output/Collisions/MC/interpolated_MC_ephems/{sat_name}"
