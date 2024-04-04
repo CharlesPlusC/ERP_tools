@@ -63,6 +63,7 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     return perturbed_states
 
 def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed_states_file):
+
     for perturbed_state_id in range(num_perturbations):
         script_content = f"""#!/bin/bash -l
 #$ -l h_rt=2:0:0
@@ -70,15 +71,24 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed
 #$ -l tmpfs=15G
 #$ -N Prop_fm{fm_num}_{sat_name}_{perturbed_state_id}
 #$ -wd /home/$USER/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}
+
+module load python/miniconda/4.10.3
+source $UCL_CONDA_PATH/etc/profile.d/conda.sh
+cp /home/$USER/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/
+conda env create -f $TMPDIR/erp_tools_env.yml
+
 cd $TMPDIR
 cp /home/$USER/source/individual_MC_job.py $TMPDIR
 cp /home/$USER/Scratch/MCCollisions/MC/interpolated_MC_ephems/{sat_name}/nominal_collision.csv $TMPDIR
 cp {perturbed_states_file} $TMPDIR
-module load python/3.11
-python propagate_and_calculate.py {sat_name} {fm_num} {perturbed_state_id}
+
+# Execute the Python script
+/home/$USER/miniconda3/envs/erp_tools_env/bin/python individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id}
+
+# Ensure results are saved back to the user's directory
 cp * /home/$USER/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}/
 """
-        folder_for_jobs = "output/Collisions/MC/sge_jobs"
+        folder_for_jobs = "/home/$USER/Scratch/MCCollisions/sge_jobs"
         script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}_{perturbed_state_id}.sh"
         with open(script_filename, 'w') as file:
             file.write(script_content)
