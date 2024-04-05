@@ -69,21 +69,22 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     perturbed_states = apply_perturbations(state, random_vectors, rotation_matrix)
     return perturbed_states
 
-def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed_states_file):
+def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations):
     import os
 
     user_home_dir = os.path.expanduser("~")
 
     folder_for_jobs = f"{user_home_dir}/Scratch/MCCollisions/sge_jobs"
-    logs_dir = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs_fm{fm_num}"
-    output_dir = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/results_fm{fm_num}/"
+    output_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/results_fm{fm_num}"
+    logs_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs_fm{fm_num}"
 
     os.makedirs(folder_for_jobs, exist_ok=True)
-    os.makedirs(logs_dir, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
 
     for perturbed_state_id in range(num_perturbations):
+        print(f"sat_name: {sat_name}, fm_num: {fm_num}, perturbed_state_id: {perturbed_state_id}, output_folder: {output_folder}")
         script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}_{perturbed_state_id}.sh"
+        output_csv_filename = f"{output_folder}/{sat_name}_fm{fm_num}_perturbed_state{perturbed_state_id}_distances.csv"
         
         script_content = f"""#!/bin/bash -l
         #$ -l h_rt=2:0:0
@@ -91,6 +92,8 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed
         #$ -l tmpfs=15G
         #$ -N Prop_fm{fm_num}_{sat_name}_{perturbed_state_id}
         #$ -wd {user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}
+        #$ -o {logs_folder}/out_{perturbed_state_id}.txt
+        #$ -e {logs_folder}/err_{perturbed_state_id}.txt
 
         module load python/miniconda3/4.10.3
         source $UCL_CONDA_PATH/etc/profile.d/conda.sh
@@ -100,7 +103,7 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed
 
         cd $TMPDIR/ERP_tools
 
-        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} {output_dir}
+        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} {output_csv_filename}
         """
         with open(script_filename, 'w') as file:
             file.write(script_content)
@@ -147,7 +150,7 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
         primary_states_perturbed_ephem.extend(perturbed_states_primary)
         perturbed_states_file = f"{output_folder}/{sat_name}_fm{fm_num}_perturbed_states.csv"
         np.savetxt(perturbed_states_file, primary_states_perturbed_ephem, delimiter=",")
-        create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed_states_file)
+        create_and_submit_job_scripts(sat_name, fm_num, num_perturbations)
 
 def main():
     sat_names_to_test = ["GRACE-FO-A"]

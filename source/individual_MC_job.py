@@ -60,10 +60,9 @@ def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpa
     #make sure the time stamps of propagated_state_df_interp and nominal_collision_df are the same
     assert np.all(propagated_state_df_interp['UTC'] == nominal_collision_df['UTC'])
 
-    print(f"smallest distance: {np.min(distances)}")
+    print(f"Closest Recorded Approach: {np.min(distances)}")
+
     # Save the results
-    if outpath is None:
-        outpath = f"{sc_res_folder}/{sat_name}_fm_{force_model_num}_state_{perturbed_state_id}_dists.csv"
     pd.DataFrame({'UTC': propagated_state_df_interp['UTC'], 'Distance': distances}).to_csv(outpath, index=False)
 
 
@@ -72,4 +71,5 @@ if __name__ == "__main__":
     force_model_num = int(sys.argv[2])
     perturbed_state_id = int(sys.argv[3])
     outpath = str(sys.argv[4])
+    print(f'running with sat_name: {sat_name}, force_model_num: {force_model_num}, perturbed_state_id: {perturbed_state_id}, outpath: {outpath}')
     propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpath)
