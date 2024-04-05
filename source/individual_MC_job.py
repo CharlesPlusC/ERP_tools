@@ -23,7 +23,7 @@ def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False
 def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpath=None):
     force_model_configs = load_force_model_configs('misc/fm_configs.json')
     user_home_dir = os.path.expanduser("~")
-    res_folder = f'{user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems/'
+    res_folder = f'{user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems'
     sc_res_folder = f"{res_folder}/{sat_name}"
     nominal_collision_df = pd.read_csv(f"{sc_res_folder}/{sat_name}_nominal_collision.csv")
     perturbed_states = np.loadtxt(f"{sc_res_folder}/{sat_name}_fm{force_model_num}_perturbed_states.csv", delimiter=",")
@@ -64,7 +64,6 @@ def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpa
 
     # Save the results
     pd.DataFrame({'UTC': propagated_state_df_interp['UTC'], 'Distance': distances}).to_csv(outpath, index=False)
-
 
 if __name__ == "__main__":
     sat_name = sys.argv[1]

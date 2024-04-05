@@ -69,6 +69,46 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     perturbed_states = apply_perturbations(state, random_vectors, rotation_matrix)
     return perturbed_states
 
+# def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations):
+#     import os
+
+#     user_home_dir = os.path.expanduser("~")
+
+#     folder_for_jobs = f"{user_home_dir}/Scratch/MCCollisions/sge_jobs"
+#     output_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/results_fm{fm_num}"
+#     logs_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs_fm{fm_num}"
+
+#     os.makedirs(folder_for_jobs, exist_ok=True)
+#     os.makedirs(output_folder, exist_ok=True)
+
+#     for perturbed_state_id in range(num_perturbations):
+#         print(f"sat_name: {sat_name}, fm_num: {fm_num}, perturbed_state_id: {perturbed_state_id}, output_folder: {output_folder}")
+#         script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}_{perturbed_state_id}.sh"
+#         output_csv_filename = f"{output_folder}/{sat_name}_fm{fm_num}_perturbed_state{perturbed_state_id}_distances.csv"
+        
+#         script_content = f"""#!/bin/bash -l
+#         #$ -l h_rt=2:0:0
+#         #$ -l mem=2G
+#         #$ -l tmpfs=15G
+#         #$ -N Prop_fm{fm_num}_{sat_name}_{perturbed_state_id}
+#         #$ -wd {user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}
+#         #$ -o {logs_folder}/out_{perturbed_state_id}.txt
+#         #$ -e {logs_folder}/err_{perturbed_state_id}.txt
+
+#         module load python/miniconda3/4.10.3
+#         source $UCL_CONDA_PATH/etc/profile.d/conda.sh
+#         cp {user_home_dir}/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
+        
+#         cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR
+
+#         cd $TMPDIR/ERP_tools
+
+#         /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} {output_csv_filename}
+#         """
+#         with open(script_filename, 'w') as file:
+#             file.write(script_content)
+#         os.system(f"qsub {script_filename}")
+
 def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations):
     import os
 
@@ -77,37 +117,41 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations):
     folder_for_jobs = f"{user_home_dir}/Scratch/MCCollisions/sge_jobs"
     output_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/results_fm{fm_num}"
     logs_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs_fm{fm_num}"
+    work_dir = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}"
 
     os.makedirs(folder_for_jobs, exist_ok=True)
     os.makedirs(output_folder, exist_ok=True)
+    os.makedirs(logs_folder, exist_ok=True)
+    os.makedirs(work_dir, exist_ok=True)
 
-    for perturbed_state_id in range(num_perturbations):
-        print(f"sat_name: {sat_name}, fm_num: {fm_num}, perturbed_state_id: {perturbed_state_id}, output_folder: {output_folder}")
-        script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}_{perturbed_state_id}.sh"
-        output_csv_filename = f"{output_folder}/{sat_name}_fm{fm_num}_perturbed_state{perturbed_state_id}_distances.csv"
-        
-        script_content = f"""#!/bin/bash -l
-        #$ -l h_rt=2:0:0
-        #$ -l mem=2G
-        #$ -l tmpfs=15G
-        #$ -N Prop_fm{fm_num}_{sat_name}_{perturbed_state_id}
-        #$ -wd {user_home_dir}/Scratch/MCCollisions/{sat_name}/propagation_fm{fm_num}
-        #$ -o {logs_folder}/out_{perturbed_state_id}.txt
-        #$ -e {logs_folder}/err_{perturbed_state_id}.txt
+    # Creating one script for all perturbed states as an array job
+    script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}.sh"
 
-        module load python/miniconda3/4.10.3
-        source $UCL_CONDA_PATH/etc/profile.d/conda.sh
-        cp {user_home_dir}/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
-        
-        cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR
+    script_content = f"""#!/bin/bash -l
+#$ -l h_rt=3:0:0
+#$ -l mem=6G
+#$ -l tmpfs=10G
+#$ -N Prop_fm{fm_num}_{sat_name}
+#$ -t 1-{num_perturbations}
+#$ -wd {work_dir}
+#$ -o {logs_folder}/out_$TASK_ID.txt
+#$ -e {logs_folder}/err_$TASK_ID.txt
 
-        cd $TMPDIR/ERP_tools
+module load python/miniconda3/4.10.3
+source $UCL_CONDA_PATH/etc/profile.d/conda.sh
+cp {user_home_dir}/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
 
-        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} {output_csv_filename}
-        """
-        with open(script_filename, 'w') as file:
-            file.write(script_content)
-        os.system(f"qsub {script_filename}")
+cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR
+
+cd $TMPDIR/ERP_tools
+
+# The TASK_ID environment variable is used to differentiate between array job tasks
+/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} $SGE_TASK_ID {output_folder}/{sat_name}_fm{fm_num}_perturbed_state${{SGE_TASK_ID}}_distances.csv
+"""
+    with open(script_filename, 'w') as file:
+        file.write(script_content)
+
+    os.system(f"qsub {script_filename}")
 
 def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
 
