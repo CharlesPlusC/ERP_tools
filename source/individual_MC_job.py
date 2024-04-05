@@ -20,7 +20,7 @@ def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False
         return df_stitched
     return df_filtered
 
-def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num):
+def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpath=None):
     force_model_configs = load_force_model_configs('misc/fm_configs.json')
     user_home_dir = os.path.expanduser("~")
     res_folder = f'{user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems/'
@@ -62,11 +62,14 @@ def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num):
 
     print(f"smallest distance: {np.min(distances)}")
     # Save the results
-    output_filename = f"{sc_res_folder}/{sat_name}_fm_{force_model_num}_state_{perturbed_state_id}_dists.csv"
-    pd.DataFrame({'UTC': propagated_state_df_interp['UTC'], 'Distance': distances}).to_csv(output_filename, index=False)
+    if outpath is None:
+        outpath = f"{sc_res_folder}/{sat_name}_fm_{force_model_num}_state_{perturbed_state_id}_dists.csv"
+    pd.DataFrame({'UTC': propagated_state_df_interp['UTC'], 'Distance': distances}).to_csv(outpath, index=False)
+
 
 if __name__ == "__main__":
     sat_name = sys.argv[1]
     force_model_num = int(sys.argv[2])
     perturbed_state_id = int(sys.argv[3])
-    propagate_and_calculate(sat_name, perturbed_state_id, force_model_num)
+    outpath = str(sys.argv[4])
+    propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpath)

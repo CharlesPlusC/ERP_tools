@@ -62,6 +62,13 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     perturbed_states = apply_perturbations(state, random_vectors, rotation_matrix)
     return perturbed_states
 
+def generate_perturbed_states(optimized_state_cov, state, num_samples):
+    # Generate perturbed states based on the covariance matrix
+    eig_vals, rotation_matrix = np.linalg.eigh(optimized_state_cov)
+    random_vectors = generate_random_vectors(eig_vals, num_samples)
+    perturbed_states = apply_perturbations(state, random_vectors, rotation_matrix)
+    return perturbed_states
+
 def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed_states_file):
     import os
 
@@ -69,8 +76,11 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed
 
     folder_for_jobs = f"{user_home_dir}/Scratch/MCCollisions/sge_jobs"
     logs_dir = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs_fm{fm_num}"
+    output_dir = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/results_fm{fm_num}/"
+
     os.makedirs(folder_for_jobs, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
     for perturbed_state_id in range(num_perturbations):
         script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}_{perturbed_state_id}.sh"
@@ -85,16 +95,12 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations, perturbed
         module load python/miniconda3/4.10.3
         source $UCL_CONDA_PATH/etc/profile.d/conda.sh
         cp {user_home_dir}/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
-        cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR/ERP_tools
-
-        cd $TMPDIR
         
-        cp {user_home_dir}/mc_collisions/ERP_tools/source/individual_MC_job.py $TMPDIR
-        cp {user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems/{sat_name}/{sat_name}_nominal_collision.csv $TMPDIR
+        cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR
 
-        cp {user_home_dir}/mc_collisions/ERP_tools/{perturbed_states_file} $TMPDIR
+        cd $TMPDIR/ERP_tools
 
-        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id}
+        /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/individual_MC_job.py {sat_name} {fm_num} {perturbed_state_id} {output_dir}
         """
         with open(script_filename, 'w') as file:
             file.write(script_content)
