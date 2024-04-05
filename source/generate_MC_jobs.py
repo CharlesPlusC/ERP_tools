@@ -175,8 +175,6 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
     os.makedirs(output_folder, exist_ok=True)
     collision_df_interp.to_csv(f"{output_folder}/{sat_name}_nominal_collision.csv", index=False)
 
-    ## Generate Perturbed States (num_perturbations * len(force_model_configs))
-
     #slice ephemeris df to be every other row (minutely data) and take only the first 35 minutes
     observations_df = ephemeris_df.iloc[::2].head(35)
     init_pos_vel_sigmas = np.array(observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']].iloc[0].tolist(), dtype=float)
