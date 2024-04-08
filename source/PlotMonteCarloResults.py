@@ -27,49 +27,60 @@ def plot_tca_vs_dca(dataframes, filenames, save_path, sat_name):
         ax.set_title(f'{sat_name} - TCA vs. DCA ({filename})')
         ax.set_xlabel('Time of Closest Approach (seconds)')
         ax.set_ylabel('Distance of Closest Approach (meters)')
-        #add grid
-        ax.grid(True)
+        #add grid with black color
+        ax.grid(color='black', linestyle='-', linewidth=0.5)
 
         plt.tight_layout()
         plt.savefig(os.path.join(save_path, f'{sat_name}_{filename}_TCA_vs_DCA.png'))
         plt.close()
 
-# Function to plot a FacetGrid of TCA distributions with simplified labels
 def plot_tca_distributions_facetgrid(dataframes, filenames, save_path, sat_name):
-    # Combine all dataframes with an identifying label
     combined_df = pd.DataFrame()
     for df, filename in zip(dataframes, filenames):
-        # Extract the unique ID from the filename
         unique_id = filename.split('_')[3]  # Adjust based on your filename structure
         label = f"fm{unique_id}"
-
         tca_seconds = (pd.to_datetime(df['TCA']) - pd.to_datetime(df['TCA'].iloc[0])).dt.total_seconds()
         temp_df = pd.DataFrame({'TCA': tca_seconds, 'Label': label})
         combined_df = pd.concat([combined_df, temp_df])
+
+    # Determine maximum TCA value range for x-axis limits
+    max_tca = max(abs(combined_df['TCA'].min()), combined_df['TCA'].max())
 
     # Create the FacetGrid object
     pal = sns.cubehelix_palette(len(dataframes), rot=-.25, light=.7)
     g = sns.FacetGrid(combined_df, row="Label", hue="Label", aspect=15, height=.5, palette=pal)
 
-    # Draw the densities
+    # Draw the densities and add the red line at TCA=0
     g.map(sns.kdeplot, "TCA", bw_adjust=.5, clip_on=False, fill=True, alpha=1, linewidth=1.5)
-    g.map(sns.kdeplot, "TCA", clip_on=False, color="w", lw=2, bw_adjust=.5)
-    g.refline(y=0, linewidth=2, linestyle="-", color=None, clip_on=False)
+    g.map(plt.axvline, x=0, color='red', linestyle='--')
+
+    # Add vertical lines for mean, first, and third quartiles
+    def add_lines(x, **kwargs):
+        mean = np.mean(x)
+        q1 = np.percentile(x, 25)
+        q3 = np.percentile(x, 75)
+        plt.axvline(mean, color='green', linestyle='--')
+        plt.axvline(q1, color='blue', linestyle=':')
+        plt.axvline(q3, color='blue', linestyle=':')
+
+    g.map(add_lines, "TCA")
 
     # Function to label the plot in axes coordinates
     def label(x, color, label):
         ax = plt.gca()
-        ax.text(0, .2, label, fontweight="bold", color=color, ha="left", va="center", transform=ax.transAxes)
+        ax.text(0, .2, label, fontweight="bold", color=color,
+                ha="left", va="center", transform=ax.transAxes, fontsize=9)
 
     g.map(label, "TCA")
 
-    # Adjust the subplots to overlap and remove axes details
+    # Adjust subplot parameters and remove axes details that don't play well with overlap
     g.figure.subplots_adjust(hspace=-.25)
     g.set_titles("")
     g.set(yticks=[], ylabel="")
     g.despine(bottom=True, left=True)
 
-    plt.tight_layout()
+    # Add the overarching title
+    plt.suptitle(f'{sat_name} - TCA Distributions', y=1.02, fontsize=16)
 
     plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_Distributions_FacetGrid.png'))
     plt.close()
