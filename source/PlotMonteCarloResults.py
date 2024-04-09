@@ -21,14 +21,14 @@ def plot_tca_vs_dca(dataframes, filenames, save_path, sat_name):
 
         # Draw a combo histogram and scatterplot with density contours
         sns.scatterplot(x=tca_seconds, y=dca, s=5, color=".15", ax=ax)
-        sns.histplot(x=tca_seconds, y=dca, bins=50, pthresh=.1, cmap="rocket", ax=ax)
-        sns.kdeplot(x=tca_seconds, y=dca, levels=5, color="w", linewidths=1, ax=ax)
+        sns.histplot(x=tca_seconds, y=dca, bins=50, pthresh=.1, cmap="rocket", cbar=True, ax=ax)
+        sns.kdeplot(x=tca_seconds, y=dca, levels=4, color="xkcd:white", linewidths=1, ax=ax)
 
         ax.set_title(f'{sat_name} - TCA vs. DCA ({filename})')
-        ax.set_xlabel('Time of Closest Approach (seconds)')
-        ax.set_ylabel('Distance of Closest Approach (meters)')
-        #add grid with black color
+        ax.set_xlabel('Δ Nominal TCA (seconds)')
+        ax.set_ylabel('Δ Nominal DCA (meters)')
         ax.grid(color='black', linestyle='-', linewidth=0.5)
+        #the delta symbol is: Δ
 
         plt.tight_layout()
         plt.savefig(os.path.join(save_path, f'{sat_name}_{filename}_TCA_vs_DCA.png'))
