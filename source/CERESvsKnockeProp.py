@@ -35,34 +35,6 @@ INTEGRATOR_MAX_STEP = 120.0
 INTEGRATOR_INIT_STEP = 30.0
 POSITION_TOLERANCE = 1.0
 
-def calculate_position_differences(end_state1, end_state2):
-    position1 = end_state1.getPVCoordinates().getPosition()
-    position2 = end_state2.getPVCoordinates().getPosition()
-    return position1.subtract(position2).getNorm()
-
-def compute_hcl_differences(state_vector_data):
-    HCL_diffs = {}
-    for name in ['CERES ERP', 'Knocke ERP']:
-        _, state_vectors = state_vector_data[name]
-        _, no_erp_state_vectors = state_vector_data['No ERP']
-        H_diffs, C_diffs, L_diffs = HCL_diff(np.array(state_vectors), np.array(no_erp_state_vectors))
-        HCL_diffs[name] = (H_diffs, C_diffs, L_diffs)
-    return HCL_diffs
-
-def generate_ephemeris_and_extract_data(propagators, start_date, end_date, time_step):
-    state_vector_data = {}
-
-    for name, propagator in propagators.items():
-        ephemeris = propagator.getEphemerisGenerator().getGeneratedEphemeris()
-        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, start_date, end_date, time_step)
-        state_vector_data[name] = (times, state_vectors)
-
-    return state_vector_data
-
-def propagate_orbit(propagator, start_date, duration):
-    end_state = propagator.propagate(start_date, start_date.shiftedBy(duration))
-    return end_state
-
 def main(TLE, sat_name):
     # CERES SYN1Deg Dataset path and TLE data
     dataset_path = 'external/data/CERES_SYN1deg-1H_Terra-Aqua-MODIS_Ed4.1_Subset_20230501-20230630.nc'

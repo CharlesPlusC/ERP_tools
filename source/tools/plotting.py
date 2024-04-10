@@ -417,7 +417,7 @@ from scipy.stats import shapiro
 
 def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, i, arc_num, estimate_drag):
     fig = plt.figure(figsize=(10, 8))
-    sns.set(style="whitegrid")
+    sns.set_theme(style="whitegrid")
     gs = GridSpec(5, 4, figure=fig, hspace=0.6)
     ax1 = fig.add_subplot(gs[0, :])
     ax2 = fig.add_subplot(gs[1, :])
@@ -490,3 +490,4 @@ def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate,
     plt.savefig(save_path)
     print(f"saving to {save_path}")
     plt.close()
+

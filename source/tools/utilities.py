@@ -675,3 +675,30 @@ def build_boxwing(satellite_name):
         panels.append(solar_array_panel)
 
     return BoxAndSolarArraySpacecraft(panels)
+
+def posvel_to_sma(x, y, z, u, v, w):
+    """
+    Calculate the semi-major axis from position and velocity vectors.
+
+    :param x, y, z: Position coordinates in meters
+    :param u, v, w: Velocity components in m/s
+    :return: Semi-major axis in meters
+    """
+    # Standard gravitational parameter for Earth in m^3/s^2 (converted from km^3/s^2)
+    mu = 398600.4418 * 1e9
+
+    # Position and velocity vectors
+    r_vector = np.array([x, y, z])
+    v_vector = np.array([u, v, w])
+
+    # Magnitudes of r and v
+    r = np.linalg.norm(r_vector)
+    v = np.linalg.norm(v_vector)
+
+    # Specific mechanical energy
+    epsilon = v**2 / 2 - mu / r
+
+    # Semi-major axis
+    a = -mu / (2 * epsilon)
+
+    return a
