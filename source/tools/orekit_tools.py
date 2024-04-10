@@ -58,6 +58,20 @@ dtcfile_data_source = DataSource(dtcfile_file)
 # ceres_times, _, _, lw_radiation_data, sw_radiation_data = extract_hourly_ceres_data(data)
 # combined_radiation_data = combine_lw_sw_data(lw_radiation_data, sw_radiation_data)
 
+def query_jb08(position, datetime):
+    frame = FramesFactory.getEME2000()
+    wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
+    jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
+                                        dtcfile_data_source)
+
+    utc = TimeScalesFactory.getUTC()
+    sun = CelestialBodyFactory.getSun()
+    atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
+    absolute_date = datetime_to_absolutedate(datetime)
+    #make vector3d object
+    position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
+    density = atmosphere.getDensity(absolute_date, position_vector, frame)
+    return density
 
 def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flags):
 
@@ -489,7 +503,7 @@ def rho_i(measured_state, measurement_type='state'):
         return measured_state
     #TODO: implement other measurement types
 
-def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate, **force_model_config):
+def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_model_config):
 
     # given a state vector, and a force model configuration, return the acceleration at that state vector
     # and the individual accelerations due to each force model component
@@ -498,7 +512,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
 
 
     epochDate = datetime_to_absolutedate(t0)
-    accelerations = []
+    accelerations_dict = {}
 
     if force_model_config.get('36x36gravity', False):
         grav_3636_acc = 0
@@ -513,7 +527,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         gravityfield_eci_t0 = extract_acceleration(state_vector, epochDate, mass, gravityfield)
         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
         grav_3636_acc+=gravityfield_eci_t0
-        accelerations.append(grav_3636_acc)
+        accelerations_dict['36x36gravity'] = grav_3636_acc
 
     if force_model_config.get('120x120gravity', False):
         grav120120_acc = 0
@@ -528,7 +542,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         gravityfield_eci_t0 = extract_acceleration(state_vector, epochDate, mass, gravityfield)
         gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
         grav120120_acc+=gravityfield_eci_t0
-        accelerations.append(grav120120_acc)
+        accelerations_dict['120x120gravity'] = grav120120_acc
 
     if force_model_config.get('3BP', False):
         luni_solar_acc = 0
@@ -544,7 +558,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         sun_eci_t0 = extract_acceleration(state_vector, epochDate, mass, sun_3dbodyattraction)
         sun_eci_t0 = np.array([sun_eci_t0[0].getX(), sun_eci_t0[0].getY(), sun_eci_t0[0].getZ()])
         luni_solar_acc+=sun_eci_t0
-        accelerations.append(luni_solar_acc)
+        accelerations_dict['3BP'] = luni_solar_acc
 
     if force_model_config.get('solid_tides', False):
         solid_tides_acc = 0
@@ -564,7 +578,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         solid_tides_sun_eci_t0 = extract_acceleration(state_vector, epochDate, mass, solid_tides_sun)
         solid_tides_sun_eci_t0 = np.array([solid_tides_sun_eci_t0[0].getX(), solid_tides_sun_eci_t0[0].getY(), solid_tides_sun_eci_t0[0].getZ()])
         solid_tides_acc+=solid_tides_sun_eci_t0
-        accelerations.append(solid_tides_acc)
+        accelerations_dict['solid_tides'] = solid_tides_acc
 
     if force_model_config.get('ocean_tides', False):
         central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
@@ -573,7 +587,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         ocean_tides = OceanTides(central_frame, ae, mu, 4, 4, IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False))
         ocean_tides_eci_t0 = extract_acceleration(state_vector, epochDate, mass, ocean_tides)
         ocean_tides_eci_t0 = np.array([ocean_tides_eci_t0[0].getX(), ocean_tides_eci_t0[0].getY(), ocean_tides_eci_t0[0].getZ()])
-        accelerations.append(ocean_tides_eci_t0)
+        accelerations_dict['ocean_tides'] = ocean_tides_eci_t0
 
     if force_model_config.get('SRP', False):
         radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
@@ -582,7 +596,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(), Constants.MOON_EQUATORIAL_RADIUS)
         solar_radiation_eci_t0 = extract_acceleration(state_vector, epochDate, mass, solarRadiationPressure)
         solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
-        accelerations.append(solar_radiation_eci_t0)
+        accelerations_dict['SRP'] = solar_radiation_eci_t0
 
     if force_model_config.get('knocke_erp', False):
         sun = CelestialBodyFactory.getSun()
@@ -592,7 +606,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
         knocke_eci_t0 = extract_acceleration(state_vector, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
-        accelerations.append(knocke_eci_t0)
+        accelerations_dict['knocke_erp'] = knocke_eci_t0
 
     # if force_model_config.get('ceres_erp', False):
     #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr) # pass the time and radiation data to the force model
@@ -605,7 +619,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         relativity_eci_t0 = extract_acceleration(state_vector, epochDate, mass, relativity)
         relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
-        accelerations.append(relativity_eci_t0)
+        accelerations_dict['relativity'] = relativity_eci_t0
 
     ###NOTE: Drag force model has to stay last in the if-loop (see below)
     if force_model_config.get('jb08drag', False):
@@ -619,7 +633,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         dragForce = DragForce(atmosphere, drag_sensitive)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
-        accelerations.append(atmospheric_drag_eci_t0)
+        accelerations_dict['jb08drag'] = atmospheric_drag_eci_t0
 
     elif force_model_config.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
@@ -632,7 +646,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         dragForce = DragForce(atmosphere, isotropicDrag)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
-        accelerations.append(atmospheric_drag_eci_t0)
+        accelerations_dict['dtm2000drag'] = atmospheric_drag_eci_t0
 
     elif force_model_config.get('nrlmsise00drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
@@ -645,6 +659,6 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, epochDate,
         dragForce = DragForce(atmosphere, isotropicDrag)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)
         atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
-        accelerations.append(atmospheric_drag_eci_t0)
+        accelerations_dict['nrlmsise00drag'] = atmospheric_drag_eci_t0
 
-    return accelerations #list of individual accelerations from each force model component passed
+    return accelerations_dict
