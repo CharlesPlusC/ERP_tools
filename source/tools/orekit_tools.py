@@ -73,6 +73,34 @@ def query_jb08(position, datetime):
     density = atmosphere.getDensity(absolute_date, position_vector, frame)
     return density
 
+def query_dtm2000(position, datetime):
+    frame = FramesFactory.getEME2000()
+    wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+    msafe = MarshallSolarActivityFutureEstimation(
+        MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+        MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+    sun = CelestialBodyFactory.getSun()
+    atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+    absolute_date = datetime_to_absolutedate(datetime)
+    #make vector3d object
+    position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
+    density = atmosphere.getDensity(absolute_date, position_vector, frame)
+    return density
+
+def query_nrlmsise00(position, datetime):
+    frame = FramesFactory.getEME2000()
+    wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
+    msafe = MarshallSolarActivityFutureEstimation(
+        MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
+        MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+    sun = CelestialBodyFactory.getSun()
+    atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+    absolute_date = datetime_to_absolutedate(datetime)
+    #make vector3d object
+    position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
+    density = atmosphere.getDensity(absolute_date, position_vector, frame)
+    return density
+
 def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flags):
 
     if config_flags.get('36x36gravity', False):
