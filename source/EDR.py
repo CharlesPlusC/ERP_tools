@@ -1,7 +1,7 @@
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir, download_orekit_data_curdir
 
-# download_orekit_data_curdir("misc")
+download_orekit_data_curdir("misc")
 vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
@@ -197,9 +197,9 @@ def main():
         mass = 600.0
         rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
         rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
-        # jb08_rhos = []
-        # dtm2000_rhos = []
-        # nrlmsise00_rhos = []
+        jb08_rhos = []
+        dtm2000_rhos = []
+        nrlmsise00_rhos = []
         x = energy_ephemeris_df['x']
         y = energy_ephemeris_df['y']
         z = energy_ephemeris_df['z']
@@ -210,18 +210,24 @@ def main():
         t = pd.to_datetime(energy_ephemeris_df['UTC'])
         
         #use posvel_to_sma to get the semi-major axis for each point
-        print(f"x: {x[:5]}, y: {y[:5]}, z: {z[:5]}, u: {u[:5]}, v: {v[:5]}, w: {w[:5]}")
+        print(f"iterating over num of points: {len(x)}")
         for i in range(len(x)):
             sma = posvel_to_sma(x[i], y[i], z[i], u[i], v[i], w[i])
             energy_ephemeris_df.at[i, 'sma'] = sma
             pos = np.array([x[i], y[i], z[i]])
             print(f"pos: {pos}, t: {t[i]}")
-            # jb08_rho = query_jb08(pos, t[i])
-            # dtm2000_rho = query_dtm2000(pos, t[i])
-            # nrlmsise00_rho = query_nrlmsise00(pos, t[i])
-            # jb08_rhos.append(jb08_rho)
-            # dtm2000_rhos.append(dtm2000_rho)
-            # nrlmsise00_rhos.append(nrlmsise00_rho)
+            #every hour get the rho_eff from the JB08, DTM2000, and NRLMSISE00 models
+            if i % 1000 == 0:
+                print(f"querying JB08, DTM2000, and NRLMSISE00 at time: {t[i]}")
+                jb08_rho = query_jb08(pos, t[i])
+                dtm2000_rho = query_dtm2000(pos, t[i])
+                nrlmsise00_rho = query_nrlmsise00(pos, t[i])
+                energy_ephemeris_df.at[i, 'jb08_rho'] = jb08_rho
+                energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
+                energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
+                jb08_rhos.append((jb08_rho, t[i]))
+                dtm2000_rhos.append((dtm2000_rho, t[i]))
+                nrlmsise00_rhos.append((nrlmsise00_rho, t[i]))
             
         smas = energy_ephemeris_df['sma']
 
@@ -232,22 +238,32 @@ def main():
         smas_180 = smas_180[180:-180]
         rho_eff_180 = rho_eff_180[180:-180]
         #slice the MJDs to be the same length as the rolling sma and rho_eff
-        MJDs = ephemeris_df['MJD'][180:-180]
+        UTCs = energy_ephemeris_df['UTC'][180:-180]
 
-        plt.plot(ephemeris_df['MJD'], rho_eff)
-        plt.xlabel('Modified Julian Date')
-        plt.ylabel('Effective Density (kg/m^3)')
-        plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
-        plt.grid(True)
-        plt.show()
+        # plt.plot(UTCs, rho_eff)
+        # plt.xlabel('Modified Julian Date')
+        # plt.ylabel('EDR Density (kg/m^3)')
+        # plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
+        # plt.grid(True)
+        # plt.show()
 
         #now same as above but with the 180-point rolling average
-        plt.plot(MJDs, rho_eff_180)
+        jb08_rhos = np.array(jb08_rhos)
+        dtm2000_rhos = np.array(dtm2000_rhos)
+        nrlmsise00_rhos = np.array(nrlmsise00_rhos)
+
+        # Now you can properly index the arrays
+        plt.plot(UTCs, rho_eff_180, label='EDR Density')
+        plt.plot(jb08_rhos[:, 1], jb08_rhos[:, 0], label='JB08 Density')
+        plt.plot(dtm2000_rhos[:, 1], dtm2000_rhos[:, 0], label='DTM2000 Density')
+        plt.plot(nrlmsise00_rhos[:, 1], nrlmsise00_rhos[:, 0], label='NRLMSISE00 Density')
         plt.xlabel('Modified Julian Date')
         plt.ylabel('Effective Density (kg/m^3)')
         plt.title(f"{sat_name}: 180-point Rolling Average Effective Density")
         plt.grid(True)
-        plt.show()
+        plt.legend()
+        # plt.show()
+        plt.savefig("output/DensityInversion/EDR_plots/EDR_{sat_name}_effective_density_{start_date_utc}_{end_date_utc}.png")
 
         # sns.set_theme(style='whitegrid')
         # fig, axs = plt.subplots(3, 1, figsize=(10, 10))
