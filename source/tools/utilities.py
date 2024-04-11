@@ -8,7 +8,9 @@ from astropy.coordinates import GCRS, ITRS, CartesianRepresentation, CartesianDi
 from typing import Tuple, List
 import requests
 import json
-
+import pandas as pd
+from scipy.interpolate import lagrange
+import pandas as pd
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from datetime import datetime, timedelta
@@ -702,3 +704,33 @@ def posvel_to_sma(x, y, z, u, v, w):
     a = -mu / (2 * epsilon)
 
     return a
+
+import numpy.polynomial.polynomial as poly
+def interpolate_ephemeris(df, start_time, end_time, freq='0.1S', window=8, degree=10):
+    df = df.drop_duplicates(subset='UTC').set_index('UTC')
+    df = df.sort_index()
+    df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=freq))
+    
+    # Prepare an output DataFrame with interpolated values
+    df_interpolated = pd.DataFrame(index=df_resampled.index, columns=df.columns)
+    
+    # Interpolate each column
+    for col in ['x', 'y', 'z', 'xv', 'yv', 'zv']:
+        for time_point in df_interpolated.index:
+            # Find the segment the time_point belongs to
+            for k in range(window, len(df) - window):
+                if df.index[k - 1] <= time_point <= df.index[k + 1]:
+                    # Determine the range for polynomial fitting
+                    x_vals = df.index[k - window:k + window + 1].astype(int)
+                    y_vals = df[col].iloc[k - window:k + window + 1]
+                    
+                    # Fit a polynomial of the given degree
+                    coefs = poly.polyfit(x_vals, y_vals, degree)
+                    
+                    # Evaluate the polynomial at the target time
+                    df_interpolated.at[time_point, col] = poly.polyval(time_point.value, coefs)
+                    break
+
+    # Handling edge cases where interpolation might not be applicable can be added here
+    
+    return df_interpolated.reset_index().rename(columns={'index': 'UTC'})

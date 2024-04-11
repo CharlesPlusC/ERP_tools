@@ -10,7 +10,7 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 
 import os
-from tools.utilities import extract_acceleration, utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
+from tools.utilities import extract_acceleration, utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma, interpolate_ephemeris
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
 import numpy as np
@@ -22,32 +22,11 @@ import numpy as np
 import math
 from scipy.special import lpmn
 from scipy.integrate import trapz
-from scipy.interpolate import CubicSpline
 
 mu = Constants.WGS84_EARTH_MU
 R_earth = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
 J2 =Constants.EGM96_EARTH_C20
 
-def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False):
-    df = df.drop_duplicates(subset='UTC').set_index('UTC')
-    df = df.sort_index()
-    df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=freq))
-    
-    for col in ['x', 'y', 'z', 'xv', 'yv', 'zv']:
-        cs = CubicSpline(df.index.astype(int), df[col])
-        df_resampled[col] = cs(df_resampled.index.astype(int))
-    
-    df_filtered = df_resampled.reset_index().rename(columns={'index': 'UTC'})
-    
-    if stitch:
-        df_stitched = pd.concat([
-            df.loc[:start_time - pd.Timedelta(freq), :],
-            df_filtered.set_index('UTC'),
-            df.loc[end_time + pd.Timedelta(freq):, :]
-        ]).reset_index()
-        return df_stitched
-    
-    return df_filtered
 
 def U_J2(r, phi, lambda_):
     theta = np.pi / 2 - phi  # Convert latitude to colatitude
@@ -218,9 +197,9 @@ def main():
         mass = 600.0
         rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
         rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
-        jb08_rhos = []
-        dtm2000_rhos = []
-        nrlmsise00_rhos = []
+        # jb08_rhos = []
+        # dtm2000_rhos = []
+        # nrlmsise00_rhos = []
         x = energy_ephemeris_df['x']
         y = energy_ephemeris_df['y']
         z = energy_ephemeris_df['z']
@@ -269,7 +248,6 @@ def main():
         plt.title(f"{sat_name}: 180-point Rolling Average Effective Density")
         plt.grid(True)
         plt.show()
-
 
         # sns.set_theme(style='whitegrid')
         # fig, axs = plt.subplots(3, 1, figsize=(10, 10))
@@ -338,5 +316,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 #### PLOTTING ####
