@@ -1,68 +1,66 @@
 import os
 import pandas as pd
 import glob
+import shutil
+from concurrent.futures import ThreadPoolExecutor
+
+def check_disk_space(directory):
+    total, used, free = shutil.disk_usage(directory)
+    return free
 
 def extract_min_distance(file_path):
-    """
-    Extract the smallest distance and its corresponding time from a CSV file.
-    """
-    df = pd.read_csv(file_path)
-    if df.empty:
-        print(f"Warning: The file {file_path} is empty.")
+    try:
+        df = pd.read_csv(file_path, usecols=['UTC', 'Distance'])
+        min_distance_row = df.loc[df['Distance'].idxmin()]
+        print(f"extracted TCA: {min_distance_row['UTC']}; DCA: {min_distance_row['Distance']} from {file_path}")
+        return min_distance_row['UTC'], min_distance_row['Distance']
+    except Exception as e:
+        print(f"Error processing file {file_path}: {e}")
         return None, None
-    min_distance_row = df.loc[df['Distance'].idxmin()]
-    return min_distance_row['UTC'], min_distance_row['Distance']
+
+def process_file(file_path):
+    tca, dca = extract_min_distance(file_path)
+    if tca and dca:
+        return {'TCA': tca, 'DCA': dca}
+    return None
 
 def process_spacecraft(sat_name, fm_num, base_directory):
-    """
-    Process all distance files for a specific spacecraft and force model,
-    creating a summary CSV file with the minimum distance and time of closest approach.
-    """
     pattern = os.path.join(base_directory, sat_name, f'results_{fm_num}', '*_distances.csv')
     distance_files = glob.glob(pattern)
-    print(f"looking for files with pattern: {pattern}")
 
     if not distance_files:
-        print(f"No distance files found for spacecraft {sat_name} and force model {fm_num}.")
         return
 
-    print(f"Processing {len(distance_files)} files for spacecraft {sat_name} and force model {fm_num}.")
-    summary_data = []
-    for i, file_path in enumerate(distance_files):
-        print(f"Processing file: {file_path}")
-        tca, dca = extract_min_distance(file_path)
-        if tca is not None and dca is not None:
-            summary_data.append({'TCA': tca, 'DCA': dca, 'sample_number': i})
-        else:
-            print(f"No valid data in file: {file_path}")
+    with ThreadPoolExecutor() as executor:
+        results = executor.map(process_file, distance_files)
 
-    if not summary_data:
-        print(f"Warning: No data was added for spacecraft {sat_name} and force model {fm_num}. CSV will be empty.")
-    else:
+    summary_data = [result for result in results if result]
+
+    if summary_data:
         summary_df = pd.DataFrame(summary_data)
-        output_file_path = os.path.join(base_directory, sat_name, 'stats', f'sc_{sat_name}_fm_{fm_num}_TCADCA.csv')
-        os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
-        summary_df.to_csv(output_file_path, index=False)
-        print(f"Output file created: {output_file_path}")
+        stats_dir = os.path.join(base_directory, sat_name, 'stats')
+        os.makedirs(stats_dir, exist_ok=True)
+        output_file_path = os.path.join(stats_dir, f'sc_{sat_name}_fm_{fm_num}_TCADCA.csv')
+        
+        # Check disk space before writing the file
+        free_space = check_disk_space(stats_dir)
+        estimated_space_needed = summary_df.memory_usage(index=True, deep=True).sum() * 10  # Rough estimate
+
+        if free_space > estimated_space_needed:
+            summary_df.to_csv(output_file_path, index=False)
+            print(f"Output file created: {output_file_path}")
+        else:
+            print("Not enough disk space to write the output file.")
 
 def main(base_directory="/home/zcesccc/Scratch/MCCollisions"):
-    """
-    Iterate through all spacecraft and force models, processing distance files.
-    """
     if not os.path.exists(base_directory):
-        print(f"Base directory {base_directory} does not exist.")
+        print("Base directory does not exist.")
         return
 
-    sat_names = os.listdir(base_directory)
-    if not sat_names:
-        print("No spacecraft directories found.")
-        return
+    sat_names = [d for d in os.listdir(base_directory) if os.path.isdir(os.path.join(base_directory, d))]
 
     for sat_name in sat_names:
-        fm_dirs = glob.glob(os.path.join(base_directory, sat_name, 'results_fm*'))
-        if not fm_dirs:
-            print(f"No force model directories found for spacecraft {sat_name}.")
-            continue
+        fm_dirs = [d for d in glob.glob(os.path.join(base_directory, sat_name, 'results_fm*')) if os.path.isdir(d)]
 
         for fm_dir in fm_dirs:
             fm_num = fm_dir.split('_')[-1]
