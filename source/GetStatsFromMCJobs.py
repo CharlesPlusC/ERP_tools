@@ -3,6 +3,7 @@ import pandas as pd
 import glob
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+import sys
 
 def check_disk_space(directory):
     total, used, free = shutil.disk_usage(directory)
@@ -52,12 +53,15 @@ def process_spacecraft(sat_name, fm_num, base_directory):
         else:
             print("Not enough disk space to write the output file.")
 
-def main(base_directory="/home/zcesccc/Scratch/MCCollisions"):
+def main(base_directory="/home/zcesccc/Scratch/MCCollisions", specific_sat_name=None):
     if not os.path.exists(base_directory):
         print("Base directory does not exist.")
         return
 
-    sat_names = [d for d in os.listdir(base_directory) if os.path.isdir(os.path.join(base_directory, d))]
+    if specific_sat_name:
+        sat_names = [specific_sat_name]
+    else:
+        sat_names = [d for d in os.listdir(base_directory) if os.path.isdir(os.path.join(base_directory, d))]
 
     for sat_name in sat_names:
         fm_dirs = [d for d in glob.glob(os.path.join(base_directory, sat_name, 'results_fm*')) if os.path.isdir(d)]
@@ -67,4 +71,5 @@ def main(base_directory="/home/zcesccc/Scratch/MCCollisions"):
             process_spacecraft(sat_name, fm_num, base_directory)
 
 if __name__ == "__main__":
-    main()
+    specific_sat = sys.argv[1] if len(sys.argv) > 1 else None
+    main(specific_sat_name=specific_sat)
