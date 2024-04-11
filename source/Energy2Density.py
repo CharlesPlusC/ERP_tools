@@ -278,6 +278,9 @@ def main():
         cross_section = 1.004
         mass = 600.0
 
+        #slice the ephemeris to be only the first 350 points
+        no_points_to_process = 10000
+        ephemeris_df = ephemeris_df.head(no_points_to_process)
         # Maintain original interpolation at 0.01-second intervals
         # ephemeris_df = ephemeris_df.head(no_points_to_process)
         interp_ephemeris_df = interpolate_ephemeris(ephemeris_df, ephemeris_df['UTC'].iloc[0], ephemeris_df['UTC'].iloc[-1], freq='0.01S')
