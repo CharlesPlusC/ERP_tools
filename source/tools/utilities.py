@@ -705,8 +705,9 @@ def posvel_to_sma(x, y, z, u, v, w):
 
     return a
 
-import numpy.polynomial.polynomial as poly
-def interpolate_ephemeris(df, start_time, end_time, freq='0.1S', window=8, degree=10):
+from scipy.interpolate import CubicHermiteSpline
+
+def interpolate_ephemeris(df, start_time, end_time, freq='0.1S', window=4):
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
     df = df.sort_index()
     df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=freq))
@@ -714,23 +715,21 @@ def interpolate_ephemeris(df, start_time, end_time, freq='0.1S', window=8, degre
     # Prepare an output DataFrame with interpolated values
     df_interpolated = pd.DataFrame(index=df_resampled.index, columns=df.columns)
     
-    # Interpolate each column
-    for col in ['x', 'y', 'z', 'xv', 'yv', 'zv']:
-        for time_point in df_interpolated.index:
-            # Find the segment the time_point belongs to
-            for k in range(window, len(df) - window):
-                if df.index[k - 1] <= time_point <= df.index[k + 1]:
-                    # Determine the range for polynomial fitting
-                    x_vals = df.index[k - window:k + window + 1].astype(int)
-                    y_vals = df[col].iloc[k - window:k + window + 1]
-                    
-                    # Fit a polynomial of the given degree
-                    coefs = poly.polyfit(x_vals, y_vals, degree)
-                    
-                    # Evaluate the polynomial at the target time
-                    df_interpolated.at[time_point, col] = poly.polyval(time_point.value, coefs)
-                    break
-
-    # Handling edge cases where interpolation might not be applicable can be added here
+    # Interpolate each set of position-velocity columns
+    pos_cols = ['x', 'y', 'z']
+    vel_cols = ['xv', 'yv', 'zv']
     
+    for pos_col, vel_col in zip(pos_cols, vel_cols):
+        pos_data = df[pos_col].to_numpy()
+        vel_data = df[vel_col].to_numpy()
+        times = df.index.astype(int) / 10**9  # Convert time to seconds for numerical stability
+        
+        # Hermite interpolation
+        hermite_spline = CubicHermiteSpline(times, pos_data, vel_data)
+        
+        # Interpolation over the new indices
+        new_times = df_resampled.index.astype(int) / 10**9
+        df_interpolated[pos_col] = hermite_spline(new_times)
+        df_interpolated[vel_col] = hermite_spline(new_times, 1)  # First derivative
+        
     return df_interpolated.reset_index().rename(columns={'index': 'UTC'})

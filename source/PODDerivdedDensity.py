@@ -43,30 +43,39 @@ def main():
         cd = 3.2
         cross_section = 1.004
         mass = 600.0
-        no_points_to_process = 30
+        no_points_to_process = 180
 
         ephemeris_df = ephemeris_df.head(no_points_to_process)
-        interp_ephemeris_df = interpolate_ephemeris(ephemeris_df, ephemeris_df['UTC'].iloc[0], ephemeris_df['UTC'].iloc[-1], freq='0.1S')
-
-        # #plot interpolated vs not interpolated
-        # plt.scatter(ephemeris_df['UTC'], ephemeris_df['xv'], label='xv')
-        # plt.scatter(ephemeris_df['UTC'], ephemeris_df['yv'], label='yv')
-        # plt.scatter(ephemeris_df['UTC'], ephemeris_df['zv'], label='zv')
-        # plt.scatter(interp_ephemeris_df['UTC'], interp_ephemeris_df['xv'], label='interp_xv')
-        # plt.scatter(interp_ephemeris_df['UTC'], interp_ephemeris_df['yv'], label='interp_yv')
-        # plt.scatter(interp_ephemeris_df['UTC'], interp_ephemeris_df['zv'], label='interp_zv')
-        # plt.xlabel('UTC')
-        # plt.ylabel('vel (m/s)')
-        # plt.title(f"{sat_name}: Interpolated vs Non-Interpolated Ephemeris")
-        # plt.legend()
-        # plt.grid(True)
-        # plt.show()
+        interp_ephemeris_df = interpolate_ephemeris(ephemeris_df, ephemeris_df['UTC'].iloc[0], ephemeris_df['UTC'].iloc[-1], freq='0.01S')
+        print(f"head of ephemeris_df: {ephemeris_df.head(10)}")
+        print(f"head of interp_ephemeris_df: {interp_ephemeris_df.head()}")
+        #where they are the same time, print the difference between the two
+        for i in range(len(ephemeris_df)):
+            if ephemeris_df['UTC'].iloc[i] == interp_ephemeris_df['UTC'].iloc[i]:
+                print(f"diff in x: {ephemeris_df['x'].iloc[i] - interp_ephemeris_df['x'].iloc[i]}")
+                print(f"diff in y: {ephemeris_df['y'].iloc[i] - interp_ephemeris_df['y'].iloc[i]}")
+                print(f"diff in z: {ephemeris_df['z'].iloc[i] - interp_ephemeris_df['z'].iloc[i]}")
+                print(f"diff in xv: {ephemeris_df['xv'].iloc[i] - interp_ephemeris_df['xv'].iloc[i]}")
+                print(f"diff in yv: {ephemeris_df['yv'].iloc[i] - interp_ephemeris_df['yv'].iloc[i]}")
+                print(f"diff in zv: {ephemeris_df['zv'].iloc[i] - interp_ephemeris_df['zv'].iloc[i]}")
 
         #calculate the pseudo accelerations
         pseudo_accelerations =  estimate_acceleration_from_vels(np.array([interp_ephemeris_df['xv'], interp_ephemeris_df['yv'], interp_ephemeris_df['zv']]).T, interp_ephemeris_df['UTC'])
         x_psuedo_acc = [acc[0] for acc in pseudo_accelerations]
         y_psuedo_acc = [acc[1] for acc in pseudo_accelerations]
         z_psuedo_acc = [acc[2] for acc in pseudo_accelerations]
+
+        #plot the pseudo accelerations each in their own subplot
+        fig, axs = plt.subplots(3)
+        fig.suptitle(f"{sat_name}: Pseudo Accelerations")
+        axs[0].plot(interp_ephemeris_df['UTC'][:-1], x_psuedo_acc)
+
+        axs[1].plot(interp_ephemeris_df['UTC'][:-1], y_psuedo_acc)
+
+        axs[2].plot(interp_ephemeris_df['UTC'][:-1], z_psuedo_acc)
+
+        plt.show()
+
 
         #drop the first el of interp_ephemeris_df to match the length of pseudo_accelerations
         interp_ephemeris_df = interp_ephemeris_df.drop(interp_ephemeris_df.index[0])
@@ -79,34 +88,50 @@ def main():
         interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
         interp_ephemeris_df.set_index('UTC', inplace=True)
         #now resample the ephmeris to 30 seconds to make the computation easier
-        # mean_30s_interp_ephem = interp_ephemeris_df.resample('30S').mean() #not sure about using the mean here...
+        interp_ephemeris_df = interp_ephemeris_df.resample('30S').mean() #not sure about using the mean here...
+
+        computed_rhos = []
+        jb08_rhos = []
 
         for i in range(1, len(interp_ephemeris_df)):
+            print(f"pts done: {i/len(interp_ephemeris_df)}")
             epoch = interp_ephemeris_df.index[i]
             vel = np.array([interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]])
             state_vector = np.array([interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i], vel[0], vel[1], vel[2]])
             computed_accelerations_dict = state2acceleration(state_vector, epoch, cr, cd, cross_section, mass, **force_model_config)
             print(f"Computed Accelerations: {computed_accelerations_dict}")
             computed_accelerations_sum = np.sum(list(computed_accelerations_dict.values()), axis=0)
+            print(f"Computed Accelerations Sum: {computed_accelerations_sum}")
+            print(f"Measured Accelerations: {np.array([interp_ephemeris_df['x_acc'][i], interp_ephemeris_df['y_acc'][i], interp_ephemeris_df['z_acc'][i]])}")
             #subtract the computed acceleration from the observed acceleration to get the "aero" acceleration
-            a_aero = computed_accelerations_sum - np.array([interp_ephemeris_df['x_acc'][i], interp_ephemeris_df['y_acc'][i], interp_ephemeris_df['z_acc'][i]])
+            a_aero = np.array([interp_ephemeris_df['x_acc'][i], interp_ephemeris_df['y_acc'][i], interp_ephemeris_df['z_acc'][i]]) - computed_accelerations_sum
             print(f"Aero Acceleration: {a_aero}")
+            r = np.array((interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i]))
+            v = np.array((interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]))
+            atm_rot = np.array([0, 0, 72.9211e-6])
+            v_rel = v - np.cross(atm_rot, r)
+            unit_v_rel = v_rel / np.linalg.norm(v_rel)
+            a_aero_dotv = np.dot(a_aero, unit_v_rel)
+            # v_components_of_o_minus_cs.append(a_aero_dotv)
+            rho = -2 * (a_aero_dotv / (cd * cross_section)) * (mass / np.abs(np.linalg.norm(v_rel))**2)
+            time = interp_ephemeris_df.index[i]
+            jb_08_rho = query_jb08(r, time)
+            computed_rhos.append(rho)
+            jb08_rhos.append(jb_08_rho)
+            print(f"Computed Density: {rho}")
+            print(f"JB08 Density: {jb_08_rho}")
 
-        ### plot the pseudo accelerations and the mean accelerations
-        #these are now mean 30 second accelerations
-        # plt.plot(mean_30s_interp_ephem.index, mean_30s_interp_ephem['x_acc'], label='x_acc')
-        # plt.plot(mean_30s_interp_ephem.index, mean_30s_interp_ephem['y_acc'], label='y_acc')
-        # plt.plot(mean_30s_interp_ephem.index, mean_30s_interp_ephem['z_acc'], label='z_acc')
-        # # these are the non-mean accelerations
-        # plt.plot(interp_ephemeris_df.index, interp_ephemeris_df['x_acc'], label='x_acc')
-        # plt.plot(interp_ephemeris_df.index, interp_ephemeris_df['y_acc'], label='y_acc')
-        # plt.plot(interp_ephemeris_df.index, interp_ephemeris_df['z_acc'], label='z_acc')
-        # plt.xlabel('UTC')
-        # plt.ylabel('Acceleration (m/s^2)')
-        # plt.title(f"{sat_name}: Pseudo Accelerations")
-        # plt.legend()
-        # plt.grid(True)
-        # plt.show()
+        ### plot the comptued and JB08 densities
+        utc_for_plotting = interp_ephemeris_df.index[1:len(computed_rhos) + 1]
+        plt.plot(utc_for_plotting, computed_rhos, label='Computed Density')
+        plt.plot(utc_for_plotting, jb08_rhos, label='JB08 Density')
+        plt.xlabel('UTC')
+        #log y axis
+        plt.yscale('log')
+        plt.ylabel('Density (kg/m^3)')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
         #subtract the computed acceleration from the observed acceleration to get the aero acceleration
         # v_components_of_o_minus_cs = []
