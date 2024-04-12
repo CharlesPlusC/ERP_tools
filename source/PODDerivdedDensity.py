@@ -43,7 +43,7 @@ def main():
         cd = 3.2
         cross_section = 1.004
         mass = 600.0
-        no_points_to_process = 180
+        no_points_to_process = 180*2
 
         ephemeris_df = ephemeris_df.head(no_points_to_process)
         interp_ephemeris_df = interpolate_ephemeris(ephemeris_df, ephemeris_df['UTC'].iloc[0], ephemeris_df['UTC'].iloc[-1], freq='0.01S')
@@ -65,16 +65,16 @@ def main():
         y_psuedo_acc = [acc[1] for acc in pseudo_accelerations]
         z_psuedo_acc = [acc[2] for acc in pseudo_accelerations]
 
-        #plot the pseudo accelerations each in their own subplot
-        fig, axs = plt.subplots(3)
-        fig.suptitle(f"{sat_name}: Pseudo Accelerations")
-        axs[0].plot(interp_ephemeris_df['UTC'][:-1], x_psuedo_acc)
+        # #plot the pseudo accelerations each in their own subplot
+        # fig, axs = plt.subplots(3)
+        # fig.suptitle(f"{sat_name}: Pseudo Accelerations")
+        # axs[0].plot(interp_ephemeris_df['UTC'][:-1], x_psuedo_acc)
 
-        axs[1].plot(interp_ephemeris_df['UTC'][:-1], y_psuedo_acc)
+        # axs[1].plot(interp_ephemeris_df['UTC'][:-1], y_psuedo_acc)
 
-        axs[2].plot(interp_ephemeris_df['UTC'][:-1], z_psuedo_acc)
+        # axs[2].plot(interp_ephemeris_df['UTC'][:-1], z_psuedo_acc)
 
-        plt.show()
+        # plt.show()
 
 
         #drop the first el of interp_ephemeris_df to match the length of pseudo_accelerations
@@ -92,6 +92,8 @@ def main():
 
         computed_rhos = []
         jb08_rhos = []
+        msis_rhos = []
+        dtm_rhos = []
 
         for i in range(1, len(interp_ephemeris_df)):
             print(f"pts done: {i/len(interp_ephemeris_df)}")
@@ -104,7 +106,7 @@ def main():
             print(f"Computed Accelerations Sum: {computed_accelerations_sum}")
             print(f"Measured Accelerations: {np.array([interp_ephemeris_df['x_acc'][i], interp_ephemeris_df['y_acc'][i], interp_ephemeris_df['z_acc'][i]])}")
             #subtract the computed acceleration from the observed acceleration to get the "aero" acceleration
-            a_aero = np.array([interp_ephemeris_df['x_acc'][i], interp_ephemeris_df['y_acc'][i], interp_ephemeris_df['z_acc'][i]]) - computed_accelerations_sum
+            a_aero = computed_accelerations_sum - np.array([interp_ephemeris_df['x_acc'][i], interp_ephemeris_df['y_acc'][i], interp_ephemeris_df['z_acc'][i]])
             print(f"Aero Acceleration: {a_aero}")
             r = np.array((interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i]))
             v = np.array((interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]))
@@ -116,15 +118,23 @@ def main():
             rho = -2 * (a_aero_dotv / (cd * cross_section)) * (mass / np.abs(np.linalg.norm(v_rel))**2)
             time = interp_ephemeris_df.index[i]
             jb_08_rho = query_jb08(r, time)
+            dtm2000_rho = query_dtm2000(r, time)
+            nrlmsise00_rho = query_nrlmsise00(r, time)
             computed_rhos.append(rho)
             jb08_rhos.append(jb_08_rho)
+            msis_rhos.append(nrlmsise00_rho)
+            dtm_rhos.append(dtm2000_rho)
             print(f"Computed Density: {rho}")
             print(f"JB08 Density: {jb_08_rho}")
+            print(f"DTM2000 Density: {dtm2000_rho}")
+            print(f"NRLMSISE00 Density: {nrlmsise00_rho}")
 
         ### plot the comptued and JB08 densities
         utc_for_plotting = interp_ephemeris_df.index[1:len(computed_rhos) + 1]
         plt.plot(utc_for_plotting, computed_rhos, label='Computed Density')
         plt.plot(utc_for_plotting, jb08_rhos, label='JB08 Density')
+        plt.plot(utc_for_plotting, msis_rhos, label='MSIS Density')
+        plt.plot(utc_for_plotting, dtm_rhos, label='DTM Density')
         plt.xlabel('UTC')
         #log y axis
         plt.yscale('log')
