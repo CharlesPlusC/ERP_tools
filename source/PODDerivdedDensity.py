@@ -45,18 +45,23 @@ def main():
         cd = 3.2
         cross_section = 1.004
         mass = 600.0
-        no_points_to_process = 180*2
+        no_points_to_process = 90
         ephemeris_df = ephemeris_df.head(no_points_to_process)
         #skip every 2nd point to reduce the number of points to process
         # ephemeris_df = ephemeris_df.iloc[::2]
         #truncate all digits in the ephemeris to have at most 6 digits after the decimal
         ephemeris_df = ephemeris_df.round(6)
-        interp_ephemeris_df = interpolate_ephemeris(ephemeris_df, ephemeris_df['UTC'].iloc[0], ephemeris_df['UTC'].iloc[-1], freq='0.01S')
-        interp_ephemeris_df = interp_ephemeris_df.round(6)
-        # print(interp_ephemeris_df)
+        interp_ephemeris_df = interpolate_ephemeris(ephemeris_df, ephemeris_df['UTC'].iloc[0], ephemeris_df['UTC'].iloc[-1], freq='0.001S', window=3)
+        #smooth the velocities
+        interp_ephemeris_df['xv'] = interp_ephemeris_df['xv'].rolling(window=100).mean()
+        interp_ephemeris_df['yv'] = interp_ephemeris_df['yv'].rolling(window=100).mean()
+        interp_ephemeris_df['zv'] = interp_ephemeris_df['zv'].rolling(window=100).mean()
+
+
         interp_velocities_x = interp_ephemeris_df['xv']
         interp_velocities_y = interp_ephemeris_df['yv']
         interp_velocities_z = interp_ephemeris_df['zv']
+
         pseudo_accelerations = take_derivative(np.array([interp_velocities_x, interp_velocities_y, interp_velocities_z]).T, interp_ephemeris_df['UTC'])
         x_psuedo_acc = [acc[0] for acc in pseudo_accelerations]
         y_psuedo_acc = [acc[1] for acc in pseudo_accelerations]
@@ -64,11 +69,8 @@ def main():
 
         #plot the smoothed and unsmoothed pseudo accelerations
         plt.plot(x_psuedo_acc, label='x pseudo acceleration')
-        # plt.plot(smooth_x_psuedo_acc, label='smooth x pseudo acceleration')
         plt.plot(y_psuedo_acc, label='y pseudo acceleration')
-        # plt.plot(smooth_y_psuedo_acc, label='smooth y pseudo acceleration')
         plt.plot(z_psuedo_acc, label='z pseudo acceleration')
-        # plt.plot(smooth_z_psuedo_acc, label='smooth z pseudo acceleration')
         plt.xlabel('UTC')
         plt.ylabel('Acceleration (m/s^2)')
         plt.legend()
@@ -93,7 +95,10 @@ def main():
         msis_rhos = []
         dtm_rhos = []
         a_aeros = []
+        rot_rate_earth = 2*np.pi/86400
+        alongtrack_o_minus_cs = []
 
+        atm_rot = np.array([0, 0, rot_rate_earth])
         for i in range(1, len(interp_ephemeris_df)):
             print(f"pts done: {i/len(interp_ephemeris_df)}")
             epoch = interp_ephemeris_df.index[i]
@@ -110,12 +115,11 @@ def main():
             print(f"Aero Acceleration: {a_aero}")
             r = np.array((interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i]))
             v = np.array((interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]))
-            # atm_rot = np.array([0, 0, 0])
-            rot_rate_earth = 2*np.pi/86400
-            atm_rot = np.array([0, 0, rot_rate_earth])
             v_rel = v - np.cross(atm_rot, r)
             unit_v_rel = v_rel / np.linalg.norm(v_rel)
             a_aero_dotv = np.dot(a_aero, unit_v_rel)
+            alongtrack_o_minus_cs.append(np.linalg.norm(a_aero_dotv))
+            print(f"areo acceleration dot velocity: {a_aero_dotv}")
             #magnitude of the velocity component of the acceleration vector in the direction of the velocity vector
             print(f"magnitude of the velocity component of the acceleration vector in the direction of the velocity vector: {np.linalg.norm(a_aero_dotv)}")
             # v_components_of_o_minus_cs.append(a_aero_dotv)
@@ -144,6 +148,11 @@ def main():
         ax.legend()
         ax.grid(True)
         plt.show()
+
+        #plot the differences in the alongtrack component of the acceleration 
+        fig, ax = plt.subplots()
+        ax.plot(interp_ephemeris_df.index[1:], alongtrack_o_minus_cs)
+
 
         #subtract the computed acceleration from the observed acceleration to get the aero acceleration
         # v_components_of_o_minus_cs = []
