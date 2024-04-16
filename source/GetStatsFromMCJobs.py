@@ -2,8 +2,8 @@ import os
 import pandas as pd
 import glob
 import shutil
-from concurrent.futures import ThreadPoolExecutor
 import sys
+from tqdm import tqdm
 
 def check_disk_space(directory):
     total, used, free = shutil.disk_usage(directory)
@@ -13,17 +13,16 @@ def extract_min_distance(file_path):
     try:
         df = pd.read_csv(file_path, usecols=['UTC', 'Distance'])
         min_distance_row = df.loc[df['Distance'].idxmin()]
-        print(f"extracted TCA: {min_distance_row['UTC']}; DCA: {min_distance_row['Distance']} from {file_path}")
         return min_distance_row['UTC'], min_distance_row['Distance']
     except Exception as e:
-        print(f"Error processing file {file_path}: {e}")
+        print("Error processing file {}: {}".format(file_path, e))
         return None, None
 
-def process_file(file_path):
+def process_file(file_path, output_file):
     tca, dca = extract_min_distance(file_path)
     if tca and dca:
-        return {'TCA': tca, 'DCA': dca}
-    return None
+        with open(output_file, 'a') as f:
+            f.write("{},{}\n".format(tca, dca))
 
 def process_spacecraft(sat_name, fm_num, base_directory):
     pattern = os.path.join(base_directory, sat_name, f'results_{fm_num}', '*_distances.csv')
@@ -32,26 +31,17 @@ def process_spacecraft(sat_name, fm_num, base_directory):
     if not distance_files:
         return
 
-    with ThreadPoolExecutor() as executor:
-        results = executor.map(process_file, distance_files)
+    stats_dir = os.path.join(base_directory, sat_name, 'stats')
+    os.makedirs(stats_dir, exist_ok=True)
+    output_file_path = os.path.join(stats_dir, f'sc_{sat_name}_fm_{fm_num}_TCADCA.csv')
 
-    summary_data = [result for result in results if result]
+    with open(output_file_path, 'w') as f:
+        f.write("TCA,DCA\n")
 
-    if summary_data:
-        summary_df = pd.DataFrame(summary_data)
-        stats_dir = os.path.join(base_directory, sat_name, 'stats')
-        os.makedirs(stats_dir, exist_ok=True)
-        output_file_path = os.path.join(stats_dir, f'sc_{sat_name}_fm_{fm_num}_TCADCA.csv')
-        
-        # Check disk space before writing the file
-        free_space = check_disk_space(stats_dir)
-        estimated_space_needed = summary_df.memory_usage(index=True, deep=True).sum() * 10  # Rough estimate
+    for file_path in tqdm(distance_files, desc=f"Processing {sat_name} FM{fm_num}"):
+        process_file(file_path, output_file_path)
 
-        if free_space > estimated_space_needed:
-            summary_df.to_csv(output_file_path, index=False)
-            print(f"Output file created: {output_file_path}")
-        else:
-            print("Not enough disk space to write the output file.")
+    print("Output file created: {}".format(output_file_path))
 
 def main(base_directory="/home/zcesccc/Scratch/MCCollisions", specific_sat_name=None):
     if not os.path.exists(base_directory):
