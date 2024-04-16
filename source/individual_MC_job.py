@@ -59,11 +59,14 @@ def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpa
 
     #make sure the time stamps of propagated_state_df_interp and nominal_collision_df are the same
     assert np.all(propagated_state_df_interp['UTC'] == nominal_collision_df['UTC'])
+    min_distance = np.min(distances)
+    min_distance_time = propagated_state_df_interp['UTC'][np.argmin(distances)]
 
     print(f"Closest Recorded Approach: {np.min(distances)}")
 
-    # Save the results
-    pd.DataFrame({'UTC': propagated_state_df_interp['UTC'], 'Distance': distances}).to_csv(outpath, index=False)
+    # Save only the TCA and DCA
+    pd.DataFrame({'UTC': [min_distance_time], 'Min Distance': [min_distance]}).to_csv(outpath, index=False)
+
 
 if __name__ == "__main__":
     sat_name = sys.argv[1]

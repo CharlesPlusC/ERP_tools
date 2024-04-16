@@ -4,7 +4,7 @@ def create_and_submit_stats_job(sat_name):
     user_home_dir = os.path.expanduser("~")
     folder_for_jobs = f"{user_home_dir}/Scratch/MCCollisions/statscollect_jobs"
     output_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/stats"
-    logs_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/logs"
+    logs_folder = f"{user_home_dir}/Scratch/MCCollisions/{sat_name}/res_collect_logs"
     python_script = f"{user_home_dir}/mc_collisions/ERP_tools/source/GetStatsFromMCJobs.py"
 
     os.makedirs(folder_for_jobs, exist_ok=True)
@@ -19,8 +19,8 @@ def create_and_submit_stats_job(sat_name):
 #$ -l tmpfs=16G
 #$ -N Stats_{sat_name}
 #$ -wd {output_folder}
-#$ -o {logs_folder}/out.txt
-#$ -e {logs_folder}/err.txt
+#$ -o {logs_folder}/stats_collect_out.txt
+#$ -e {logs_folder}/stats_collect_err.txt
 
 module load python/miniconda3/4.10.3
 source $UCL_CONDA_PATH/etc/profile.d/conda.sh
