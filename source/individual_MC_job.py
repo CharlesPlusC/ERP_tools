@@ -62,7 +62,8 @@ def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpa
     min_distance = np.min(distances)
     min_distance_time = propagated_state_df_interp['UTC'][np.argmin(distances)]
 
-    print(f"Closest Recorded Approach: {np.min(distances)}")
+    print(f"Closest Recorded Approach: {min_distance}")
+    print(f"Time of Closest Recorded Approach: {min_distance_time}")
 
     # Save only the TCA and DCA
     pd.DataFrame({'UTC': [min_distance_time], 'Min Distance': [min_distance]}).to_csv(outpath, index=False)

@@ -136,7 +136,7 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
     collision_df_interp.to_csv(f"{output_folder}/{sat_name}_nominal_collision.csv", index=False)
 
     #slice ephemeris df to be every other row (minutely data) and take only the first 35 minutes
-    observations_df = ephemeris_df.iloc[::2].head(35)
+    observations_df = ephemeris_df.iloc[::2].head(20)
     init_pos_vel_sigmas = np.array(observations_df[['x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']].iloc[0].tolist(), dtype=float)
     initial_vals = np.array(init_pos_vel_sigmas.tolist() + [cd, cr, cross_section, mass], dtype=float)
     initial_t = observations_df['UTC'].iloc[0]
@@ -152,14 +152,18 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
         primary_states_perturbed_ephem.extend(perturbed_states_primary)
         perturbed_states_file = f"{output_folder}/{sat_name}_fm{fm_num}_perturbed_states.csv"
         np.savetxt(perturbed_states_file, primary_states_perturbed_ephem, delimiter=",")
+        print(f"Generated perturbed states for {sat_name} with force model {fm_num}")
         create_and_submit_job_scripts(sat_name, fm_num, num_perturbations)
 
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_perturbations = 10000
-
+    print(f"Generating nominal and perturbed states for {sat_names_to_test}")
     for sat_name in sat_names_to_test:
+        print(f"Generating nominal and perturbed states for {sat_name}")
         generate_nominal_and_perturbed_states(sat_name, num_perturbations)
 
 if __name__ == "__main__":
+    print(f"Running MC job generation script.")
     main()
+    print(f"MC job generation complete.")
