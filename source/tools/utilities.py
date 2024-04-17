@@ -707,11 +707,44 @@ def posvel_to_sma(x, y, z, u, v, w):
 
     return a
 
+import numpy as np
+import pandas as pd
+from scipy.interpolate import lagrange
+
+def calculate_arc_to_chord_ratio(positions):
+    if len(positions) < 2:
+        return np.inf  # Avoid division by zero or invalid calculation
+    arc_length = np.sum(np.abs(np.diff(positions)))
+    chord_length = np.abs(positions[-1] - positions[0])
+    return arc_length / chord_length if chord_length > 0 else np.inf
+
+import numpy as np
+import pandas as pd
+from scipy.interpolate import lagrange
+
+def piecewise_lagrange_interpolation(x, y, num_points):
+    """Interpolate using piece-wise Lagrange polynomial based on num_points segments."""
+    n = len(y)
+    step = num_points
+    interpolated_values = []
+    new_xs = []
+
+    for i in range(0, n, step):
+        end = min(i + step, n)
+        xi = x[i:end]
+        yi = y[i:end]
+        if len(xi) > 1:  # Ensure there are at least two points to interpolate
+            poly = lagrange(xi, yi)
+            # Define interpolation points within the current xi range
+            new_xi = np.linspace(xi[0], xi[-1], num=len(xi)*10)  # Increase density
+            new_xs.extend(new_xi)
+            interpolated_values.extend(poly(new_xi))
+
+    return np.array(new_xs), np.array(interpolated_values)
 
 from scipy.interpolate import CubicSpline
 from scipy.signal import savgol_filter
-
-def improved_interpolation_and_acceleration(df, fine_freq):
+def improved_interpolation_and_acceleration(df, fine_freq, filter_window_length, filter_polyorder):
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
     df = df.sort_index()
     start_time = df.index.min()  # Automatically get the start time from the data
@@ -737,8 +770,8 @@ def improved_interpolation_and_acceleration(df, fine_freq):
         interpolated_velocities = vel_spline(new_times)
 
         # Apply Savitzky-Golay filter to the interpolated velocities for smoothing
-        window_length = 51
-        polyorder = 8   
+        window_length = filter_window_length
+        polyorder = filter_polyorder   
         if window_length > len(interpolated_velocities):
             window_length = len(interpolated_velocities) | 1  # Ensure it's odd
         smoothed_velocities = savgol_filter(interpolated_velocities, window_length, polyorder)
@@ -756,45 +789,21 @@ def improved_interpolation_and_acceleration(df, fine_freq):
 
     return df_interpolated
 
-# import numpy as np
-# import pandas as pd
-# from scipy.interpolate import CubicSpline
-
-# def improved_interpolation_and_acceleration(df, fine_freq):
-#     df = df.drop_duplicates(subset='UTC').set_index('UTC')
-#     df = df.sort_index()
-#     start_time = df.index.min()  # Automatically get the start time from the data
-#     end_time = df.index.max()    # Automatically get the end time from the data
-
-#     df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=fine_freq))
-    
-#     # Prepare an output DataFrame with columns for position, velocity, and acceleration
-#     columns = ['x', 'y', 'z', 'xv', 'yv', 'zv']
-#     df_interpolated = pd.DataFrame(index=df_resampled.index, columns=columns)
-    
-#     # Interpolate position and velocity columns
-#     pos_cols = ['x', 'y', 'z']  # Assuming original data includes position columns
-#     vel_cols = ['xv', 'yv', 'zv']
-#     for pos_col, vel_col in zip(pos_cols, vel_cols):
-#         pos_data = df[pos_col].to_numpy()
-#         vel_data = df[vel_col].to_numpy()
-#         times = df.index.astype(int) / 10**9  # Convert time to seconds for numerical stability
+def project_acc_into_HCL(x_acc, y_acc, z_acc, x, y, z, xv, yv, zv):
         
-#         pos_spline = CubicSpline(times, pos_data)
-#         vel_spline = CubicSpline(times, vel_data)
-        
-#         new_times = df_resampled.index.astype(int) / 10**9
-#         df_interpolated[pos_col] = pos_spline(new_times)
-#         df_interpolated[vel_col] = vel_spline(new_times)
+        r = np.array([x, y, z])
+        v = np.array([xv, yv, zv])
 
-#     # Calculate accelerations using finely interpolated velocity data
-#     acc_cols = ['accx', 'accy', 'accz']
-#     fine_freq_seconds = pd.to_timedelta(fine_freq).total_seconds()
-#     for vel_col, acc_col in zip(vel_cols, acc_cols):
-#         df_interpolated[acc_col] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
+        unit_radial = r/np.linalg.norm(r)
+        unit_cross_track = np.cross(r, v)/np.linalg.norm(np.cross(r, v))
+        unit_along_track = np.cross(unit_radial, unit_cross_track)
 
-#     # Reset index to add UTC back as a column
-#     df_interpolated = df_interpolated.reset_index().rename(columns={'index': 'UTC'})
+        #put the three unit vectors into a matrix
+        unit_vectors = np.array([unit_radial, unit_cross_track, unit_along_track])
 
-#     return df_interpolated
+        acc = np.array([x_acc, y_acc, z_acc])
 
+        #now project the acceleration vector into the HCL frame
+        acc_HCL = np.matmul(unit_vectors, acc)
+
+        return acc_HCL
