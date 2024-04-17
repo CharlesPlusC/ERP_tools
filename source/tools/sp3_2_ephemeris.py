@@ -31,8 +31,7 @@ def read_sp3_gz_file(sp3_gz_file_path):
     velocities = []
 
     for record in records:
-        utc_time = record.time
-        times.append(utc_time)
+        times.append(record.time)
         positions.append(record.position)
         velocities.append(record.velocity)
 

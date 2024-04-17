@@ -485,8 +485,9 @@ def utc_to_mjd(utc_time: datetime) -> float:
     else:
         rounded_utc_time = utc_time.replace(microsecond=0)
 
+    #the time is rounded otherwise some floating point errors can occur in the microseconds
     # Convert the rounded datetime object to Astropy Time object
-    time = Time(rounded_utc_time, format='datetime', scale='utc', precision=9)
+    time = Time(utc_time, format='datetime', scale='utc', precision=15)
 
     # Convert to Modified Julian Date
     mjd = time.mjd
@@ -525,6 +526,7 @@ def SP3_to_EME2000(itrs_pos, itrs_vel, mjds):
 
         # Round the days to the nearest second before creating the timedelta
         # NOTE: this is to avoid floating point errors when creating the timedelta
+        seconds_since_epoch = (days_since_epoch * 86400)
         seconds_since_epoch = round(days_since_epoch * 86400)
         dt = base_date + timedelta(seconds=seconds_since_epoch)
         dt = dt.replace(tzinfo=timezone.utc)
@@ -705,31 +707,94 @@ def posvel_to_sma(x, y, z, u, v, w):
 
     return a
 
-from scipy.interpolate import CubicHermiteSpline
 
-def interpolate_ephemeris(df, start_time, end_time, freq='0.1S', window=4):
+from scipy.interpolate import CubicSpline
+from scipy.signal import savgol_filter
+
+def improved_interpolation_and_acceleration(df, fine_freq):
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
     df = df.sort_index()
-    df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=freq))
+    start_time = df.index.min()  # Automatically get the start time from the data
+    end_time = df.index.max()    # Automatically get the end time from the data
+
+    df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=fine_freq))
     
-    # Prepare an output DataFrame with interpolated values
-    df_interpolated = pd.DataFrame(index=df_resampled.index, columns=df.columns)
+    columns = ['x', 'y', 'z', 'xv', 'yv', 'zv']
+    df_interpolated = pd.DataFrame(index=df_resampled.index, columns=columns)
     
-    # Interpolate each set of position-velocity columns
     pos_cols = ['x', 'y', 'z']
     vel_cols = ['xv', 'yv', 'zv']
-    
     for pos_col, vel_col in zip(pos_cols, vel_cols):
         pos_data = df[pos_col].to_numpy()
         vel_data = df[vel_col].to_numpy()
-        times = df.index.astype(int) / 10**9  # Convert time to seconds for numerical stability
+        times = df.index.astype(int) / 10**9
         
-        # Hermite interpolation
-        hermite_spline = CubicHermiteSpline(times, pos_data, vel_data)
+        pos_spline = CubicSpline(times, pos_data)
+        vel_spline = CubicSpline(times, vel_data)
         
-        # Interpolation over the new indices
         new_times = df_resampled.index.astype(int) / 10**9
-        df_interpolated[pos_col] = hermite_spline(new_times)
-        df_interpolated[vel_col] = hermite_spline(new_times, 1)  # First derivative
+        df_interpolated[pos_col] = pos_spline(new_times)
+        interpolated_velocities = vel_spline(new_times)
+
+        # Apply Savitzky-Golay filter to the interpolated velocities for smoothing
+        window_length = 51
+        polyorder = 8   
+        if window_length > len(interpolated_velocities):
+            window_length = len(interpolated_velocities) | 1  # Ensure it's odd
+        smoothed_velocities = savgol_filter(interpolated_velocities, window_length, polyorder)
         
-    return df_interpolated.reset_index().rename(columns={'index': 'UTC'})
+        df_interpolated[vel_col] = smoothed_velocities
+
+    fine_freq_seconds = pd.to_timedelta(fine_freq).total_seconds()
+
+    acc_cols = ['accx', 'accy', 'accz']
+    for vel_col, acc_col in zip(vel_cols, acc_cols):
+        # Now calculate acceleration from the smoothed velocity data
+        df_interpolated[acc_col] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
+
+    df_interpolated = df_interpolated.reset_index().rename(columns={'index': 'UTC'})
+
+    return df_interpolated
+
+# import numpy as np
+# import pandas as pd
+# from scipy.interpolate import CubicSpline
+
+# def improved_interpolation_and_acceleration(df, fine_freq):
+#     df = df.drop_duplicates(subset='UTC').set_index('UTC')
+#     df = df.sort_index()
+#     start_time = df.index.min()  # Automatically get the start time from the data
+#     end_time = df.index.max()    # Automatically get the end time from the data
+
+#     df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=fine_freq))
+    
+#     # Prepare an output DataFrame with columns for position, velocity, and acceleration
+#     columns = ['x', 'y', 'z', 'xv', 'yv', 'zv']
+#     df_interpolated = pd.DataFrame(index=df_resampled.index, columns=columns)
+    
+#     # Interpolate position and velocity columns
+#     pos_cols = ['x', 'y', 'z']  # Assuming original data includes position columns
+#     vel_cols = ['xv', 'yv', 'zv']
+#     for pos_col, vel_col in zip(pos_cols, vel_cols):
+#         pos_data = df[pos_col].to_numpy()
+#         vel_data = df[vel_col].to_numpy()
+#         times = df.index.astype(int) / 10**9  # Convert time to seconds for numerical stability
+        
+#         pos_spline = CubicSpline(times, pos_data)
+#         vel_spline = CubicSpline(times, vel_data)
+        
+#         new_times = df_resampled.index.astype(int) / 10**9
+#         df_interpolated[pos_col] = pos_spline(new_times)
+#         df_interpolated[vel_col] = vel_spline(new_times)
+
+#     # Calculate accelerations using finely interpolated velocity data
+#     acc_cols = ['accx', 'accy', 'accz']
+#     fine_freq_seconds = pd.to_timedelta(fine_freq).total_seconds()
+#     for vel_col, acc_col in zip(vel_cols, acc_cols):
+#         df_interpolated[acc_col] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
+
+#     # Reset index to add UTC back as a column
+#     df_interpolated = df_interpolated.reset_index().rename(columns={'index': 'UTC'})
+
+#     return df_interpolated
+
