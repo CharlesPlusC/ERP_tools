@@ -23,6 +23,10 @@ import math
 from scipy.special import lpmn
 from scipy.integrate import trapz
 
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import pandas as pd
+import os
 import numpy as np
 import pandas as pd
 import datetime
@@ -95,45 +99,96 @@ def main():
         return density_inversion_df
 
 def plot_density_data(density_df, moving_avg_minutes):
-    # Convert moving average minutes to the number of points based on data frequency
-    freq_in_seconds = pd.infer_freq(density_df['Epoch'])
-    seconds_per_point = pd.to_timedelta(freq_in_seconds).seconds
+    # Ensure 'Epoch' is converted to datetime
+    if density_df['Epoch'].dtype != 'datetime64[ns]':
+        density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
+
+    # Calculate the window size based on data frequency and moving average duration
+    if pd.infer_freq(density_df['Epoch']) is None:
+        density_df = density_df.set_index('Epoch').asfreq('infer')
+    seconds_per_point = pd.to_timedelta(pd.infer_freq(density_df['Epoch'])).seconds
     window_size = (moving_avg_minutes * 60) // seconds_per_point
 
-    # Set Epoch as the index for plotting
-    density_df.set_index('Epoch', inplace=True)
-
     # Compute the moving average for Computed Density
-    density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size).mean()
+    density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
+    density_df = density_df.iloc[185:-5] #get rid of the values that are weird because of the moving average
 
     # Plotting
-    plt.figure(figsize=(10, 6))
-    plt.plot(density_df.index, density_df['Computed Density'], label='Computed Density')
-    plt.plot(density_df.index, density_df['JB08 Density'], label='JB08 Density')
-    plt.plot(density_df.index, density_df['DTM2000 Density'], label='DTM2000 Density')
-    plt.plot(density_df.index, density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
-    plt.plot(density_df.index, density_df['Computed Density MA'], label='Computed Density Moving Average', linestyle='--')
+    plt.figure(figsize=(11, 7)) 
+    # plt.plot(density_df['Epoch'], density_df['Computed Density'], label='Computed Density')
+    plt.plot(density_df['Epoch'], density_df['JB08 Density'], label='JB08 Density')
+    plt.plot(density_df['Epoch'], density_df['DTM2000 Density'], label='DTM2000 Density')
+    plt.plot(density_df['Epoch'], density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
+    plt.plot(density_df['Epoch'], density_df['Computed Density MA'], label='Computed Density Moving Average', linestyle='--')
 
     plt.title('Density Data Over Time')
-    plt.xlabel('Epoch')
+    plt.xlabel('Epoch (UTC)')
     plt.ylabel('Density')
-    plt.yscale('log')
     plt.legend()
+    plt.yscale('log')  
     plt.grid(True)
+
+    # Date formatting for better visibility
+    plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.gca().xaxis.set_major_formatter(mdates.ConciseDateFormatter(mdates.AutoDateLocator()))
+    plt.xticks(rotation=45)
 
     # Save the plot
     save_folder = "output/DensityInversion/PODBasedAccelerometry/Plots"
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d')}_density_plot.png"
-    plt.savefig(os.path.join(save_folder, filename))
+    plt.savefig(os.path.join(save_folder, filename), dpi=600)
     plt.close()
 
-if __name__ == "__main__":
-    densitydf = main()
-    # densitydf = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
-    # plot_density_data(densitydf, 35)
+def density_compare_scatter(density_df, moving_avg_window):
+    # Convert moving average minutes to the number of points based on data frequency
+    if not isinstance(density_df.index, pd.DatetimeIndex):
+        density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
+        density_df.set_index('Epoch', inplace=True)
+    
+    # Calculate moving average for the Computed Density
+    freq_in_seconds = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+    window_size = (moving_avg_window * 60) // freq_in_seconds
+    density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, min_periods=1).mean()
 
+    #drop the first and last 10 rows for computed density moving average as they are skewed
+    density_df = density_df.iloc[185:-10]
+
+    #plot line plot of epoch vs computed density moving average
+    plt.figure(figsize=(11, 7))
+    plt.plot(density_df.index, density_df['Computed Density MA'], label='Computed Density Moving Average')
+    plt.plot(density_df.index, density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
+    plt.yscale('log')
+    plt.legend()
+    plt.xlabel('Epoch (UTC)')
+    plt.ylabel('Density')
+    plt.title('Computed Density Moving Average vs. NRLMSISE00 Density')
+    plt.grid(True)
+    plt.show()
+
+    # Clean up data
+    density_df = density_df.dropna(subset=['Computed Density MA', 'NRLMSISE00 Density'])
+    density_df = density_df[density_df['Computed Density MA'] > 0]  # Filter out non-positive values for log scale
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    plt.scatter(density_df['NRLMSISE00 Density'], density_df['Computed Density MA'], alpha=0.5)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel('NRLMSISE00 Density')
+    plt.ylabel('Computed Density Moving Average')
+    plt.title('Comparison of NRLMSISE00 Density vs. Estimated Density')
+    plt.grid(True)
+    plt.show()
+
+
+if __name__ == "__main__":
+    # densitydf = main()
+    densitydf = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
+    density_compare_scatter(densitydf, 45)
+    # plot_density_data(densitydf, 45)
+ 
 
 #TODO:
 # Compare accelerations that result from differentiation of SP3 velocity data to GNV_1B PODAAC accelerometer readings

@@ -27,7 +27,6 @@ mu = Constants.WGS84_EARTH_MU
 R_earth = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
 J2 =Constants.EGM96_EARTH_C20
 
-
 def U_J2(r, phi, lambda_):
     theta = np.pi / 2 - phi  # Convert latitude to colatitude
     # J2 potential term calculation, excluding the monopole term
@@ -88,8 +87,6 @@ def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
     
     return rho_eff
 
-folder_save = "output/DensityInversion/OrbitEnergy"
-
 def main():
     # sat_names_to_test = ["GRACE-FO-B", "TerraSAR-X", "TanDEM-X", "CHAMP"]
     sat_names_to_test = ["GRACE-FO-A"]
@@ -101,6 +98,7 @@ def main():
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         start_date_utc = ephemeris_df['UTC'].iloc[0]
         end_date_utc = ephemeris_df['UTC'].iloc[-1]
+        folder_save = "output/DensityInversion/OrbitEnergy"
         file_name = os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.csv")
         
         if os.path.exists(file_name):
@@ -189,6 +187,7 @@ def main():
             #TODO: the above will only really work if the ephemeris is 30s time steps
         EDR = -energy_ephemeris_df['HOT_total_diff']
         #now get the 180-point rolling average of the EDR
+        EDR60 = EDR.rolling(window=60, min_periods=1).mean()
         EDR_180 = EDR.rolling(window=180, min_periods=1).mean()
         velocity = np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0)
         time_steps = energy_ephemeris_df['MJD']
@@ -196,6 +195,7 @@ def main():
         A_ref = 1.004  # From Mehta et al 2013
         mass = 600.0
         rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
+        rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
         rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
         jb08_rhos = []
         dtm2000_rhos = []
@@ -217,7 +217,7 @@ def main():
             pos = np.array([x[i], y[i], z[i]])
             print(f"pos: {pos}, t: {t[i]}")
             #every hour get the rho_eff from the JB08, DTM2000, and NRLMSISE00 models
-            if i % 1000 == 0:
+            if i % 100 == 0:
                 print(f"querying JB08, DTM2000, and NRLMSISE00 at time: {t[i]}")
                 jb08_rho = query_jb08(pos, t[i])
                 dtm2000_rho = query_dtm2000(pos, t[i])
@@ -237,15 +237,17 @@ def main():
         #slice the rolling sma and rho_eff by 180 points at the start and at the finish
         smas_180 = smas_180[180:-180]
         rho_eff_180 = rho_eff_180[180:-180]
+        rho_eff_60 = rho_eff_60[180:-180]
+        rho_eff = rho_eff[180:-180]
         #slice the MJDs to be the same length as the rolling sma and rho_eff
         UTCs = energy_ephemeris_df['UTC'][180:-180]
 
-        # plt.plot(UTCs, rho_eff)
-        # plt.xlabel('Modified Julian Date')
-        # plt.ylabel('EDR Density (kg/m^3)')
-        # plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
-        # plt.grid(True)
-        # plt.show()
+        plt.plot(UTCs, rho_eff)
+        plt.xlabel('Modified Julian Date')
+        plt.ylabel('EDR Density (kg/m^3)')
+        plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
+        plt.grid(True)
+        plt.show()
 
         #now same as above but with the 180-point rolling average
         jb08_rhos = np.array(jb08_rhos)
@@ -253,13 +255,15 @@ def main():
         nrlmsise00_rhos = np.array(nrlmsise00_rhos)
 
         # Now you can properly index the arrays
-        plt.plot(UTCs, rho_eff_180, label='EDR Density')
+        plt.plot(UTCs, rho_eff_180, label='EDR Density 180-point moving average')
+        plt.plot(UTCs, rho_eff_60, label='EDR Density 60-point moving average')
+        plt.plot(UTCs, rho_eff, label='EDR Density')
         plt.plot(jb08_rhos[:, 1], jb08_rhos[:, 0], label='JB08 Density')
         plt.plot(dtm2000_rhos[:, 1], dtm2000_rhos[:, 0], label='DTM2000 Density')
         plt.plot(nrlmsise00_rhos[:, 1], nrlmsise00_rhos[:, 0], label='NRLMSISE00 Density')
         plt.xlabel('Modified Julian Date')
         plt.ylabel('Effective Density (kg/m^3)')
-        plt.title(f"{sat_name}: 180-point Rolling Average Effective Density")
+        plt.title(f"{sat_name}: 180-point Rolling Density")
         plt.grid(True)
         plt.legend()
         # plt.show()
