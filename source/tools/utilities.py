@@ -745,6 +745,7 @@ def piecewise_lagrange_interpolation(x, y, num_points):
 from scipy.interpolate import CubicSpline
 from scipy.signal import savgol_filter
 def improved_interpolation_and_acceleration(df, fine_freq, filter_window_length, filter_polyorder):
+    #TODO: split into two functions
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
     df = df.sort_index()
     start_time = df.index.min()  # Automatically get the start time from the data
@@ -805,5 +806,7 @@ def project_acc_into_HCL(x_acc, y_acc, z_acc, x, y, z, xv, yv, zv):
 
         #now project the acceleration vector into the HCL frame
         acc_HCL = np.matmul(unit_vectors, acc)
-
-        return acc_HCL
+        h_acc = acc_HCL[0]
+        c_acc = acc_HCL[1]
+        l_acc = acc_HCL[2]
+        return h_acc, c_acc, l_acc
