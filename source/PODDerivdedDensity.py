@@ -102,24 +102,30 @@ def plot_density_data(density_df, moving_avg_minutes):
     # Ensure 'Epoch' is converted to datetime
     if density_df['Epoch'].dtype != 'datetime64[ns]':
         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
+    
+    # Set 'Epoch' as the index if not already set
+    if not isinstance(density_df.index, pd.DatetimeIndex):
+        density_df.set_index('Epoch', inplace=True)
 
     # Calculate the window size based on data frequency and moving average duration
-    if pd.infer_freq(density_df['Epoch']) is None:
-        density_df = density_df.set_index('Epoch').asfreq('infer')
-    seconds_per_point = pd.to_timedelta(pd.infer_freq(density_df['Epoch'])).seconds
+    if pd.infer_freq(density_df.index) is None:
+        density_df = density_df.asfreq('infer')
+    seconds_per_point = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
     window_size = (moving_avg_minutes * 60) // seconds_per_point
 
     # Compute the moving average for Computed Density
     density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
-    density_df = density_df.iloc[185:-5] #get rid of the values that are weird because of the moving average
+    shift_periods = ((moving_avg_minutes/2) * 60) // seconds_per_point
+
+    # Shift the moving average back by 30 minutes
+    density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
 
     # Plotting
-    plt.figure(figsize=(11, 7)) 
-    # plt.plot(density_df['Epoch'], density_df['Computed Density'], label='Computed Density')
-    plt.plot(density_df['Epoch'], density_df['JB08 Density'], label='JB08 Density')
-    plt.plot(density_df['Epoch'], density_df['DTM2000 Density'], label='DTM2000 Density')
-    plt.plot(density_df['Epoch'], density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
-    plt.plot(density_df['Epoch'], density_df['Computed Density MA'], label='Computed Density Moving Average', linestyle='--')
+    plt.figure(figsize=(11, 7))
+    plt.plot(density_df.index, density_df['JB08 Density'], label='JB08 Density')
+    plt.plot(density_df.index, density_df['DTM2000 Density'], label='DTM2000 Density')
+    plt.plot(density_df.index, density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
+    plt.plot(density_df.index, density_df['Computed Density MA'], label='Computed Density Moving Average', linestyle='--')
 
     plt.title('Density Data Over Time')
     plt.xlabel('Epoch (UTC)')
@@ -141,7 +147,11 @@ def plot_density_data(density_df, moving_avg_minutes):
     plt.savefig(os.path.join(save_folder, filename), dpi=600)
     plt.close()
 
-def density_compare_scatter(density_df, moving_avg_window):
+def density_compare_scatter(density_df, moving_avg_window, save_path='output/DensityInversion/PODBasedAccelerometry/Plots/'):
+    # Ensure the save directory exists
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
     # Convert moving average minutes to the number of points based on data frequency
     if not isinstance(density_df.index, pd.DatetimeIndex):
         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
@@ -151,43 +161,54 @@ def density_compare_scatter(density_df, moving_avg_window):
     freq_in_seconds = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
     window_size = (moving_avg_window * 60) // freq_in_seconds
     density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, min_periods=1).mean()
-
-    #drop the first and last 10 rows for computed density moving average as they are skewed
+    
     density_df = density_df.iloc[185:-10]
 
-    #plot line plot of epoch vs computed density moving average
-    plt.figure(figsize=(11, 7))
-    plt.plot(density_df.index, density_df['Computed Density MA'], label='Computed Density Moving Average')
-    plt.plot(density_df.index, density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
-    plt.yscale('log')
-    plt.legend()
-    plt.xlabel('Epoch (UTC)')
-    plt.ylabel('Density')
-    plt.title('Computed Density Moving Average vs. NRLMSISE00 Density')
-    plt.grid(True)
-    plt.show()
+    # Model names to compare
+    model_names = ['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
 
-    # Clean up data
-    density_df = density_df.dropna(subset=['Computed Density MA', 'NRLMSISE00 Density'])
-    density_df = density_df[density_df['Computed Density MA'] > 0]  # Filter out non-positive values for log scale
+    for model in model_names:
+        # Clean up data for each model
+        plot_data = density_df.dropna(subset=['Computed Density MA', model])
+        plot_data = plot_data[plot_data['Computed Density MA'] > 0]  # Ensure positive values for log scale
 
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    plt.scatter(density_df['NRLMSISE00 Density'], density_df['Computed Density MA'], alpha=0.5)
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlabel('NRLMSISE00 Density')
-    plt.ylabel('Computed Density Moving Average')
-    plt.title('Comparison of NRLMSISE00 Density vs. Estimated Density')
-    plt.grid(True)
-    plt.show()
+        # Scatter plot creation
+        plt.figure(figsize=(10, 6))
+        plt.scatter(plot_data[model], plot_data['Computed Density MA'], alpha=0.5)
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel(f'{model}')
+        plt.ylabel('Computed Density Moving Average')
+        plt.title(f'Comparison of {model} vs. Estimated Density')
+        plt.grid(True)
+
+        # Save the plot to the specified path
+        plot_filename = f'comparison_{model.replace(" ", "_")}.png'
+        plt.savefig(os.path.join(save_path, plot_filename))
+        plt.close()
+
+        #and now plot the density over time for both the model and the computed density
+        plt.figure(figsize=(11, 7))
+        plt.plot(plot_data.index, plot_data['Computed Density MA'], label='Computed Density Moving Average')
+        plt.plot(plot_data.index, plot_data[model], label=f'{model}')
+        plt.title(f'{model} vs. Computed Density Over Time')
+        plt.xlabel('Epoch (UTC)')
+        plt.ylabel('Density')
+        plt.legend()
+        plt.yscale('log')
+        plt.grid(True)
+        plot_filename = f'comparison_{model.replace(" ", "_")}_time.png'
+        plt.savefig(os.path.join(save_path, plot_filename))
+        plt.close()
+
+
 
 
 if __name__ == "__main__":
     # densitydf = main()
     densitydf = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
-    density_compare_scatter(densitydf, 45)
-    # plot_density_data(densitydf, 45)
+    # density_compare_scatter(densitydf, 45)
+    plot_density_data(densitydf, 48)
  
 
 #TODO:
