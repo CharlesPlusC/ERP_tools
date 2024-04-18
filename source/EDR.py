@@ -153,8 +153,8 @@ def main():
                 phi_rad = np.radians(row['lat'])
                 lambda_rad = np.radians(row['lon'])
                 r = row['alt']
-                degree = 64
-                order = 64
+                degree = 80
+                order = 80
                 date = datetime_to_absolutedate(row['UTC'])
 
                 # Compute non-spherical and J2 potential
@@ -271,7 +271,8 @@ def main():
         plt.ylabel('EDR Density (kg/m^3)')
         plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
         plt.grid(True)
-        plt.show()
+        plot_folder_save = "output/DensityInversion/EDR/Plots"
+        savefile = os.path.join(plot_folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
 
         #now same as above but with the 180-point rolling average
         jb08_rhos = np.array(jb08_rhos)
@@ -291,7 +292,8 @@ def main():
         plt.grid(True)
         plt.legend()
         plt.show()
-        savefile = os.path.join(folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
+        plot_folder_save = "output/DensityInversion/EDR/Plots"
+        savefile = os.path.join(plot_folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
         plt.savefig(savefile)
 
         # sns.set_theme(style='whitegrid')
