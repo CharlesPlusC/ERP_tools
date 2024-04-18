@@ -34,7 +34,7 @@ import os
 from tqdm import tqdm
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A"]
+    sat_names_to_test = ["GRACE-FO-B"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         force_model_config = {
@@ -43,7 +43,7 @@ def main():
         }
         settings = {
             'cr': 1.5, 'cd': 3.2, 'cross_section': 1.004, 'mass': 600.0,
-            'no_points_to_process': 180*5, 'filter_window_length': 21, 'filter_polyorder': 7,
+            'no_points_to_process': 180*100, 'filter_window_length': 21, 'filter_polyorder': 7,
             'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
         }
         ephemeris_df = ephemeris_df.head(settings['no_points_to_process'])
@@ -115,9 +115,11 @@ def plot_density_data(density_df, moving_avg_minutes):
 
     # Compute the moving average for Computed Density
     density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
-    shift_periods = ((moving_avg_minutes/2) * 60) // seconds_per_point
+    
+    # Calculate the number of periods to shift equivalent to half of the moving average window in minutes
+    shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)  # Ensure integer conversion
 
-    # Shift the moving average back by 30 minutes
+    # Shift the moving average back by the calculated periods
     density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
 
     # Plotting
@@ -160,9 +162,15 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
     # Calculate moving average for the Computed Density
     freq_in_seconds = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
     window_size = (moving_avg_window * 60) // freq_in_seconds
-    density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, min_periods=1).mean()
     
-    density_df = density_df.iloc[185:-10]
+    # Compute the moving average for Computed Density
+    density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
+
+    # Calculate the number of points to shift equivalent to half of the moving average window
+    shift_periods = int((moving_avg_window / 2 * 60) // freq_in_seconds)
+
+    # Shift the moving average back by the calculated periods
+    density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
 
     # Model names to compare
     model_names = ['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
@@ -174,9 +182,7 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
 
         # Scatter plot creation
         plt.figure(figsize=(10, 6))
-        plt.scatter(plot_data[model], plot_data['Computed Density MA'], alpha=0.5)
-        plt.xscale('log')
-        plt.yscale('log')
+        plt.scatter(plot_data[model], plot_data['Computed Density MA'], alpha=0.1)
         plt.xlabel(f'{model}')
         plt.ylabel('Computed Density Moving Average')
         plt.title(f'Comparison of {model} vs. Estimated Density')
@@ -187,28 +193,27 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
         plt.savefig(os.path.join(save_path, plot_filename))
         plt.close()
 
-        #and now plot the density over time for both the model and the computed density
+        # Line plot of density over time for both the model and the computed density
         plt.figure(figsize=(11, 7))
         plt.plot(plot_data.index, plot_data['Computed Density MA'], label='Computed Density Moving Average')
-        plt.plot(plot_data.index, plot_data[model], label=f'{model}')
+        plt.plot(plot_data.index, plot_data[model], label=model)
         plt.title(f'{model} vs. Computed Density Over Time')
         plt.xlabel('Epoch (UTC)')
         plt.ylabel('Density')
         plt.legend()
-        plt.yscale('log')
         plt.grid(True)
         plot_filename = f'comparison_{model.replace(" ", "_")}_time.png'
         plt.savefig(os.path.join(save_path, plot_filename))
         plt.close()
 
 
-
-
 if __name__ == "__main__":
-    # densitydf = main()
-    densitydf = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
-    # density_compare_scatter(densitydf, 45)
-    plot_density_data(densitydf, 48)
+    densitydf = main()
+    # densitydf_gfo_A = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
+    densitydf_gfo_B = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-18_GRACE-FO-B_density_inversion.csv")
+
+    # density_compare_scatter(densitydf_gfo_B, 48)
+    plot_density_data(densitydf_gfo_B, 48)
  
 
 #TODO:

@@ -10,16 +10,14 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 
 import os
-from tools.utilities import extract_acceleration, utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma, interpolate_ephemeris
+from tools.utilities import utc_to_mjd, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
-from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
+from tools.orekit_tools import query_jb08, query_dtm2000, query_nrlmsise00, state2acceleration
 import numpy as np
 import datetime
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
 import numpy as np
-import math
 from scipy.special import lpmn
 from scipy.integrate import trapz
 
@@ -89,23 +87,29 @@ def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
 
 def main():
     # sat_names_to_test = ["GRACE-FO-B", "TerraSAR-X", "TanDEM-X", "CHAMP"]
+    force_model_config = {'3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    settings = {'cr': 1.5, 'cd': 3.2, 'cross_section': 1.004, 'mass': 600.0}   
     sat_names_to_test = ["GRACE-FO-A"]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         print(f'length of ephemeris_df: {len(ephemeris_df)}')
-        # ephemeris_df = ephemeris_df.head(250)
+        ephemeris_df = ephemeris_df.head(180*5)
         # take the UTC column and convert to mjd
         ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
         start_date_utc = ephemeris_df['UTC'].iloc[0]
         end_date_utc = ephemeris_df['UTC'].iloc[-1]
-        folder_save = "output/DensityInversion/OrbitEnergy"
-        file_name = os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.csv")
-        
+        folder_save = "output/DensityInversion/EDR/Data"
+        datenow = datetime.datetime.now().strftime("%Y-%m-%d")
+        file_name = os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}_tstamp{datenow}.csv")
+        #find the time difference between the first two points
+        delta_t = ephemeris_df['MJD'].iloc[1] - ephemeris_df['MJD'].iloc[0]
+
         if os.path.exists(file_name):
             print(f"Fetching data from {file_name}")
             energy_ephemeris_df = pd.read_csv(file_name)
         else:
             print(f"Computing data for {sat_name}")
+            energy_ephemeris_df = ephemeris_df.copy()
             x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
             # Convert EME2000 to ITRF for each point
             for _, row in energy_ephemeris_df.iterrows():
@@ -140,25 +144,45 @@ def main():
             print(f"first five values of monopole potential: {monopole_potential[:5]}")
             energy_ephemeris_df['monopole'] = monopole_potential
 
+            # Initializations
             U_non_sphericals = []
             U_j2s = []
+            work_done_by_other_accs = []  # This will store the work done at each timestep
+
             for _, row in energy_ephemeris_df.iterrows():
-                print(f"computing potential for {row['lat']}, {row['lon']}, {row['alt']}")
                 phi_rad = np.radians(row['lat'])
                 lambda_rad = np.radians(row['lon'])
                 r = row['alt']
                 degree = 64
                 order = 64
                 date = datetime_to_absolutedate(row['UTC'])
-                U_non_spher =  compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
+
+                # Compute non-spherical and J2 potential
+                U_non_spher = compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
                 U_j2 = U_J2(r, phi_rad, lambda_rad)
                 U_j2s.append(U_j2)
                 U_non_sphericals.append(U_non_spher)
 
+                # Compute the work done by third body forces
+                state_vector = np.array([row['x'], row['y'], row['z'], row['xv'], row['yv'], row['zv']])
+                other_acceleration = state2acceleration(state_vector, row['UTC'], settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
+                # Sum all the accelerations in the other_accelerations dict
+                other_acceleration = np.sum(list(other_acceleration.values()), axis=0)
+
+                # Compute dot product of acceleration vector with the velocity vector
+                velocity_vector = state_vector[3:]  # Extract velocity components
+                work = np.dot(other_acceleration, velocity_vector) * delta_t  # Multiply by delta_t to get work over that timestep
+                work_done_by_other_accs.append(work)
+
+            print(f"first five values of U_j2: {U_j2s[:5]}")
+            print(f"first five values of U_non_spherical: {U_non_sphericals[:5]}")
+            print(f"first five values of work_done_by_other_accs: {work_done_by_other_accs[:5]}")
+            print(f"first five values of kinetic_energy: {kinetic_energy[:5]}")
+
             #total energies
             energy_total_spherical = kinetic_energy  - monopole_potential
             energy_total_J2 = kinetic_energy  - monopole_potential + U_j2s
-            energy_total_HOT = kinetic_energy  - monopole_potential + U_non_sphericals
+            energy_total_HOT = kinetic_energy  - monopole_potential + U_non_sphericals + work_done_by_other_accs
 
             #difference between total energies
             spherical_total_diff = energy_total_spherical[0] - energy_total_spherical
@@ -266,8 +290,9 @@ def main():
         plt.title(f"{sat_name}: 180-point Rolling Density")
         plt.grid(True)
         plt.legend()
-        # plt.show()
-        plt.savefig("output/DensityInversion/EDR_plots/EDR_{sat_name}_effective_density_{start_date_utc}_{end_date_utc}.png")
+        plt.show()
+        savefile = os.path.join(folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
+        plt.savefig(savefile)
 
         # sns.set_theme(style='whitegrid')
         # fig, axs = plt.subplots(3, 1, figsize=(10, 10))

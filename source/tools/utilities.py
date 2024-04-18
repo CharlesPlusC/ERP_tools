@@ -14,7 +14,8 @@ import pandas as pd
 import orekit
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from datetime import datetime, timedelta
-
+from scipy.interpolate import CubicSpline
+from scipy.signal import savgol_filter
 # orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
@@ -487,7 +488,7 @@ def utc_to_mjd(utc_time: datetime) -> float:
 
     #the time is rounded otherwise some floating point errors can occur in the microseconds
     # Convert the rounded datetime object to Astropy Time object
-    time = Time(utc_time, format='datetime', scale='utc', precision=15)
+    time = Time(utc_time, format='datetime', scale='utc', precision=8)
 
     # Convert to Modified Julian Date
     mjd = time.mjd
@@ -718,10 +719,6 @@ def calculate_arc_to_chord_ratio(positions):
     chord_length = np.abs(positions[-1] - positions[0])
     return arc_length / chord_length if chord_length > 0 else np.inf
 
-import numpy as np
-import pandas as pd
-from scipy.interpolate import lagrange
-
 def piecewise_lagrange_interpolation(x, y, num_points):
     """Interpolate using piece-wise Lagrange polynomial based on num_points segments."""
     n = len(y)
@@ -742,8 +739,6 @@ def piecewise_lagrange_interpolation(x, y, num_points):
 
     return np.array(new_xs), np.array(interpolated_values)
 
-from scipy.interpolate import CubicSpline
-from scipy.signal import savgol_filter
 def improved_interpolation_and_acceleration(df, fine_freq, filter_window_length, filter_polyorder):
     #TODO: split into two functions
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
