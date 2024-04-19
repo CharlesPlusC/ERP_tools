@@ -19,7 +19,6 @@ from org.orekit.utils import Constants
 
 import os
 from tools.utilities import HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem
-
 from tools.plotting import combined_residuals_plot
 from tools.orekit_tools import configure_force_models
 from tools.BatchLeastSquares import OD_BLS
