@@ -43,7 +43,7 @@ def main():
         }
         settings = {
             'cr': 1.5, 'cd': 3.2, 'cross_section': 1.004, 'mass': 600.0,
-            'no_points_to_process': 180*100, 'filter_window_length': 21, 'filter_polyorder': 7,
+            'no_points_to_process': 180*65, 'filter_window_length': 21, 'filter_polyorder': 7,
             'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
         }
         ephemeris_df = ephemeris_df.head(settings['no_points_to_process'])
@@ -122,6 +122,9 @@ def plot_density_data(density_df, moving_avg_minutes):
     # Shift the moving average back by the calculated periods
     density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
 
+    # Replace values below 1e-13 with the last valid value above the threshold
+    density_df['Computed Density MA'] = density_df['Computed Density MA'].where(density_df['Computed Density MA'] >= 3e-13).ffill()
+
     # Plotting
     plt.figure(figsize=(11, 7))
     plt.plot(density_df.index, density_df['JB08 Density'], label='JB08 Density')
@@ -148,6 +151,7 @@ def plot_density_data(density_df, moving_avg_minutes):
     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d')}_density_plot.png"
     plt.savefig(os.path.join(save_folder, filename), dpi=600)
     plt.close()
+
 
 def density_compare_scatter(density_df, moving_avg_window, save_path='output/DensityInversion/PODBasedAccelerometry/Plots/'):
     # Ensure the save directory exists
@@ -176,22 +180,51 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
     model_names = ['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
 
     for model in model_names:
-        # Clean up data for each model
         plot_data = density_df.dropna(subset=['Computed Density MA', model])
         plot_data = plot_data[plot_data['Computed Density MA'] > 0]  # Ensure positive values for log scale
+        
+        f, ax = plt.subplots(figsize=(6, 6))
 
-        # Scatter plot creation
-        plt.figure(figsize=(10, 6))
-        plt.scatter(plot_data[model], plot_data['Computed Density MA'], alpha=0.1)
-        plt.xlabel(f'{model}')
-        plt.ylabel('Computed Density Moving Average')
-        plt.title(f'Comparison of {model} vs. Estimated Density')
-        plt.grid(True)
-
-        # Save the plot to the specified path
+        # Draw a combo histogram and scatterplot with density contours
+        sns.scatterplot(x=plot_data[model], y=plot_data['Computed Density MA'], s=5, color=".15", ax=ax)
+        sns.histplot(x=plot_data[model], y=plot_data['Computed Density MA'], bins=50, pthresh=.1, cmap="rocket", cbar=True, ax=ax)
+        sns.kdeplot(x=plot_data[model], y=plot_data['Computed Density MA'], levels=4, color="xkcd:white", linewidths=1, ax=ax)
+        #log the x and y 
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        #add a line of y=x
+        ax.plot([1e-13, 1e-11], [1e-13, 1e-11], color='black', linestyle='--')
+        #constrain the axes to be between 1e-13 and 1e-11 and of same length
+        ax.set_xlim(1e-13, 3e-12)
+        ax.set_ylim(1e-13, 3e-12)
+        ax.set_title(f'Comparison of {model} vs. Computed Density')
+        ax.set_xlabel('Model Density')
+        ax.set_ylabel('Computed Density')
+        ax.grid(color='black', linestyle='-', linewidth=0.5)
         plot_filename = f'comparison_{model.replace(" ", "_")}.png'
         plt.savefig(os.path.join(save_path, plot_filename))
         plt.close()
+
+        # Scatter plot creation
+        # plt.figure(figsize=(10, 6))
+        # plt.scatter(plot_data[model], plot_data['Computed Density MA'], alpha=0.1)
+        # plt.xlabel(f'{model}')
+        # plt.xscale('log')
+        # plt.yscale('log')
+        # #for axes to be betwen 1e-11 and 1e-13 and of same length
+        # plt.xlim(1e-13, 1e-11)
+        # plt.ylim(1e-13, 1e-11)
+        # #draw a line of y=x
+        # plt.plot([1e-13, 1e-11], [1e-13, 1e-11], color='black', linestyle='--')
+        # plt.ylabel('Computed Density Moving Average')
+        # plt.title(f'Comparison of {model} vs. Estimated Density')
+        # plt.grid(True)
+
+        # # Save the plot to the specified path
+        # plot_filename = f'comparison_{model.replace(" ", "_")}.png'
+        # plt.savefig(os.path.join(save_path, plot_filename))
+        # plt.close()
+
 
         # Line plot of density over time for both the model and the computed density
         plt.figure(figsize=(11, 7))
@@ -200,6 +233,7 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
         plt.title(f'{model} vs. Computed Density Over Time')
         plt.xlabel('Epoch (UTC)')
         plt.ylabel('Density')
+        plt.yscale('log')
         plt.legend()
         plt.grid(True)
         plot_filename = f'comparison_{model.replace(" ", "_")}_time.png'
@@ -208,9 +242,9 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
 
 
 if __name__ == "__main__":
-    densitydf = main()
+    # densitydf = main()
     # densitydf_gfo_A = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
-    densitydf_gfo_B = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-18_GRACE-FO-B_density_inversion.csv")
+    densitydf_gfo_B = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-19_GRACE-FO-B_density_inversion.csv")
 
     # density_compare_scatter(densitydf_gfo_B, 48)
     plot_density_data(densitydf_gfo_B, 48)
