@@ -145,13 +145,14 @@ def plot_collision_probability_estimate(probabilities, filenames, save_path, sat
     ax.bar(filenames, probabilities, color='orange')
     ax.set_xlabel('Force Model')
     ax.set_ylabel('Probability of Collision (%)')
-    ax.set_title(f'{sat_name} - Probability of Collision Estimate')
-    ax.set_yscale('log')
-    ax.set_ylim(1e-4, 100)
+    #make the title be a little bit separated upwards
+    ax.set_title(f'{sat_name} - Probability of Collision Estimate', y=1.1)
+    # ax.set_yscale('log')
+    ax.set_ylim(0, 100)
     ax.grid(color='black', linestyle='-', linewidth=0.3)
 
     for i, v in enumerate(probabilities):
-        ax.text(i, max(v, 1e-4) * 1.1, f"{v:.4f}%", ha='center', va='bottom')
+        ax.text(i, max(v, 1e-4) * 1.05, f"{v:.2f}%", ha='center', va='bottom')
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f'{sat_name}_Probability_of_Collision_Estimate.png'))
