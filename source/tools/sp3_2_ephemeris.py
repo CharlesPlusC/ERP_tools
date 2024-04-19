@@ -96,31 +96,41 @@ def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
             file.write(line2)
 
 def sp3_ephem_to_df(satellite, date=None, ephemeris_dir="external/ephems"):
-    # Path to the directory containing the ephemeris files for the satellite
     sat_dir = os.path.join(ephemeris_dir, satellite)
-
-    # List of all ephemeris files for the satellite
     ephemeris_files = glob.glob(os.path.join(sat_dir, "*.txt"))
 
     if date is not None:
-        # Parse the input date
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
         selected_file = None
 
         for file_path in ephemeris_files:
-            # Extract the date range from the file name
             basename = os.path.basename(file_path)
-            dates = basename.split('-')[2:5]  # Expected format: NORADXXXXX-YYYY-MM-DD-YYYY-MM-DD.txt
-            start_date = datetime.strptime(dates[0], "%Y-%m-%d").date()
-            end_date = datetime.strptime(dates[2].split('.')[0], "%Y-%m-%d").date()
-            
-            # Check if the target date is within the file's date range
-            if start_date <= target_date <= end_date:
-                selected_file = file_path
-                break
+            parts = basename.split('-')
+            # Correctly extracting start and end dates considering the format 'NORADXXXXX-YYYY-MM-DD-YYYY-MM-DD.txt'
+            try:
+                # Start Date
+                start_year = parts[1]
+                start_month = parts[2]
+                start_day = parts[3]
+                start_date_str = f"{start_year}-{start_month}-{start_day}"
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+
+                # End Date
+                end_year = parts[4]
+                end_month = parts[5]
+                end_day = parts[6].split('.')[0]  # To remove the '.txt' extension
+                end_date_str = f"{end_year}-{end_month}-{end_day}"
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+
+                if start_date <= target_date <= end_date:
+                    selected_file = file_path
+                    break
+            except ValueError as e:
+                print(f"Error parsing date from filename {basename}: {e}")
+                continue
+
         ephemeris_files = [selected_file] if selected_file else []
 
-    # Initialize an empty DataFrame
     df = pd.DataFrame()
 
     for file_path in ephemeris_files:
