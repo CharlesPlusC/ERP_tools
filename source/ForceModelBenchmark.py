@@ -42,7 +42,7 @@ def generate_config_name(config_dict, arc_number):
 def main():
     sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_arcs = 6
-    arc_length = 45 #mins
+    arc_length = 25 #mins
     prop_length = 60 * 60 * 6 #seconds
     estimate_drag = False
     boxwing = False
@@ -71,8 +71,7 @@ def main():
         cross_section = sat_info['cross_section']
         mass = sat_info['mass']
         ephemeris_df = ephemeris_df.iloc[::2, :]
-        #slice the ephemeris to start 12 arcs past the beginning
-        ephemeris_df = ephemeris_df.iloc[12*arc_length:]
+        ephemeris_df = ephemeris_df.iloc[arc_length:]
         time_step = (ephemeris_df['UTC'].iloc[1] - ephemeris_df['UTC'].iloc[0]).total_seconds() / 60.0  # in minutes
         time_step_seconds = time_step * 60.0
         arc_step = int(arc_length / time_step)
@@ -217,7 +216,7 @@ def main():
             os.makedirs(output_dir)
 
         plt.figure(figsize=(10, 6))
-        sns.set_palette(sns.color_palette("bright", len(diffs_3d_abs_results)))  # Change to a brighter color palette
+        sns.set_palette(sns.color_palette("bright", len(diffs_3d_abs_results)))
 
         for i, (config_name, rms_values_list) in enumerate(diffs_3d_abs_results.items()):
             if len(rms_values_list) > arc:

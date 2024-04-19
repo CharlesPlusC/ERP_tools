@@ -6,6 +6,7 @@ import pandas as pd
 import sp3
 import gzip
 import tempfile
+from datetime import datetime
 import os
 import glob
 from source.tools.utilities import SP3_to_EME2000, utc_to_mjd
@@ -94,12 +95,30 @@ def write_ephemeris_file(satellite, df, sat_dict, output_dir="external/ephems"):
             file.write(line1)
             file.write(line2)
 
-def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
+def sp3_ephem_to_df(satellite, date=None, ephemeris_dir="external/ephems"):
     # Path to the directory containing the ephemeris files for the satellite
     sat_dir = os.path.join(ephemeris_dir, satellite)
 
     # List of all ephemeris files for the satellite
     ephemeris_files = glob.glob(os.path.join(sat_dir, "*.txt"))
+
+    if date is not None:
+        # Parse the input date
+        target_date = datetime.strptime(date, "%Y-%m-%d").date()
+        selected_file = None
+
+        for file_path in ephemeris_files:
+            # Extract the date range from the file name
+            basename = os.path.basename(file_path)
+            dates = basename.split('-')[2:5]  # Expected format: NORADXXXXX-YYYY-MM-DD-YYYY-MM-DD.txt
+            start_date = datetime.strptime(dates[0], "%Y-%m-%d").date()
+            end_date = datetime.strptime(dates[2].split('.')[0], "%Y-%m-%d").date()
+            
+            # Check if the target date is within the file's date range
+            if start_date <= target_date <= end_date:
+                selected_file = file_path
+                break
+        ephemeris_files = [selected_file] if selected_file else []
 
     # Initialize an empty DataFrame
     df = pd.DataFrame()
@@ -110,10 +129,9 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
             while True:
                 line1 = file.readline()
                 line2 = file.readline()
-                if not line2:  # Check if second line is empty (end of file)
+                if not line2:
                     break
-                
-                # Split lines and handle UTC timestamp
+
                 line1_parts = line1.strip().split()
                 utc = ' '.join(line1_parts[:2])
                 ephemeris_values = line1_parts[2:]
@@ -122,25 +140,19 @@ def sp3_ephem_to_df(satellite, ephemeris_dir="external/ephems"):
                 if len(ephemeris_values) != 6 or len(sigma_values) != 6:
                     raise ValueError("Incorrect number of values in ephemeris or sigma lines.")
 
-                # Convert positions and velocities from km to m
-                converted_values = [float(val) * 1000 if i < 6 else float(val) 
+                converted_values = [float(val) * 1000 if i < 6 else float(val)
                                     for i, val in enumerate(ephemeris_values)]
-                
-                # Combine all values and convert to appropriate types
+
                 row = [pd.to_datetime(utc)] + converted_values + sigma_values
                 data.append(row)
 
-            # Create a DataFrame from the current file data
-            file_df = pd.DataFrame(data, columns=['UTC', 'x', 'y', 'z', 
-                                                  'xv', 'yv', 'zv', 
-                                                  'sigma_x', 'sigma_y', 'sigma_z', 
+            file_df = pd.DataFrame(data, columns=['UTC', 'x', 'y', 'z',
+                                                  'xv', 'yv', 'zv',
+                                                  'sigma_x', 'sigma_y', 'sigma_z',
                                                   'sigma_xv', 'sigma_yv', 'sigma_zv'])
 
-            # Append to the main DataFrame
-            df = pd.concat([df, file_df])
+            df = pd.concat([df, file_df], ignore_index=True)
 
-    # Reset index
-    df.reset_index(drop=True, inplace=True)
     return df
 
 def main(sat_name = None):
