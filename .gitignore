@@ -3,7 +3,6 @@
 *.nc
 *.pyc
 *__pycache__/
-*orekit-data.zip
 output/OD_BLS/Tapley/saved_runs/
 *.ini
 *misc/CDDIS.ini
