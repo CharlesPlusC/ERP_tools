@@ -93,22 +93,16 @@ import pandas as pd
 
 def setup_and_submit_jobs():
     print("force model benchmarking script")
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-A"]
+    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     dates_to_test = ["2019-01-01", "2023-05-04"]
-    num_arcs = 10  # number of OD arcs that will be run
+    num_arcs = 1  # number of OD arcs that will be run
     arc_length = 25  # length of each arc in minutes
     prop_length = 60 * 60 * 12  # length of propagation in seconds
     force_model_configs = [
         {'36x36gravity': True, '3BP': True},
         {'120x120gravity': True, '3BP': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
-    ]
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True}]
 
     for fm_num, force_model_config in enumerate(force_model_configs):
         for sat_name in sat_names_to_test:
