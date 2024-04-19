@@ -3,7 +3,7 @@
         "norad_id": 31698,
         "sp3-c_code": "L13",
         "mass": 1230.0,
-        "cross_section": 4.0,
+        "cross_section": 2.4,
         "cd": 2.4,
         "cr": 1.5
     },
@@ -19,23 +19,23 @@
         "norad_id": 43476,
         "sp3-c_code": "L64",
         "mass": 600.2,
-        "cross_section": 1.94,
-        "cd": 2.4,
-        "cr": 1
+        "cross_section": 1.004,
+        "cd": 3.2,
+        "cr": 1.5
     },
     "GRACE-FO-B": {
         "norad_id": 43477,
         "sp3-c_code": "L65",
         "mass": 600.2,
-        "cross_section": 1.94,
-        "cd": 2.4,
-        "cr": 1
+        "cross_section": 1.004,
+        "cd": 3.2,
+        "cr": 1.5
     },
     "TanDEM-X": {
         "norad_id": 36605,
         "sp3-c_code": "L20",
         "mass": 1350.0,
-        "cross_section": 5.0,
+        "cross_section": 2.4,
         "cd": 2.4,
         "cr": 1.5
     },

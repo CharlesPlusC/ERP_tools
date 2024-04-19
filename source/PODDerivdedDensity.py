@@ -34,16 +34,17 @@ import os
 from tqdm import tqdm
 
 def main():
-    sat_names_to_test = ["GRACE-FO-B"]
+    sat_names_to_test = ["TerraSAR-X"]
     for sat_name in sat_names_to_test:
+        sat_info = get_satellite_info(sat_name)
         ephemeris_df = sp3_ephem_to_df(sat_name)
         force_model_config = {
             '120x120gravity': True, '3BP': True, 'solid_tides': True,
             'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True
         }
         settings = {
-            'cr': 1.5, 'cd': 3.2, 'cross_section': 1.004, 'mass': 600.0,
-            'no_points_to_process': 180*65, 'filter_window_length': 21, 'filter_polyorder': 7,
+            'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
+            'no_points_to_process': 180*4, 'filter_window_length': 21, 'filter_polyorder': 7,
             'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
         }
         ephemeris_df = ephemeris_df.head(settings['no_points_to_process'])
@@ -123,7 +124,7 @@ def plot_density_data(density_df, moving_avg_minutes):
     density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
 
     # Replace values below 1e-13 with the last valid value above the threshold
-    density_df['Computed Density MA'] = density_df['Computed Density MA'].where(density_df['Computed Density MA'] >= 3e-13).ffill()
+    # density_df['Computed Density MA'] = density_df['Computed Density MA'].where(density_df['Computed Density MA'] >= 3e-13).ffill()
 
     # Plotting
     plt.figure(figsize=(11, 7))
@@ -240,14 +241,13 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
         plt.savefig(os.path.join(save_path, plot_filename))
         plt.close()
 
-
 if __name__ == "__main__":
     # densitydf = main()
     # densitydf_gfo_A = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
     densitydf_gfo_B = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-19_GRACE-FO-B_density_inversion.csv")
-
-    # density_compare_scatter(densitydf_gfo_B, 48)
-    plot_density_data(densitydf_gfo_B, 48)
+    # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-19_TerraSAR-X_density_inversion.csv")
+    # density_compare_scatter(densitydf_gfo_B, 45)
+    plot_density_data(densitydf_gfo_B, 45)
  
 
 #TODO:
