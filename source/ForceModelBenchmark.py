@@ -40,7 +40,7 @@ def generate_config_name(config_dict, arc_number):
     config_keys = '+'.join(key for key, value in config_dict.items() if value)
     return f"arc{arc_number}_{config_keys}"
 
-def benchmark(sat_name, date, OD_points, OP_reference_trajectory, prop_length, arc_number, *force_model_config):
+def benchmark(sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config):
     #arc_number included for naming purposes
     estimate_drag = False
     boxwing = False
@@ -64,7 +64,8 @@ def benchmark(sat_name, date, OD_points, OP_reference_trajectory, prop_length, a
 
     a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
     observations_df = OD_points[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-
+    print(f"Type of force_model_config before calling propagate_state: {type(force_model_config)}")
+    print(f"force_model_config before calling propagate_state: {force_model_config}")
     optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing)
     folder_path = "output/OD_BLS/Tapley/saved_runs"
     initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")
@@ -182,21 +183,16 @@ def benchmark(sat_name, date, OD_points, OP_reference_trajectory, prop_length, a
     plt.close()
 
 if __name__ == "__main__":
-    sat_name = sys.argv[1]
+    sat_name = sys.argv[0]
     #ensure sat name is a string
     assert isinstance(sat_name, str), "sat_name must be a string"
-    date = sys.argv[2]
-    assert isinstance(date, str), "date must be a string"
-    assert len(date) == 10, "date must be a string of the format 'YYYY-MM-DD'"
-    assert date[4] == "-", "date must be a string of the format 'YYYY-MM-DD'"
-    assert date[7] == "-", "date must be a string of the format 'YYYY-MM-DD'"
-    OD_points = sys.argv[3]
+    OD_points = sys.argv[1]
     assert isinstance(OD_points, pd.DataFrame), "OD_points must be a pandas dataframe"
-    OP_reference_trajectory = sys.argv[4]
+    OP_reference_trajectory = sys.argv[2]
     assert isinstance(OP_reference_trajectory, pd.DataFrame), "OP_reference_trajectory must be a pandas dataframe"
-    prop_length = sys.argv[5]
+    prop_length = sys.argv[3]
     assert isinstance(prop_length, int), "prop_length must be an integer"
-    arc_number  = sys.argv[6]
+    arc_number  = sys.argv[4]
     assert isinstance(arc_number, int), "arc_number must be an integer"
-    force_model_config = sys.argv[7:]
+    force_model_config = sys.argv[5:]
     assert isinstance(force_model_config, dict), "force_model_config must be a dictionary"
