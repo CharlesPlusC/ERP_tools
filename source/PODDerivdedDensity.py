@@ -34,7 +34,7 @@ import os
 from tqdm import tqdm
 
 def main():
-    sat_names_to_test = ["TerraSAR-X"]
+    sat_names_to_test = ["GRACE-FO-B"]
     for sat_name in sat_names_to_test:
         sat_info = get_satellite_info(sat_name)
         ephemeris_df = sp3_ephem_to_df(sat_name)
@@ -99,6 +99,13 @@ def main():
         density_inversion_df.to_csv(os.path.join(save_folder, filename), index=False)
         return density_inversion_df
 
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import os
+import datetime
+
 def plot_density_data(density_df, moving_avg_minutes):
     # Ensure 'Epoch' is converted to datetime
     if density_df['Epoch'].dtype != 'datetime64[ns]':
@@ -116,34 +123,36 @@ def plot_density_data(density_df, moving_avg_minutes):
 
     # Compute the moving average for Computed Density
     density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
-    
-    # Calculate the number of periods to shift equivalent to half of the moving average window in minutes
-    shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)  # Ensure integer conversion
 
-    # Shift the moving average back by the calculated periods
+    # Shift the moving average by half the window size
+    shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)
     density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
 
-    # Replace values below 1e-13 with the last valid value above the threshold
-    # density_df['Computed Density MA'] = density_df['Computed Density MA'].where(density_df['Computed Density MA'] >= 3e-13).ffill()
+    # Replace values below a threshold
+    density_df['Computed Density MA'] = density_df['Computed Density MA'].where(density_df['Computed Density MA'] >= 3e-13).ffill()
 
-    # Plotting
-    plt.figure(figsize=(11, 7))
-    plt.plot(density_df.index, density_df['JB08 Density'], label='JB08 Density')
-    plt.plot(density_df.index, density_df['DTM2000 Density'], label='DTM2000 Density')
-    plt.plot(density_df.index, density_df['NRLMSISE00 Density'], label='NRLMSISE00 Density')
-    plt.plot(density_df.index, density_df['Computed Density MA'], label='Computed Density Moving Average', linestyle='--')
+    # Plotting enhancements
+    sns.set(style="whitegrid")
+    custom_palette = sns.color_palette("Set2", 4)
+    plt.figure(figsize=(10, 6))
+    sns.lineplot(data=density_df, x=density_df.index, y='JB08 Density', label='JB08 Density', palette=custom_palette)
+    sns.lineplot(data=density_df, x=density_df.index, y='DTM2000 Density', label='DTM2000 Density', palette=custom_palette)
+    sns.lineplot(data=density_df, x=density_df.index, y='NRLMSISE00 Density', label='NRLMSISE00 Density', palette=custom_palette)
+    sns.lineplot(data=density_df, x=density_df.index, y='Computed Density MA', label='Computed Density', linestyle='--', palette=custom_palette)
 
-    plt.title('Density Data Over Time')
-    plt.xlabel('Epoch (UTC)')
-    plt.ylabel('Density')
-    plt.legend()
-    plt.yscale('log')  
-    plt.grid(True)
+    plt.title('Model vs Inverted-for Density: GRACE-FO-A', fontsize=14)
+    plt.xlabel('Epoch (UTC)', fontsize=14)
+    plt.ylabel('Density (log scale)', fontsize=14)
+    plt.legend(loc='upper right', frameon=True)
+    plt.yscale('log')
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-    # Date formatting for better visibility
-    plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.gca().xaxis.set_major_formatter(mdates.ConciseDateFormatter(mdates.AutoDateLocator()))
-    plt.xticks(rotation=45)
+    # Improve date formatting
+    locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
+    formatter = mdates.ConciseDateFormatter(locator)
+    plt.gca().xaxis.set_major_locator(locator)
+    plt.gca().xaxis.set_major_formatter(formatter)
+    plt.xticks(rotation=45, fontsize=12)
 
     # Save the plot
     save_folder = "output/DensityInversion/PODBasedAccelerometry/Plots"
@@ -152,6 +161,7 @@ def plot_density_data(density_df, moving_avg_minutes):
     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d')}_density_plot.png"
     plt.savefig(os.path.join(save_folder, filename), dpi=600)
     plt.close()
+
 
 
 def density_compare_scatter(density_df, moving_avg_window, save_path='output/DensityInversion/PODBasedAccelerometry/Plots/'):
@@ -229,7 +239,7 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
 
         # Line plot of density over time for both the model and the computed density
         plt.figure(figsize=(11, 7))
-        plt.plot(plot_data.index, plot_data['Computed Density MA'], label='Computed Density Moving Average')
+        plt.plot(plot_data.index, plot_data['Computed Density MA'], label='Computed Density')
         plt.plot(plot_data.index, plot_data[model], label=model)
         plt.title(f'{model} vs. Computed Density Over Time')
         plt.xlabel('Epoch (UTC)')
