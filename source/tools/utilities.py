@@ -744,52 +744,6 @@ def piecewise_lagrange_interpolation(x, y, num_points):
 
     return np.array(new_xs), np.array(interpolated_values)
 
-# def improved_interpolation_and_acceleration(df, fine_freq, filter_window_length, filter_polyorder):
-#     #TODO: split into two functions
-#     df = df.drop_duplicates(subset='UTC').set_index('UTC')
-#     df = df.sort_index()
-#     start_time = df.index.min()  # Automatically get the start time from the data
-#     end_time = df.index.max()    # Automatically get the end time from the data
-
-#     df_resampled = pd.DataFrame(index=pd.date_range(start=start_time, end=end_time, freq=fine_freq))
-    
-#     columns = ['x', 'y', 'z', 'xv', 'yv', 'zv']
-#     df_interpolated = pd.DataFrame(index=df_resampled.index, columns=columns)
-    
-#     pos_cols = ['x', 'y', 'z']
-#     vel_cols = ['xv', 'yv', 'zv']
-#     for pos_col, vel_col in zip(pos_cols, vel_cols):
-#         pos_data = df[pos_col].to_numpy()
-#         vel_data = df[vel_col].to_numpy()
-#         times = df.index.astype(int) / 10**9
-        
-#         pos_spline = CubicSpline(times, pos_data)
-#         vel_spline = CubicSpline(times, vel_data)
-        
-#         new_times = df_resampled.index.astype(int) / 10**9
-#         df_interpolated[pos_col] = pos_spline(new_times)
-#         interpolated_velocities = vel_spline(new_times)
-
-#         # Apply Savitzky-Golay filter to the interpolated velocities for smoothing
-#         window_length = filter_window_length
-#         polyorder = filter_polyorder   
-#         if window_length > len(interpolated_velocities):
-#             window_length = len(interpolated_velocities) | 1  # Ensure its odd
-#         smoothed_velocities = savgol_filter(interpolated_velocities, window_length, polyorder)
-        
-#         df_interpolated[vel_col] = smoothed_velocities
-
-#     fine_freq_seconds = pd.to_timedelta(fine_freq).total_seconds()
-
-#     acc_cols = ['accx', 'accy', 'accz']
-#     for vel_col, acc_col in zip(vel_cols, acc_cols):
-#         # Now calculate acceleration from the smoothed velocity data
-#         df_interpolated[acc_col] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
-
-#     df_interpolated = df_interpolated.reset_index().rename(columns={'index': 'UTC'})
-
-#     return df_interpolated
-
 def interpolate_positions(df, fine_freq):
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
     df = df.sort_index()
@@ -813,7 +767,7 @@ def calculate_acceleration(df_interpolated, fine_freq, filter_window_length, fil
     for vel_col in ['xv', 'yv', 'zv']:
         velocities = df_interpolated[vel_col].to_numpy()
         if filter_window_length > len(velocities):
-            filter_window_length = len(velocities) | 1  # Ensure it's odd
+            filter_window_length = len(velocities) | 1
         df_interpolated[vel_col] = savgol_filter(velocities, filter_window_length, filter_polyorder)
         df_interpolated['acc' + vel_col[1]] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
 

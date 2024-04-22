@@ -53,8 +53,6 @@ def main():
                                                          settings['filter_window_length'],
                                                          settings['filter_polyorder'])
 
-
-
             interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
             interp_ephemeris_df.set_index('UTC', inplace=True)
             interp_ephemeris_df = interp_ephemeris_df.asfreq(settings['density_freq'])
@@ -241,10 +239,8 @@ if __name__ == "__main__":
     density_dfs = [densitydf_gfo_B_fm0, densitydf_gfo_B_fm1, densitydf_gfo_B_fm2]
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-19_TerraSAR-X_density_inversion.csv")
     # density_compare_scatter(densitydf_gfo_B, 45)
-    plot_density_data(density_dfs, 195)
+    plot_density_data(density_dfs, 45)
  
 
 #TODO:
-# Compare accelerations that result from differentiation of SP3 velocity data to GNV_1B PODAAC accelerometer readings
-# Compute accelerations from GNV_1B 5s velocities to see if POD solution resolution affects the accelerations -> cant find 5s velocities anywhere??
 # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
