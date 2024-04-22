@@ -494,6 +494,12 @@ def utc_to_mjd(utc_time: datetime) -> float:
     mjd = time.mjd
     return mjd
 
+def gps_time_to_utc(gps_time):
+    GPS_EPOCH = datetime(1980, 1, 6)  # GPS time starts at this point
+    LEAP_SECONDS = 18  
+    utc_time = GPS_EPOCH + timedelta(seconds=gps_time - LEAP_SECONDS)
+    return utc_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Format to nearest millisecond
+
 def std_dev_from_lower_triangular(lower_triangular_data):
     cov_matrix = np.zeros((6, 6))
     row, col = np.tril_indices(6)
@@ -769,7 +775,7 @@ def improved_interpolation_and_acceleration(df, fine_freq, filter_window_length,
         window_length = filter_window_length
         polyorder = filter_polyorder   
         if window_length > len(interpolated_velocities):
-            window_length = len(interpolated_velocities) | 1  # Ensure it's odd
+            window_length = len(interpolated_velocities) | 1  # Ensure its odd
         smoothed_velocities = savgol_filter(interpolated_velocities, window_length, polyorder)
         
         df_interpolated[vel_col] = smoothed_velocities
