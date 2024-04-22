@@ -25,7 +25,7 @@ def compute_acc_from_vel(window_length=21, polyorder=7):
     sat_name = "GRACE-FO-A"
     sat_info = get_satellite_info(sat_name)
     start_date = datetime.datetime(2023, 5, 5, 0, 0, 0)
-    end_date = datetime.datetime(2023, 5, 5, 2, 0, 0)
+    end_date = datetime.datetime(2023, 5, 5, 6, 0, 0)
     ephemeris_df = sp3_ephem_to_df(sat_name)
 
     force_model_configs = [
@@ -85,90 +85,6 @@ def compute_acc_from_vel(window_length=21, polyorder=7):
     inverted_accelerations_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Data/{sat_name}/{datenow}_fm{force_model_config_number}_win{window_length}_poly{polyorder}_inv_accs.csv", index=False)
     return inverted_accelerations_df
 
-def compare_measured_and_inverted_accelerations():
-
-    # Drop the columns that are all NaN
-    merged_df = merged_df.dropna(axis=1, how='all')
-
-    #make all the values positive
-    merged_df['inverted_x_acc'] = merged_df['inverted_x_acc'].abs()
-    merged_df['inverted_y_acc'] = merged_df['inverted_y_acc'].abs()
-    merged_df['inverted_z_acc'] = merged_df['inverted_z_acc'].abs()
-    merged_df['inertial_x_acc_x'] = merged_df['inertial_x_acc_x'].abs()
-    merged_df['inertial_y_acc_x'] = merged_df['inertial_y_acc_x'].abs()
-    merged_df['inertial_z_acc_x'] = merged_df['inertial_z_acc_x'].abs()
-
-    #project both the measured and inverted accelerations into HCL
-
-    fig, ax = plt.subplots(3, 1, figsize=(12, 8))
-    ax[0].plot(merged_df['utc_time'], merged_df['inertial_x_acc_x'], label='Measured Acceleration')
-    ax[0].plot(merged_df['utc_time'], merged_df['inverted_x_acc'], label='Inverted Acceleration')
-    ax[0].set_ylabel('Acceleration (m/s^2)')
-    ax[0].set_title('Acceleration in X-axis')
-    ax[0].set_yscale('log')
-    ax[0].legend()
-
-    ax[1].plot(merged_df['utc_time'], merged_df['inertial_y_acc_x'], label='Measured Acceleration')
-    ax[1].plot(merged_df['utc_time'], merged_df['inverted_y_acc'], label='Inverted Acceleration')
-    ax[1].set_ylabel('Acceleration (m/s^2)')
-    ax[1].set_title('Acceleration in Y-axis')
-    ax[1].set_yscale('log')
-    ax[1].legend()
-
-    ax[2].plot(merged_df['utc_time'], merged_df['inertial_z_acc_x'], label='Measured Acceleration')
-    ax[2].plot(merged_df['utc_time'], merged_df['inverted_z_acc'], label='Inverted Acceleration')
-    ax[2].set_ylabel('Acceleration (m/s^2)')
-    ax[2].set_title('Acceleration in Z-axis')
-    ax[2].set_yscale('log')
-    ax[2].legend()
-
-    plt.tight_layout()
-    plt.show()
-
-def compare_rolling_averages():
-    # 'x', 'y', 'z', 'xv', 'yv', 'zv',
-
-    moving_avgs = range(1, 181, 5)
-    for moving_avg_minutes in moving_avgs:
-        acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
-        quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
-
-        inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
-        velocity_based_accelerations = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/date2024-04-22_13-10-19_fm0_inverted_accelerations.csv")
-
-        inertial_gfo_data['utc_time'] = pd.to_datetime(inertial_gfo_data['utc_time'])
-        velocity_based_accelerations['utc_time'] = pd.to_datetime(velocity_based_accelerations['utc_time'])
-
-        merged_df = pd.merge(inertial_gfo_data, velocity_based_accelerations, on='utc_time', how='inner')
-        merged_df.set_index('utc_time', inplace=True)
-
-
-        merged_df = merged_df.dropna(axis=1, how='all')
-        seconds_per_point = pd.to_timedelta(pd.infer_freq(merged_df.index)).seconds
-        window_size = (moving_avg_minutes * 60) // seconds_per_point
-        shift_periods = (moving_avg_minutes * 30) // seconds_per_point
-
-        for axis in ['x', 'y', 'z']:
-            #first use project_acc_into_HCL to get the HCL components
-            h,c,l = HCL_diff(merged_df[f'inertial_{axis}_acc_x'], merged_df[f'inverted_{axis}_acc'])
-
-            merged_df[f'inverted_{axis}_acc'] = merged_df[f'inverted_{axis}_acc'].rolling(window=window_size, center=False).mean().shift(-shift_periods)
-            merged_df[f'inertial_{axis}_acc_x'] = merged_df[f'inertial_{axis}_acc_x'].rolling(window=window_size, center=False).mean().shift(-shift_periods)
-
-
-        fig, ax = plt.subplots(3, 1, figsize=(12, 8))
-        for i, axis in enumerate(['x', 'y', 'z']):
-            ax[i].plot(merged_df.index, merged_df[f'inertial_{axis}_acc_x'], label='Measured Acceleration')
-            ax[i].plot(merged_df.index, merged_df[f'inverted_{axis}_acc'], label='Inverted Acceleration')
-            ax[i].set_ylabel('Acceleration (m/s^2)')
-            ax[i].set_title(f'Acceleration in {axis.upper()}-axis')
-            ax[i].set_yscale('log')
-            ax[i].legend()
-
-        plt.tight_layout()
-        plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/rolling_avg_comparison_{moving_avg_minutes}min.png")
-        plt.close()
-
 if __name__ == '__main__':
     acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
     quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
@@ -177,7 +93,7 @@ if __name__ == '__main__':
     # velocity_based_accelerations = compute_acc_from_vel(window_length=21, polyorder=7)
 
     # if already computed, you can load them from the csv file instead
-    velocity_based_accelerations = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-22_14-02-13_fm0_win21_poly7_inv_accs.csv")
+    velocity_based_accelerations = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-22_15-03-16_fm0_win21_poly7_inv_accs.csv")
 
     inertial_gfo_data['utc_time'] = pd.to_datetime(inertial_gfo_data['utc_time'])
     velocity_based_accelerations['utc_time'] = pd.to_datetime(velocity_based_accelerations['utc_time'])
@@ -212,11 +128,14 @@ if __name__ == '__main__':
     merged_df['inverted_l_acc'] = merged_df['inverted_l_acc'].abs()
     merged_df['inertial_l_acc'] = merged_df['inertial_l_acc'].abs()
 
-    for window in range(1, 181, 5):
+    rmss = []
+    for window in range(5, 256, 5):
+        
         #plot the 45 minute rolling average of the inverted against the measured accelerations
         rolling_inverted = merged_df['inverted_l_acc'].rolling(window=window, center=True).mean()
         #calculat the RMS difference between the two
         rms_diff = np.sqrt(np.mean((rolling_inverted - merged_df['inertial_l_acc'])**2))
+        rmss.append(rms_diff)
         #drop the first and last 5 values of both
         merged_df = merged_df.iloc[5:-5]
         rolling_inverted = rolling_inverted.iloc[5:-5]
@@ -234,8 +153,20 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/l_diff_comparison{window}.png")
         plt.close()
-    # look at rolling averages of both sets of accelerations
-    # look at HCL components/differences
-    # look at PSD of both sets of accelerations
-    # look at PSD of the rolling averages of both sets of accelerations
+
+    #plot the RMS difference as a function of window size
+    plt.plot(range(5, 256, 5), rmss)
+    plt.xlabel('Window Size')
+    plt.ylabel('RMS Difference')
+    plt.tight_layout()
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/RMS_Difference.png")
+    plt.close()
+
+
+    #TODO: # Most useful plot to get here is going to tell us how much of the singal we recover. 
+           # What kind of bias and what we lose from the detail in the along track.
+                # first we plot just the two along track accelerations -> use RMS as a metric for average length?
+                # second we plot the PSD of the two along track accelerations
+           # Make it so that we can come back with other accelerations and compare those as well.
+
 

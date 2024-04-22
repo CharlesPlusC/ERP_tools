@@ -239,7 +239,7 @@ if __name__ == "__main__":
     density_dfs = [densitydf_gfo_B_fm0, densitydf_gfo_B_fm1, densitydf_gfo_B_fm2]
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-19_TerraSAR-X_density_inversion.csv")
     # density_compare_scatter(densitydf_gfo_B, 45)
-    plot_density_data(density_dfs, 45)
+    plot_density_data(density_dfs, 195)
  
 
 #TODO:
