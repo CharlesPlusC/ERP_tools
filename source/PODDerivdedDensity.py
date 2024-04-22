@@ -10,7 +10,7 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 
 import os
-from tools.utilities import project_acc_into_HCL, improved_interpolation_and_acceleration, extract_acceleration, utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
+from tools.utilities import project_acc_into_HCL, calculate_acceleration, interpolate_positions, extract_acceleration, utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
 import numpy as np
@@ -41,17 +41,19 @@ def main():
 
             settings = {
                 'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
-                'no_points_to_process': 180*3, 'filter_window_length': 21, 'filter_polyorder': 7,
+                'no_points_to_process': 180*6, 'filter_window_length': 21, 'filter_polyorder': 7,
                 'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
             }
             
             ephemeris_df = ephemeris_df.head(settings['no_points_to_process'])
             
-            interp_ephemeris_df = improved_interpolation_and_acceleration(
-                ephemeris_df, settings['ephemeris_interp_freq'],
-                filter_window_length=settings['filter_window_length'],
-                filter_polyorder=settings['filter_polyorder']
-            )
+            interp_ephemeris_df = interpolate_positions(ephemeris_df, settings['ephemeris_interp_freq'])
+            interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, 
+                                                         settings['ephemeris_interp_freq'],
+                                                         settings['filter_window_length'],
+                                                         settings['filter_polyorder'])
+
+
 
             interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
             interp_ephemeris_df.set_index('UTC', inplace=True)
@@ -113,7 +115,7 @@ def main():
     return density_inversion_dfs
 
 def plot_density_data(data_frames, moving_avg_minutes):
-    sns.set(style="whitegrid")
+    sns.set_style(style="whitegrid")
     
     # Define color palette for all densities including model densities
     custom_palette = sns.color_palette("Set2", len(data_frames) + 3)  # Adding 3 for model densities
