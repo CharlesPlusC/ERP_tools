@@ -494,10 +494,9 @@ def utc_to_mjd(utc_time: datetime) -> float:
     mjd = time.mjd
     return mjd
 
-def gps_time_to_utc(gps_time):
-    GPS_EPOCH = datetime(1980, 1, 6)  # GPS time starts at this point
-    LEAP_SECONDS = 18  
-    utc_time = GPS_EPOCH + timedelta(seconds=gps_time - LEAP_SECONDS)
+def gps_time_to_utc(gps_time, GPS_EPOCH):
+    # NOTE: Specific to GRACE-FO GPS time...
+    utc_time = GPS_EPOCH + timedelta(seconds=gps_time)
     return utc_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Format to nearest millisecond
 
 def std_dev_from_lower_triangular(lower_triangular_data):

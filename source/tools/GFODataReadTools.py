@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import re
+from datetime import datetime
 from tools.utilities import gps_time_to_utc
 
 def read_accelerometer(file_path):
@@ -101,10 +103,26 @@ def accelerations_to_inertial(acc_df):
 
     return transformed
 
+def extract_epoch_time(filepath):
+    pattern = r"epoch_time: (\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})"
+    
+    with open(filepath, 'r') as file:
+        for line in file:
+            match = re.search(pattern, line)
+            if match:
+                date_part, time_part = match.groups()
+                date_time_str = f"{date_part} {time_part}"
+                return datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
+    raise ValueError("Epoch time not found in the file.")
+
 def get_gfo_inertial_accelerations(acc_data_path, quat_data_path):
     acc_df = read_accelerometer(acc_data_path)
     quat_df = read_quaternions(quat_data_path)
     acc_and_quat_df = pd.merge(acc_df, quat_df, on='gps_time')
     inertial_df = accelerations_to_inertial(acc_and_quat_df)
-    inertial_df['utc_time'] = inertial_df['gps_time'].apply(gps_time_to_utc)
+    # get the GPS epoch
+    gps_start_time = extract_epoch_time(acc_data_path)
+    inertial_df['utc_time'] = inertial_df['gps_time'].apply(lambda x: gps_time_to_utc(x, gps_start_time))
+    #drop any rows with missing/Nan values
+    inertial_df.dropna(inplace=True)
     return inertial_df
