@@ -163,7 +163,6 @@ def avg_win_length_rms(merged_df):
         plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/{component}_diff_RMS_Difference.png")
         plt.close()
 
-
 if __name__ == '__main__':
     
     acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt" # accelerometer data
@@ -211,7 +210,3 @@ if __name__ == '__main__':
                 # first we plot just the two along track accelerations -> use RMS as a metric for average length?
                 # second we plot the PSD of the two along track accelerations
            # Make it so that we can come back with other accelerations and compare those as well.
-
-
-
-# if __name__ == '__main__':
