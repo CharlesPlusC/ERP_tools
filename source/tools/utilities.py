@@ -760,16 +760,19 @@ def interpolate_positions(df, fine_freq):
         df_interpolated[pos_col] = CubicSpline(times, df[pos_col])(new_times)
         df_interpolated[vel_col] = CubicSpline(times, df[vel_col])(new_times)
 
+    df_interpolated.reset_index(inplace=True)
+    df_interpolated.rename(columns={'index': 'UTC'}, inplace=True)
+
     return df_interpolated
 
 def calculate_acceleration(df_interpolated, fine_freq, filter_window_length, filter_polyorder):
     fine_freq_seconds = pd.to_timedelta(fine_freq).total_seconds()
-    for vel_col in ['xv', 'yv', 'zv']:
+    for vel_col, acc_col in zip(['xv', 'yv', 'zv'], ['accx', 'accy', 'accz']):
         velocities = df_interpolated[vel_col].to_numpy()
         if filter_window_length > len(velocities):
-            filter_window_length = len(velocities) | 1
+            filter_window_length = len(velocities) | 1  # Ensure the window length is odd
         df_interpolated[vel_col] = savgol_filter(velocities, filter_window_length, filter_polyorder)
-        df_interpolated['acc' + vel_col[1]] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
+        df_interpolated[acc_col] = np.gradient(df_interpolated[vel_col], fine_freq_seconds)
 
     return df_interpolated
 
