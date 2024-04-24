@@ -538,7 +538,6 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
 
     assert state_vector.shape == (6,), "State vector must be of shape (6,)"
 
-
     epochDate = datetime_to_absolutedate(t0)
     accelerations_dict = {}
 

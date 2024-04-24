@@ -159,27 +159,36 @@ def benchmark(sat_name, OD_points, OP_reference_trajectory, prop_length, arc_num
         print(f"saved {diff_type} differences plot for {sat_name} to {output_dir}")
         plt.close()
 
-    output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc_number + 1}"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+#     output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc_number + 1}"
+#     if not os.path.exists(output_dir):
+#         os.makedirs(output_dir)
 
-    plt.figure(figsize=(10, 6))
-    sns.set_palette(sns.color_palette("bright", len(diffs_3d_abs_results)))
+#     plt.figure(figsize=(10, 6))
+#     sns.set_palette(sns.color_palette("bright", len(diffs_3d_abs_results)))
 
-    for i, (config_name, rms_values_list) in enumerate(diffs_3d_abs_results.items()):
-        if len(rms_values_list) > arc_number:
-            rms_values = rms_values_list[arc_number]
-            plt.scatter(observation_times, rms_values, label=config_name, s=3, alpha=0.7)
+#     for i, (config_name, rms_values_list) in enumerate(diffs_3d_abs_results.items()):
+#         if len(rms_values_list) > arc_number:
+#             rms_values = rms_values_list[arc_number]
+#             plt.scatter(observation_times, rms_values, label=config_name, s=3, alpha=0.7)
 
-    plt.xlabel('Time')
-    plt.ylabel('RMS (m)')
-    plt.title(f'RMS Differences for {sat_name} - Arc {arc_number + 1}')
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    plt.grid(True)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}/RMS_diff_{arc_length}obs_{prop_length}prop_arc{arc_number + 1}.png", bbox_inches='tight')
-    plt.close()
+#     plt.xlabel('Time')
+#     plt.ylabel('RMS (m)')
+#     plt.title(f'RMS Differences for {sat_name} - Arc {arc_number + 1}')
+#     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+#     plt.grid(True)
+#     plt.xticks(rotation=45)
+#     plt.tight_layout()
+#     plt.savefig(f"{output_dir}/RMS_diff_{arc_length}obs_{prop_length}prop_arc{arc_number + 1}.png", bbox_inches='tight')
+#     plt.close()
+
+# def main():
+#     # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+#     sat_names_to_test = ["Sentinel-1A", "Sentinel-3B"]
+#     # dates_to_test = ["2019-01-01", "2023-05-04"]
+#     dates_to_test = ["2023-05-04"]
+#     for sat_name in sat_names_to_test:
+#         for date in dates_to_test:
+#             benchmark(sat_name, date)
 
 if __name__ == "__main__":
     sat_name = sys.argv[0]
