@@ -5,22 +5,15 @@ download_orekit_data_curdir("misc")
 vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
-from orekit.pyhelpers import datetime_to_absolutedate
-from org.orekit.forces.gravity.potential import GravityFieldFactory
-from org.orekit.utils import Constants
-
 import os
-from tools.utilities import project_acc_into_HCL, calculate_acceleration, interpolate_positions, extract_acceleration, utc_to_mjd, HCL_diff, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
+from tools.utilities import project_acc_into_HCL, calculate_acceleration, interpolate_positions, get_satellite_info
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
 import numpy as np
 import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.special import lpmn
-from scipy.integrate import trapz
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from tqdm import tqdm
 import pandas as pd
 
@@ -32,21 +25,20 @@ def main():
         sat_info = get_satellite_info(sat_name)
         ephemeris_df = sp3_ephem_to_df(sat_name)
         force_model_configs = [
-            {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'relativity': True},
+            # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'relativity': True},
             # {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
-            # {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+            {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
             ]
         
         for force_model_config_number, force_model_config in enumerate(force_model_configs):
 
             settings = {
                 'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
-                'no_points_to_process': 45, 'filter_window_length': 21, 'filter_polyorder': 7,
+                'no_points_to_process': 180*2, 'filter_window_length': 21, 'filter_polyorder': 7,
                 'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
             }
             
             ephemeris_df = ephemeris_df.head(settings['no_points_to_process'])
-            
             interp_ephemeris_df = interpolate_positions(ephemeris_df, settings['ephemeris_interp_freq'])
             interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, 
                                                          settings['ephemeris_interp_freq'],
@@ -232,7 +224,7 @@ def density_compare_scatter(density_df, moving_avg_window, sat_name):
         plt.close()
 
 if __name__ == "__main__":
-    # density_dfs = main()
+    density_dfs = main()
     # densitydf_gfo_A = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
     # densitydf_gfo_B_fm0 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm0_density_inversion.csv")
     # densitydf_gfo_B_fm1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm1_density_inversion.csv")
@@ -242,7 +234,7 @@ if __name__ == "__main__":
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-19_TerraSAR-X_density_inversion.csv")
     sat_name = 'CHAMP'
     # density_compare_scatter(champ_density_df, 45)
-    plot_density_data(density_dfs, 15, sat_name)
+    plot_density_data(density_dfs, 45, sat_name)
  
 
 #TODO:

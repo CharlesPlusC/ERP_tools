@@ -11,7 +11,7 @@
         "norad_id": 26405,
         "sp3-c_code": "L06",
         "mass": 522.0,
-        "cross_section": 2.0,
+        "cross_section": 1.0,
         "cd": 2.2,
         "cr": 1.0
     },
@@ -46,5 +46,54 @@
         "cross_section": 12.0,
         "cd": 2.2,
         "cr": 1
+    },
+    "Sentinel-1A": {
+        "norad_id": 39634,
+        "sp3-c_code": "L70",
+        "mass": 2200.0,
+        "cross_section": 3.9,
+        "cd": 2.2,
+        "cr": 1
+    },
+    "Sentinel-1B": {
+        "norad_id": 41456,
+        "sp3-c_code": "L71",
+        "mass": 2200.0,
+        "cross_section": 3.9,
+        "cd": 2.2,
+        "cr": 1
+    },
+    "Sentinel-2A": {
+        "norad_id": 40697,
+        "sp3-c_code": "L72",
+        "mass": 1100.0,
+        "cross_section": 1.47,
+        "cd": 2.2,
+        "cr": 1
+    },
+    "Sentinel-2B": {
+        "norad_id": 42063,
+        "sp3-c_code": "L73",
+        "mass": 1100.0,
+        "cross_section": 1.47,
+        "cd": 2.2,
+        "cr": 1
+    },
+    "Sentinel-3A": {
+        "norad_id": 41335,
+        "sp3-c_code": "L74",
+        "mass": 1200.0,
+        "cross_section": 3.9,
+        "cd": 2.2,
+        "cr": 1
+    },
+    "Sentinel-3B": {
+        "norad_id": 43437,
+        "sp3-c_code": "L75",
+        "mass": 1200.0,
+        "cross_section": 3.9,
+        "cd": 2.2,
+        "cr": 1
     }
 }
+
