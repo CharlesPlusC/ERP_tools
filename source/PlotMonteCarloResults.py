@@ -15,8 +15,9 @@ def plot_tca_vs_dca(dataframes, filenames, save_path, sat_name):
     for df, filename in zip(dataframes, filenames):
         f, ax = plt.subplots(figsize=(6, 6))
 
-        # Converting TCA to seconds since the first TCA
-        tca_seconds = (pd.to_datetime(df['TCA']) - pd.to_datetime(df['TCA'].iloc[0])).dt.total_seconds()
+        #now look at TCA seconds since 2023-05-05 09:59:42.000000
+        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') - pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
+
         dca = df['DCA']
 
         # Draw a combo histogram and scatterplot with density contours
@@ -28,7 +29,7 @@ def plot_tca_vs_dca(dataframes, filenames, save_path, sat_name):
         ax.set_xlabel('Δ Nominal TCA (seconds)')
         ax.set_ylabel('Δ Nominal DCA (meters)')
         ax.grid(color='black', linestyle='-', linewidth=0.5)
-        #the delta symbol is: Δ
+        ax.set_yscale('log')
 
         plt.tight_layout()
         plt.savefig(os.path.join(save_path, f'{sat_name}_{filename}_TCA_vs_DCA.png'))
@@ -39,7 +40,7 @@ def plot_tca_distributions_facetgrid(dataframes, filenames, save_path, sat_name)
     for df, filename in zip(dataframes, filenames):
         unique_id = filename.split('_')[3]  # Adjust based on your filename structure
         label = f"fm{unique_id}"
-        tca_seconds = (pd.to_datetime(df['TCA']) - pd.to_datetime(df['TCA'].iloc[0])).dt.total_seconds()
+        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') - pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
         temp_df = pd.DataFrame({'TCA': tca_seconds, 'Label': label})
         combined_df = pd.concat([combined_df, temp_df])
 
@@ -138,7 +139,6 @@ def plot_dca_distributions_facetgrid(dataframes, filenames, save_path, sat_name)
     plt.savefig(os.path.join(save_path, f'{sat_name}_DCA_Distributions_FacetGrid.png'))
     plt.close()
 
-
 # Function to plot the probability of collision estimate and save the plot
 def plot_collision_probability_estimate(probabilities, filenames, save_path, sat_name):
     fig, ax = plt.subplots()
@@ -187,7 +187,7 @@ def plot_tca_vs_dca_matrix(dataframes, filenames, save_path, sat_name):
             break
 
         # Converting TCA to seconds since the first TCA
-        tca_seconds = (pd.to_datetime(df['TCA']) - pd.to_datetime(df['TCA'].iloc[0])).dt.total_seconds()
+        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') - pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
         dca = df['DCA']
 
         # Drawing the scatterplot, histogram, and KDE on the subplot
@@ -200,11 +200,7 @@ def plot_tca_vs_dca_matrix(dataframes, filenames, save_path, sat_name):
         axs[i].set_ylabel('DCA (meters)')
         axs[i].grid(True)
         axs[i].legend()
-        #make the y lim from 0-12
-        # axs[i].set_ylim(0, 12)
-        #make the x lim from -0.008 to 0.008
-        # axs[i].set_xlim(-0.008, 0.008)
-        #add a black grid
+        axs[i].set_yscale('log')
         axs[i].grid(color='black', linestyle='-', linewidth=0.5)
 
     # Hide unused subplots
@@ -227,9 +223,9 @@ def plot_tca_vs_dca_jointplot(dataframes, filenames, save_path, sat_name):
         unique_id = filename.split('_')[3]  # Adjust based on your filename structure
         label = f"fm{unique_id}"
 
-        tca_seconds = (pd.to_datetime(df['TCA']) - pd.to_datetime(df['TCA'].iloc[0])).dt.total_seconds()
+        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') - pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
         temp_df = pd.DataFrame({'TCA': tca_seconds, 'DCA': df['DCA'], 'Force Model': label})
-        combined_df = pd.concat([combined_df, temp_df])
+        combined_df = pd.concat([combined_df, temp_df], ignore_index=True)
 
     # Show the joint distribution using kernel density estimation
     g = sns.jointplot(
@@ -240,23 +236,24 @@ def plot_tca_vs_dca_jointplot(dataframes, filenames, save_path, sat_name):
         space=0,
     )
 
-    #change x label to Time of Closest Approach (seconds)
+    # Change x label to Time of Closest Approach (seconds)
     g.set_axis_labels("ΔTCA (seconds)", "ΔDCA (meters)")
 
-    #add grid with black color
+    g.ax_joint.set_yscale('log')
+
+    # Add grid with black color
     g.ax_joint.grid(color='black', linestyle='-', linewidth=0.3)
 
-    #set figure title
+    # Set figure title
     g.figure.suptitle(f'{sat_name} - TCA vs. DCA KDE')
 
-    #tight layout
+    # Tight layout
     plt.tight_layout()
 
     plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_KDE.png'))
     plt.close()
-
 # List of satellites to test
-sat_names_to_test = ["GRACE-FO-A"]
+sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TanDEM-X", "TerraSAR-X"]
 
 for sat_name in sat_names_to_test:
     base_path = f'output/Collisions/MC/TCA_DCA/{sat_name}/data'
@@ -282,7 +279,3 @@ for sat_name in sat_names_to_test:
     plot_tca_distributions_facetgrid(dataframes, files, save_path, sat_name)
     plot_dca_distributions_facetgrid(dataframes, files, save_path, sat_name)
     plot_tca_vs_dca_jointplot(dataframes, files, save_path, sat_name)
-
-
-
-
