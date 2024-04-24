@@ -231,8 +231,10 @@ def benchmark(sat_name, date):
         plt.close()
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    dates_to_test = ["2019-01-01", "2023-05-04"]
+    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["Sentinel-1A", "Sentinel-3B"]
+    # dates_to_test = ["2019-01-01", "2023-05-04"]
+    dates_to_test = ["2023-05-04"]
     for sat_name in sat_names_to_test:
         for date in dates_to_test:
             benchmark(sat_name, date)
