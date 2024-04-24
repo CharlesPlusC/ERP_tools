@@ -32,7 +32,7 @@ def plot_tca_vs_dca(dataframes, filenames, save_path, sat_name):
         ax.set_yscale('log')
 
         plt.tight_layout()
-        plt.savefig(os.path.join(save_path, f'{sat_name}_{filename}_TCA_vs_DCA.png'))
+        plt.savefig(os.path.join(save_path, f'{sat_name}_{filename}_TCA_vs_DCA.jpg'), dpi=600)
         plt.close()
 
 def plot_tca_distributions_facetgrid(dataframes, filenames, save_path, sat_name):
@@ -83,7 +83,7 @@ def plot_tca_distributions_facetgrid(dataframes, filenames, save_path, sat_name)
     plt.suptitle(f'{sat_name} - TCA Distributions', fontsize=14)
     plt.tight_layout()
 
-    plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_Distributions_FacetGrid.png'))
+    plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_Distributions_FacetGrid.jpg'), dpi=600)
     plt.close()
 
 def plot_dca_distributions_facetgrid(dataframes, filenames, save_path, sat_name):
@@ -136,7 +136,7 @@ def plot_dca_distributions_facetgrid(dataframes, filenames, save_path, sat_name)
     plt.suptitle(f'{sat_name} - DCA Distributions', fontsize=14)
     plt.tight_layout()
 
-    plt.savefig(os.path.join(save_path, f'{sat_name}_DCA_Distributions_FacetGrid.png'))
+    plt.savefig(os.path.join(save_path, f'{sat_name}_DCA_Distributions_FacetGrid.jpg'), dpi=600)
     plt.close()
 
 # Function to plot the probability of collision estimate and save the plot
@@ -155,7 +155,7 @@ def plot_collision_probability_estimate(probabilities, filenames, save_path, sat
         ax.text(i, max(v, 1e-4) * 1.05, f"{v:.2f}%", ha='center', va='bottom')
 
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f'{sat_name}_Probability_of_Collision_Estimate.png'))
+    plt.savefig(os.path.join(save_path, f'{sat_name}_Probability_of_Collision_Estimate.jpg'), dpi=600)
     plt.close()
 
 # Function to plot cumulative distribution for DCA across all files for a satellite
@@ -173,7 +173,7 @@ def plot_cumulative_distribution_dca(dataframes, filenames, save_path, sat_name)
     ax.legend()
 
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f'{sat_name}_Cumulative_Distribution_DCA.png'))
+    plt.savefig(os.path.join(save_path, f'{sat_name}_Cumulative_Distribution_DCA.jpg'), dpi=600)
     plt.close()
 
 # Function to plot TCA vs. DCA in a 3x3 subplot matrix
@@ -209,7 +209,7 @@ def plot_tca_vs_dca_matrix(dataframes, filenames, save_path, sat_name):
 
     plt.tight_layout()
     plt.suptitle(f'{sat_name} - TCA vs. DCA Comparison', y=1.02)
-    plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_Matrix.png'))
+    plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_Matrix.jpg'), dpi=600)
     plt.close()
 
 
@@ -250,7 +250,7 @@ def plot_tca_vs_dca_jointplot(dataframes, filenames, save_path, sat_name):
     # Tight layout
     plt.tight_layout()
 
-    plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_KDE.png'))
+    plt.savefig(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_KDE.jpg'), dpi=600)
     plt.close()
 # List of satellites to test
 sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TanDEM-X", "TerraSAR-X"]
