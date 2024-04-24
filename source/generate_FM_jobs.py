@@ -37,6 +37,7 @@ def setup_and_submit_jobs():
                     folder_for_jobs = f"{user_home_dir}/Scratch/FMBenchmark/sge_jobs"
                     logs_folder = f"{user_home_dir}/Scratch/FMBenchmark/{sat_name}/logs_fm{fm_num}"
                     work_dir = f"{user_home_dir}/Scratch/FMBenchmark/{sat_name}/propagation_fm{fm_num}"
+                    output_dir = f"{user_home_dir}/Scratch/FMBenchmark/{sat_name}/output_fm{fm_num}_arc{arc_number}"
 
                     os.makedirs(folder_for_jobs, exist_ok=True)
                     os.makedirs(logs_folder, exist_ok=True)
@@ -47,9 +48,6 @@ def setup_and_submit_jobs():
                     OD_points_json = OD_points.to_json(orient='split')
                     OP_reference_trajectory_json = OP_reference_trajectory.to_json(orient='split')
                     print(f"Submitting job for {sat_name} arc {arc_number} with force model {force_model_config}")
-                    print(f"OD points: {OD_points_json}")
-                    print(f"OP reference trajectory: {OP_reference_trajectory_json}")
-
                     script_content = f"""#!/bin/bash -l
 #$ -l h_rt=3:0:0
 #$ -l mem=6G
@@ -70,7 +68,7 @@ echo '{OD_points_json}' > {work_dir}/OD_points.json
 echo '{OP_reference_trajectory_json}' > {work_dir}/OP_reference_trajectory.json
 echo '{force_model_config_json}' > {work_dir}/force_model_config.json
 
-/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/ForceModelBenchmark.py {sat_name} {work_dir}/OD_points.json {work_dir}/OP_reference_trajectory.json {prop_length} {arc_number} {work_dir}/force_model_config.json
+/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python $TMPDIR/ERP_tools/source/ForceModelBenchmark.py {output_dir} {sat_name} {work_dir}/OD_points.json {work_dir}/OP_reference_trajectory.json {prop_length} {arc_number} {work_dir}/force_model_config.json
 """
                     with open(script_filename, 'w') as file:
                         file.write(script_content)

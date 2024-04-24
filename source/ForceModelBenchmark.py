@@ -39,7 +39,7 @@ def generate_config_name(config_dict, arc_number):
     config_keys = '+'.join(key for key, value in config_dict.items() if value)
     return f"arc{arc_number}_{config_keys}"
 
-def benchmark(sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config):
+def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config):
     #arc_number included for naming purposes
     estimate_drag = False
     boxwing = False
@@ -66,7 +66,6 @@ def benchmark(sat_name, OD_points, OP_reference_trajectory, prop_length, arc_num
     print(f"Type of force_model_config before calling propagate_state: {type(force_model_config)}")
     print(f"force_model_config before calling propagate_state: {force_model_config}")
     optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing)
-    folder_path = "output/OD_BLS/Tapley/saved_runs"
     initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")
     output_folder = f"{folder_path}/{sat_name}/fm{i+1}arc{arc_number+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}_ID{uuid.uuid4()}" # Add uuid to avoid overwriting
     os.makedirs(output_folder, exist_ok=True)
