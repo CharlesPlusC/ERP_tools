@@ -26,7 +26,7 @@ import pandas as pd
 
 
 def main():
-    sat_names_to_test = ["GRACE-FO-B"]
+    sat_names_to_test = ["CHAMP"]
     density_inversion_dfs = []
     for sat_name in sat_names_to_test:
         sat_info = get_satellite_info(sat_name)
@@ -41,7 +41,7 @@ def main():
 
             settings = {
                 'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
-                'no_points_to_process': 180*6, 'filter_window_length': 21, 'filter_polyorder': 7,
+                'no_points_to_process': 45, 'filter_window_length': 21, 'filter_polyorder': 7,
                 'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
             }
             
@@ -112,7 +112,7 @@ def main():
 
     return density_inversion_dfs
 
-def plot_density_data(data_frames, moving_avg_minutes):
+def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     sns.set_style(style="whitegrid")
     
     # Define color palette for all densities including model densities
@@ -144,7 +144,7 @@ def plot_density_data(data_frames, moving_avg_minutes):
     plt.yscale('log')
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     datenow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/computed_density_moving_averages_{datenow}.png')
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/computed_density_moving_averages_{datenow}.png')
 
     # Second plot for the first data frame with model densities along with computed densities
     plt.figure(figsize=(10, 6))
@@ -162,10 +162,11 @@ def plot_density_data(data_frames, moving_avg_minutes):
     plt.legend(loc='upper right', frameon=True)
     plt.yscale('log')
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/model_density_vs_computed_density_{datenow}.png')
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
 
-def density_compare_scatter(density_df, moving_avg_window, save_path='output/DensityInversion/PODBasedAccelerometry/Plots/'):
-    # Ensure the save directory exists
+def density_compare_scatter(density_df, moving_avg_window, sat_name):
+    
+    save_path = f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/'
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
@@ -233,13 +234,15 @@ def density_compare_scatter(density_df, moving_avg_window, save_path='output/Den
 if __name__ == "__main__":
     # density_dfs = main()
     # densitydf_gfo_A = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
-    densitydf_gfo_B_fm0 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm0_density_inversion.csv")
-    densitydf_gfo_B_fm1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm1_density_inversion.csv")
-    densitydf_gfo_B_fm2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm2_density_inversion.csv")
-    density_dfs = [densitydf_gfo_B_fm0, densitydf_gfo_B_fm1, densitydf_gfo_B_fm2]
+    # densitydf_gfo_B_fm0 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm0_density_inversion.csv")
+    # densitydf_gfo_B_fm1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm1_density_inversion.csv")
+    # densitydf_gfo_B_fm2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm2_density_inversion.csv")
+    champ_density_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
+    density_dfs = [champ_density_df]
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-19_TerraSAR-X_density_inversion.csv")
-    # density_compare_scatter(densitydf_gfo_B, 45)
-    plot_density_data(density_dfs, 45)
+    sat_name = 'CHAMP'
+    # density_compare_scatter(champ_density_df, 45)
+    plot_density_data(density_dfs, 15, sat_name)
  
 
 #TODO:
