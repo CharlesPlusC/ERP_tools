@@ -63,11 +63,9 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
 
     a_priori_estimate = np.concatenate(([initial_t.timestamp()], initial_vals))
     observations_df = OD_points[['UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv']]
-    print(f"Type of force_model_config before calling propagate_state: {type(force_model_config)}")
-    print(f"force_model_config before calling propagate_state: {force_model_config}")
     optimized_states, cov_mats, residuals, RMSs = OD_BLS(observations_df, force_model_config, a_priori_estimate, estimate_drag, max_patience=1, boxwing=boxwing)
     initial_t_str = initial_t.strftime("%Y-%m-%d_%H-%M-%S")
-    output_folder = f"{folder_path}/{sat_name}/fm{i+1}arc{arc_number+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}_ID{uuid.uuid4()}" # Add uuid to avoid overwriting
+    output_folder = f"{folder_path}/{sat_name}/arc{arc_number+1}#pts{len(observations_df)}estdrag{estimate_drag}_{initial_t_str}_fm{force_model_config}" # Add uuid to avoid overwriting
     os.makedirs(output_folder, exist_ok=True)
     np.save(f"{output_folder}/optimized_states.npy", optimized_states)
     np.save(f"{output_folder}/cov_mats.npy", cov_mats)
