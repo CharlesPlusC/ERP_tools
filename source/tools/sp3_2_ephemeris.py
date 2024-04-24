@@ -1,4 +1,4 @@
-# for all the satellites below, this script will take the sp3 files in sp3_cache, and concatenate them into a single dataframe per spacecraft. 
+# for all the satellites below, this script will take the sp3 files in sp3_files, and concatenate them into a single dataframe per spacecraft. 
 # the datatframe will then be used to write out an ephemeris file for each spacecraft that will be saved in the specified directory.
 
 import json
@@ -106,7 +106,6 @@ def sp3_ephem_to_df(satellite, date=None, ephemeris_dir="external/ephems"):
         for file_path in ephemeris_files:
             basename = os.path.basename(file_path)
             parts = basename.split('-')
-            # Correctly extracting start and end dates considering the format 'NORADXXXXX-YYYY-MM-DD-YYYY-MM-DD.txt'
             try:
                 # Start Date
                 start_year = parts[1]
@@ -194,7 +193,6 @@ def main(sat_name = None):
         df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T
         df['vel_x_eci'], df['vel_y_eci'], df['vel_z_eci'] = icrs_velocities.T
 
-    # Now add in  'sigma_x', 'sigma_y', 'sigma_z', 'sigma_xv', 'sigma_yv', 'sigma_zv' columns to each dataframe
     # for the time being we will input dummy values consistent with 5cm and 1mm/s for position and velocity respectively
     #TODO: replace this with actual values eventually
     for satellite, df in sp3_dataframes.items():
