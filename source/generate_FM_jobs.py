@@ -1,20 +1,25 @@
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 import os
 import json
-import pandas as pd
 
 def setup_and_submit_jobs():
     print("force model benchmarking script")
-    sat_names_to_test = ["GRACE-FO-A"]
-    # sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
-    dates_to_test = ["2019-01-01", "2023-05-04"]
-    num_arcs = 1  # number of OD arcs that will be run
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X", "Sentinel-1A", "Sentinel-2A", "Sentinel-2B", "Sentinel-3A", "Sentinel-3B", "Sentinel-6A"]
+    dates_to_test = ["2023-05-04"] # date to test
+    num_arcs = 20  # number of OD arcs that will be run
     arc_length = 25  # length of each arc in minutes
     prop_length = 60 * 60 * 12  # length of propagation in seconds
     force_model_configs = [
         {'36x36gravity': True, '3BP': True},
         {'120x120gravity': True, '3BP': True},
-        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True}]
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'jb08drag': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'dtm2000drag': True},
+        {'120x120gravity': True, '3BP': True,'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True, 'nrlmsise00drag': True}
+    ]
 
     for fm_num, force_model_config in enumerate(force_model_configs):
         for sat_name in sat_names_to_test:
@@ -41,6 +46,9 @@ def setup_and_submit_jobs():
                     force_model_config_json = json.dumps(force_model_config)
                     OD_points_json = OD_points.to_json(orient='split')
                     OP_reference_trajectory_json = OP_reference_trajectory.to_json(orient='split')
+                    print(f"Submitting job for {sat_name} arc {arc_number} with force model {force_model_config}")
+                    print(f"OD points: {OD_points_json}")
+                    print(f"OP reference trajectory: {OP_reference_trajectory_json}")
 
                     script_content = f"""#!/bin/bash -l
 #$ -l h_rt=3:0:0
