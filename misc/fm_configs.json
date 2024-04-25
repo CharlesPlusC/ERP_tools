@@ -1,0 +1,11 @@
+[
+    {"36x36gravity": true, "3BP": true},
+    {"120x120gravity": true, "3BP": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true, "knocke_erp": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true, "knocke_erp": true, "relativity": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true, "knocke_erp": true, "relativity": true, "SRP": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true, "knocke_erp": true, "relativity": true, "SRP": true, "jb08drag": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true, "knocke_erp": true, "relativity": true, "SRP": true, "dtm2000drag": true},
+    {"120x120gravity": true, "3BP": true, "solid_tides": true, "ocean_tides": true, "knocke_erp": true, "relativity": true, "SRP": true, "nrlmsise00drag": true}
+]
