@@ -250,52 +250,48 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
 
 def plot_density_arglat(data_frames, moving_avg_minutes, sat_name):
-    #import LogNorm for log scale colorbar
+    sns.set_style("darkgrid", {'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white', 'axes.labelcolor': 'white', 'xtick.color': 'white', 'ytick.color': 'white', 'figure.facecolor': '#2d2d2d', 'text.color': 'white'})
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(15, 10), dpi=100)
+    #import lognorm for the colorbar
     from matplotlib.colors import LogNorm
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(15, 10))
     axes = axes.flatten()
     density_types = ['Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
     titles = ['Computed Density', 'JB08 Model Density', 'DTM2000 Model Density', 'NRLMSISE00 Model Density']
 
-    vmin = 3e-13
-    vmax = 2e-12
+    vmin, vmax = 3e-13, 2e-12
 
     for i, density_df in enumerate(data_frames):
         density_df = get_arglat_from_df(density_df)
-        if 'Epoch' not in density_df or density_df['Epoch'].dtype != 'datetime64[ns]':
-            density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
-        if not isinstance(density_df.index, pd.DatetimeIndex):
-            density_df.set_index('Epoch', inplace=True)
-        
+        density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
+        density_df.set_index('Epoch', inplace=True)
+
         if moving_avg_minutes > 0:
-            seconds_per_point = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
-            window_size = (moving_avg_minutes * 60) // seconds_per_point
-            shift_periods = (moving_avg_minutes * 60 // 2) // seconds_per_point
+            window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+            shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+
             for density_type in density_types:
                 if density_type in density_df.columns:
-                    density_df[f'{density_type} MA'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
-                    density_df[f'{density_type} MA'] = density_df[f'{density_type} MA'].shift(-shift_periods)
-                    #drop the first and last 5 MA values
-                    density_df = density_df.iloc[5:-25]
+                    density_df[f'{density_type} MA'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+                    density_df = density_df.iloc[5:-5]  # Adjust indices as necessary
 
         else:
             for density_type in density_types:
                 if density_type in density_df.columns:
                     density_df[f'{density_type} MA'] = density_df[density_type]
-        
+
         for j, density_type in enumerate(density_types):
             if f'{density_type} MA' in density_df.columns:
-                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='gist_ncar', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
-                axes[j].set_title(titles[j])
+                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='jet', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
+                axes[j].set_title(titles[j], fontsize=12)
                 axes[j].set_xlabel('Time (UTC)')
                 axes[j].set_ylabel('Argument of Latitude')
-                cbar = fig.colorbar(sc, ax=axes[j], label='Density (kg/m³)')
+                cbar = fig.colorbar(sc, ax=axes[j])
                 cbar.set_label('Density (kg/m³)', rotation=270, labelpad=15)
 
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name}')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
-    
+
 if __name__ == "__main__":
     # density_dfs = main()
     # density_compare_scatter(champ_density_df, 45)
