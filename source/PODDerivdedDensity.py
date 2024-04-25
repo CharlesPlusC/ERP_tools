@@ -17,9 +17,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import pandas as pd
 
-
 def main():
-    sat_names_to_test = ["CHAMP"]
+    sat_names_to_test = ["GRACE-FO-B", "TanDEM-X"]
     density_inversion_dfs = []
     for sat_name in sat_names_to_test:
         sat_info = get_satellite_info(sat_name)
@@ -34,7 +33,7 @@ def main():
 
             settings = {
                 'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
-                'no_points_to_process': 180*2, 'filter_window_length': 21, 'filter_polyorder': 7,
+                'no_points_to_process': 180*5, 'filter_window_length': 21, 'filter_polyorder': 7,
                 'ephemeris_interp_freq': '0.01S', 'density_freq': '15S'
             }
             
@@ -48,7 +47,7 @@ def main():
             interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
             interp_ephemeris_df.set_index('UTC', inplace=True)
             interp_ephemeris_df = interp_ephemeris_df.asfreq(settings['density_freq'])
-            
+
             if force_model_config_number == 0:
                 density_inversion_df = pd.DataFrame(columns=[
                     'Epoch', 'Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density',
@@ -114,6 +113,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     plt.figure(figsize=(10, 6))
     for i, density_df in enumerate(data_frames):
         print(f'Processing density_df {i+1}')
+        print(f"density_df['Epoch']: {density_df['Epoch']}")
         if density_df['Epoch'].dtype != 'datetime64[ns]':
             density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
         if not isinstance(density_df.index, pd.DatetimeIndex):
@@ -125,18 +125,17 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density MA'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
         shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)
         density_df['Computed Density MA'] = density_df['Computed Density MA'].shift(-shift_periods)
-        density_df['Computed Density MA'] = density_df['Computed Density MA'].where(density_df['Computed Density MA'] >= 3e-13).ffill()
         
-        sns.lineplot(data=density_df, x=density_df.index, y='Computed Density MA', label=f'Computed Density {i+1}', linestyle='--', palette=[custom_palette[i]])
+    #     sns.lineplot(data=density_df, x=density_df.index, y='Computed Density MA', label=f'Computed Density {i+1}', linestyle='--', palette=[custom_palette[i]])
 
-    plt.title('Computed Density Moving Averages', fontsize=14)
-    plt.xlabel('Epoch (UTC)', fontsize=14)
-    plt.ylabel('Density (log scale)', fontsize=14)
-    plt.legend(loc='upper right', frameon=True)
-    plt.yscale('log')
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    # plt.title(f'Computed and Modelled Atmospheric Density for {sat_name}', fontsize=14)
+    # plt.xlabel('Epoch (UTC)', fontsize=14)
+    # plt.ylabel('Density (log scale)', fontsize=14)
+    # plt.legend(loc='upper right', frameon=True)
+    # plt.yscale('log')
+    # plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     datenow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/computed_density_moving_averages_{datenow}.png')
+    # plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/computed_density_moving_averages_{datenow}.png')
 
     # Second plot for the first data frame with model densities along with computed densities
     plt.figure(figsize=(10, 6))
@@ -224,18 +223,17 @@ def density_compare_scatter(density_df, moving_avg_window, sat_name):
         plt.close()
 
 if __name__ == "__main__":
-    density_dfs = main()
-    # densitydf_gfo_A = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-18_GRACE-FO-A_density_inversion.csv")
-    # densitydf_gfo_B_fm0 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm0_density_inversion.csv")
-    # densitydf_gfo_B_fm1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm1_density_inversion.csv")
-    # densitydf_gfo_B_fm2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-22_GRACE-FO-B_fm2_density_inversion.csv")
-    champ_density_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
-    density_dfs = [champ_density_df]
-    # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-19_TerraSAR-X_density_inversion.csv")
-    sat_name = 'CHAMP'
-    # density_compare_scatter(champ_density_df, 45)
-    plot_density_data(density_dfs, 45, sat_name)
+    # density_dfs = main()
+    # density_dfs = [champ_density_df]
+    # densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-24_GRACE-FO-A_fm0_density_inversion.csv")
+    # density_dfs = [densitydf_df]
+    # sat_name = 'GRACE-FO-B'
+    # # density_compare_scatter(champ_density_df, 45)
+    for i in range(0,200,1):
+        densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-25_GRACE-FO-B_fm0_density_inversion.csv")
+        density_dfs = [densitydf_df]
+        sat_name = f'GRACE-FO-B'
+        plot_density_data(density_dfs, i, sat_name)
  
-
 #TODO:
 # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
