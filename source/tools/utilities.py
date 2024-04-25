@@ -330,6 +330,16 @@ def extract_acceleration(state_vector_data, TLE_epochDate, SATELLITE_MASS, force
 
     return (accelerations, rtn_components) if rtn else accelerations
 
+def pv_to_kep(pvCoordinates, frame, current_date, mu=Constants.WGS84_EARTH_MU):
+    keplerian_orbit = KeplerianOrbit(pvCoordinates, frame, current_date, mu)
+    a = keplerian_orbit.getA()
+    e = keplerian_orbit.getE()
+    i = keplerian_orbit.getI()
+    omega = keplerian_orbit.getPerigeeArgument()
+    raan = keplerian_orbit.getRightAscensionOfAscendingNode()
+    v = keplerian_orbit.getTrueAnomaly()
+    return (a, e, np.rad2deg(i), np.rad2deg(omega), np.rad2deg(raan), np.rad2deg(v))
+
 def keplerian_elements_from_orekit_ephem(ephemeris, initial_date, end_date, step, mu):
     times = []
     keplerian_elements = []
@@ -340,15 +350,7 @@ def keplerian_elements_from_orekit_ephem(ephemeris, initial_date, end_date, step
         pvCoordinates = state.getPVCoordinates()
         frame = state.getFrame()
 
-        keplerian_orbit = KeplerianOrbit(pvCoordinates, frame, current_date, mu)
-        a = keplerian_orbit.getA()
-        e = keplerian_orbit.getE()
-        i = keplerian_orbit.getI()
-        omega = keplerian_orbit.getPerigeeArgument()
-        raan = keplerian_orbit.getRightAscensionOfAscendingNode()
-        v = keplerian_orbit.getTrueAnomaly()
-
-        keplerian_elements.append((a, e, np.rad2deg(i), np.rad2deg(omega), np.rad2deg(raan), np.rad2deg(v)))
+        keplerian_elements.append(pv_to_kep(pvCoordinates, frame, current_date, mu))
 
         times.append(current_date.durationFrom(initial_date))
         current_date = current_date.shiftedBy(step)
@@ -765,3 +767,57 @@ def project_acc_into_HCL(x_acc, y_acc, z_acc, x, y, z, xv, yv, zv):
         c_acc = acc_HCL[1]
         l_acc = acc_HCL[2]
         return h_acc, c_acc, l_acc
+
+def car2kep(x, y, z, u, v, w, deg=False, arg_l=False):
+    """Convert cartesian to keplerian elements.
+
+    Args:
+        x (float): x position in km
+        y (float): y position in km
+        z (float): z position in km
+        u (float): x velocity in km/s
+        v (float): y velocity in km/s
+        w (float): z velocity in km/s
+        deg (bool, optional): If True, return angles in degrees. If False, return angles in radians. Defaults to False.
+        arg_l (bool, optional): If True, return argument of latitude in degrees. If False, return argument of latitude in radians. Defaults to False.
+
+    Returns:
+        tuple: a, e, i, w, W, V, arg_lat
+    """
+    #TODO: add argument of latitude
+    #make the vectors in as astropy Quantity objects
+    r = [x, y, z] * units.km
+    v = [u, v, w] * units.km / units.s
+
+    #convert to cartesian
+    orb = Orbit.from_vectors(Earth, r, v, plane=Planes.EARTH_EQUATOR)
+
+    #convert to keplerian
+    if deg == True:
+
+        a = orb.a.value
+        e = orb.ecc.value
+        i = np.rad2deg(orb.inc.value)
+        w = np.rad2deg(orb.raan.value)
+        W = np.rad2deg(orb.argp.value)
+        V = np.rad2deg(orb.nu.value)
+        # arg_lat = np.rad2deg(orb.arglat.value)
+
+        if arg_l == True:
+            return a, e, i, w, W, V
+        elif arg_l == False:
+            return a, e, i, w, W, V
+
+    elif deg == False:
+        a = orb.a.value
+        e = orb.ecc.value
+        i = orb.inc.value
+        w = orb.raan.value
+        W = orb.argp.value
+        V = orb.nu.value
+        # arg_lat = orb.arg_lat.value
+
+        if arg_l == True:
+            return a, e, i, w, W, V
+
+    return a, e, i, w, W, V                
