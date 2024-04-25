@@ -23,7 +23,7 @@ def interpolate_ephemeris(df, start_time, end_time, freq='0.0001S', stitch=False
 def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpath=None):
     force_model_configs = load_force_model_configs('misc/fm_configs.json')
     user_home_dir = os.path.expanduser("~")
-    res_folder = f'{user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems'
+    res_folder = f'{user_home_dir}/mc_collisions/ERP_tools/output/Collisions/MC/interpolated_MC_ephems/'
     sc_res_folder = f"{res_folder}/{sat_name}"
     nominal_collision_df = pd.read_csv(f"{sc_res_folder}/{sat_name}_nominal_collision.csv")
     perturbed_states = np.loadtxt(f"{sc_res_folder}/{sat_name}_fm{force_model_num}_perturbed_states.csv", delimiter=",")
@@ -56,18 +56,15 @@ def propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpa
 
     # Calculate distances - this is an example using a simple subtraction of vectors
     distances = np.linalg.norm(propagated_state_df_interp[['x', 'y', 'z']].values - nominal_collision_df[['x', 'y', 'z']].values, axis=1)
-
-    #make sure the time stamps of propagated_state_df_interp and nominal_collision_df are the same
-    assert np.all(propagated_state_df_interp['UTC'] == nominal_collision_df['UTC'])
     min_distance = np.min(distances)
     min_distance_time = propagated_state_df_interp['UTC'][np.argmin(distances)]
+    #make sure the time stamps of propagated_state_df_interp and nominal_collision_df are the same
+    assert np.all(propagated_state_df_interp['UTC'] == nominal_collision_df['UTC'])
 
-    print(f"Closest Recorded Approach: {min_distance}")
-    print(f"Time of Closest Recorded Approach: {min_distance_time}")
+    print(f"Closest Recorded Approach: {np.min(distances)}")
 
-    # Save only the TCA and DCA
-    pd.DataFrame({'UTC': [min_distance_time], 'Min Distance': [min_distance]}).to_csv(outpath, index=False)
-
+    # Save the results
+    pd.DataFrame({'UTC': [min_distance_time], 'Distance': [min_distance]}).to_csv(outpath, index=False)
 
 if __name__ == "__main__":
     sat_name = sys.argv[1]
@@ -76,3 +73,4 @@ if __name__ == "__main__":
     outpath = str(sys.argv[4])
     print(f'running with sat_name: {sat_name}, force_model_num: {force_model_num}, perturbed_state_id: {perturbed_state_id}, outpath: {outpath}')
     propagate_and_calculate(sat_name, perturbed_state_id, force_model_num, outpath)
+
