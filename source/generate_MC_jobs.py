@@ -62,13 +62,6 @@ def generate_perturbed_states(optimized_state_cov, state, num_samples):
     perturbed_states = apply_perturbations(state, random_vectors, rotation_matrix)
     return perturbed_states
 
-def generate_perturbed_states(optimized_state_cov, state, num_samples):
-    # Generate perturbed states based on the covariance matrix
-    eig_vals, rotation_matrix = np.linalg.eigh(optimized_state_cov)
-    random_vectors = generate_random_vectors(eig_vals, num_samples)
-    perturbed_states = apply_perturbations(state, random_vectors, rotation_matrix)
-    return perturbed_states
-
 def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations):
     import os
 
@@ -113,7 +106,7 @@ cd $TMPDIR/ERP_tools
 
     os.system(f"qsub {script_filename}")
 
-def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
+def generate_nominal_and_perturbed_states(sat_name, num_perturbations):
 
     ## Define Force Model Configurations To Test
     force_model_configs = load_force_model_configs('misc/fm_configs.json')
@@ -128,12 +121,14 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
     t0 = ephemeris_df['UTC'].iloc[0]
 
     ## Generate Collision Trajectory and Interpolate around nominal TCA
-    t_col = t0 + datetime.timedelta(hours=12)  
+    t_col = t0 + datetime.timedelta(hours=12) #set the TCA to be 12 hours after the first ephemeris point
     collision_df = generate_collision_trajectory(ephemeris_df, t_col, dt=5.0, post_col_t=15.0)
     collision_df_interp = interpolate_ephemeris(collision_df, t_col - datetime.timedelta(seconds=7), t_col + datetime.timedelta(seconds=7), stitch=True) #interpolate the collision trajectory very finely around the TCA
     output_folder = f"output/Collisions/MC/interpolated_MC_ephems/{sat_name}"
     os.makedirs(output_folder, exist_ok=True)
     collision_df_interp.to_csv(f"{output_folder}/{sat_name}_nominal_collision.csv", index=False)
+
+    ## Generate Perturbed States (num_perturbations * len(force_model_configs))
 
     #slice ephemeris df to be every other row (minutely data) and take only the first 35 minutes
     observations_df = ephemeris_df.iloc[::2].head(20)
@@ -152,11 +147,10 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations=20):
         primary_states_perturbed_ephem.extend(perturbed_states_primary)
         perturbed_states_file = f"{output_folder}/{sat_name}_fm{fm_num}_perturbed_states.csv"
         np.savetxt(perturbed_states_file, primary_states_perturbed_ephem, delimiter=",")
-        print(f"Generated perturbed states for {sat_name} with force model {fm_num}")
         create_and_submit_job_scripts(sat_name, fm_num, num_perturbations)
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_perturbations = 10000
     print(f"Generating nominal and perturbed states for {sat_names_to_test}")
     for sat_name in sat_names_to_test:
@@ -167,3 +161,4 @@ if __name__ == "__main__":
     print(f"Running MC job generation script.")
     main()
     print(f"MC job generation complete.")
+
