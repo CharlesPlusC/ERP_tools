@@ -18,7 +18,7 @@ from tqdm import tqdm
 import pandas as pd
 
 def main():
-    sat_names_to_test = ["GRACE-FO-B", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-B", "TerraSAR-X"]
     density_inversion_dfs = []
     for sat_name in sat_names_to_test:
         sat_info = get_satellite_info(sat_name)
@@ -223,18 +223,19 @@ def density_compare_scatter(density_df, moving_avg_window, sat_name):
         plt.close()
 
 if __name__ == "__main__":
-    # density_dfs = main()
+    density_dfs = main()
     # density_dfs = [champ_density_df]
     # densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-24_GRACE-FO-A_fm0_density_inversion.csv")
     # density_dfs = [densitydf_df]
     # sat_name = 'GRACE-FO-B'
     # # density_compare_scatter(champ_density_df, 45)
-    for i in range(0,200,1):
-        densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-25_GRACE-FO-B_fm0_density_inversion.csv")
-        density_dfs = [densitydf_df]
-        sat_name = f'GRACE-FO-B'
-        plot_density_data(density_dfs, i, sat_name)
+    # for i in range(0,200,1):
+    #     densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-25_GRACE-FO-B_fm0_density_inversion.csv")
+    #     density_dfs = [densitydf_df]
+    #     sat_name = f'GRACE-FO-B'
+    #     plot_density_data(density_dfs, i, sat_name)
  
+#2019
 #Champ -> 6
 #GraceFOA -> 11
 #GraceFOB -> 45 (?)

@@ -29,10 +29,6 @@ from org.orekit.forces import ForceModel, BoxAndSolarArraySpacecraft, Panel
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
 
-def load_force_model_configs(json_file):
-    with open(json_file, 'r') as file:
-        return json.load(file)
-
 def ecef_to_lla(x, y, z):
     """
     Convert Earth-Centered, Earth-Fixed (ECEF) coordinates to Latitude, Longitude, Altitude (LLA).
@@ -716,37 +712,6 @@ def posvel_to_sma(x, y, z, u, v, w):
     a = -mu / (2 * epsilon)
 
     return a
-
-import numpy as np
-import pandas as pd
-from scipy.interpolate import lagrange
-
-def calculate_arc_to_chord_ratio(positions):
-    if len(positions) < 2:
-        return np.inf  # Avoid division by zero or invalid calculation
-    arc_length = np.sum(np.abs(np.diff(positions)))
-    chord_length = np.abs(positions[-1] - positions[0])
-    return arc_length / chord_length if chord_length > 0 else np.inf
-
-def piecewise_lagrange_interpolation(x, y, num_points):
-    """Interpolate using piece-wise Lagrange polynomial based on num_points segments."""
-    n = len(y)
-    step = num_points
-    interpolated_values = []
-    new_xs = []
-
-    for i in range(0, n, step):
-        end = min(i + step, n)
-        xi = x[i:end]
-        yi = y[i:end]
-        if len(xi) > 1:  # Ensure there are at least two points to interpolate
-            poly = lagrange(xi, yi)
-            # Define interpolation points within the current xi range
-            new_xi = np.linspace(xi[0], xi[-1], num=len(xi)*10)  # Increase density
-            new_xs.extend(new_xi)
-            interpolated_values.extend(poly(new_xi))
-
-    return np.array(new_xs), np.array(interpolated_values)
 
 def interpolate_positions(df, fine_freq):
     df = df.drop_duplicates(subset='UTC').set_index('UTC')
