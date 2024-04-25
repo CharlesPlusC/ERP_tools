@@ -8,8 +8,8 @@ setup_orekit_curdir("misc/orekit-data.zip")
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 from tools.utilities import interpolate_positions,calculate_acceleration, get_satellite_info, project_acc_into_HCL
+from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
-from tools.orekit_tools import state2acceleration
 import numpy as np
 import datetime
 from tqdm import tqdm
@@ -213,12 +213,31 @@ if __name__ == '__main__':
     inertial_x_acc = merged_df['inertial_x_acc_x']
     inertial_y_acc = merged_df['inertial_y_acc_x']
     inertial_z_acc = merged_df['inertial_z_acc_x']
-
+    density_inversion_df = pd.DataFrame(columns=[
+        'Epoch', 'Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density',
+        'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz'
+    ])
     #now convert to HCL components
     for i in range(1, len(merged_df)):
         h_acc_inv, c_diff_inv, l_diff_inv = project_acc_into_HCL(inverted_x_acc[i], inverted_y_acc[i], inverted_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
         h_acc_meas, c_diff_meas, l_diff_meas = project_acc_into_HCL(inertial_x_acc[i], inertial_y_acc[i], inertial_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
-
+        
+        r = np.array([merged_df.loc[i, 'x'], merged_df.loc[i, 'y'], merged_df.loc[i, 'z']])
+        v = np.array([merged_df.loc[i, 'xv'], merged_df.loc[i, 'yv'], merged_df.loc[i, 'zv']])
+        atm_rot = np.array([0, 0, 72.9211e-6])
+        v_rel = v - np.cross(atm_rot, r)
+        rho = -2 * (l_diff_meas / (2.2 * 1.004)) * (600.2 / np.abs(np.linalg.norm(v_rel))**2)
+        time = merged_df.loc[i, 'utc_time']
+        jb_08_rho = query_jb08(r, time)
+        dtm2000_rho = query_dtm2000(r, time)
+        nrlmsise00_rho = query_nrlmsise00(r, time)
+        new_row = pd.DataFrame({
+            'Epoch': time,
+            'Computed Density': rho,
+            'JB08 Density': jb_08_rho,
+            'DTM2000 Density': dtm2000_rho,
+            'NRLMSISE00 Density': nrlmsise00_rho
+        })
         merged_df.loc[i, 'inverted_h_acc'] = h_acc_inv
         merged_df.loc[i, 'inverted_c_acc'] = c_diff_inv
         merged_df.loc[i, 'inverted_l_acc'] = l_diff_inv
@@ -226,15 +245,20 @@ if __name__ == '__main__':
         merged_df.loc[i, 'inertial_h_acc'] = h_acc_meas
         merged_df.loc[i, 'inertial_c_acc'] = c_diff_meas
         merged_df.loc[i, 'inertial_l_acc'] = l_diff_meas
-    
-    avg_win_length_rms(merged_df)
 
-    components = ['h', 'c', 'l']
-    window_lengths = range(5, 256, 5)
-    psd_data = compute_and_plot_psd_coherence(merged_df, components, window_lengths)
+
+
+
+
+    # avg_win_length_rms(merged_df)
+
+    # components = ['h', 'c', 'l']
+    # window_lengths = range(5, 256, 5)
+    # psd_data = compute_and_plot_psd_coherence(merged_df, components, window_lengths)
+
 
     #TODO: # Most useful plot to get here is going to tell us how much of the singal we recover. 
-           # What kind of bias and what we lose from the detail in the along track.
+            # What kind of bias and what we lose from the detail in the along track.
                 # first we plot just the two along track accelerations -> use RMS as a metric for average length?
                 # second we plot the PSD of the two along track accelerations
            # Make it so that we can come back with other accelerations and compare those as well.

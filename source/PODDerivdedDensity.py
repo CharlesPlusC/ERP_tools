@@ -56,6 +56,7 @@ def main():
             {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
             ]
         
+
         for force_model_config_number, force_model_config in enumerate(force_model_configs):
 
             settings = {
@@ -120,6 +121,7 @@ def main():
                         'accx': [diff_x], 'accy': [diff_y], 'accz': [diff_z]
                     })
                 density_inversion_df = pd.concat([density_inversion_df, new_row], ignore_index=True)
+                
                 density_inversion_dfs.append(density_inversion_df)
 
                 save_folder = f"output/DensityInversion/PODBasedAccelerometry/Data/{sat_name}/"
@@ -281,7 +283,7 @@ def plot_density_arglat(data_frames, moving_avg_minutes, sat_name):
 
         for j, density_type in enumerate(density_types):
             if f'{density_type} MA' in density_df.columns:
-                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='jet', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
+                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
                 axes[j].set_title(titles[j], fontsize=12)
                 axes[j].set_xlabel('Time (UTC)')
                 axes[j].set_ylabel('Argument of Latitude')
@@ -306,5 +308,5 @@ if __name__ == "__main__":
     densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-25_TerraSAR-X_fm0_density_inversion.csv")
     #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
     density_dfs = [densitydf_df]
-    sat_name = 'TerraSAR-X'
+    sat_name = 'GRACE-FO-B'
     plot_density_arglat(density_dfs, 45, sat_name)
