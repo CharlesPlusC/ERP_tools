@@ -235,5 +235,12 @@ if __name__ == "__main__":
         sat_name = f'GRACE-FO-B'
         plot_density_data(density_dfs, i, sat_name)
  
+#Champ -> 6
+#GraceFOA -> 11
+#GraceFOB -> 45 (?)
+#Sentinel1A -> 12
+#Sentinel2A -> 13
+#TerraSARX -> 197 (meh)
+
 #TODO:
 # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
