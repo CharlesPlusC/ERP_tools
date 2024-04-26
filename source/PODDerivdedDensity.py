@@ -277,38 +277,38 @@ def save_density_inversion_data(sat_name, density_inversion_dfs):
         df.to_csv(os.path.join(save_folder, filename), index=False)
 
 def main():
-    sat_names_to_test = ["GRACE-FO-A"]
+    sat_names_to_test = ["GRACE-FO-A", "TerraSAR-X"]
     force_model_configs = [
         {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
     ]
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        # ephemeris_df = ephemeris_df.head(15)
+        ephemeris_df = ephemeris_df.head(180*35)
         interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
         interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
 
-        acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
-        quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
-        inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
+        # acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
+        # quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
+        # inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
 
-        ephemeris_df_copy = interp_ephemeris_df.copy()
-        ephemeris_df_copy.drop(columns=['accx', 'accy', 'accz'], inplace=True)
+        # ephemeris_df_copy = interp_ephemeris_df.copy()
+        # ephemeris_df_copy.drop(columns=['accx', 'accy', 'accz'], inplace=True)
 
         # Ensure utc_time in both DataFrames is converted to datetime
-        ephemeris_df_copy['UTC'] = pd.to_datetime(ephemeris_df_copy['UTC'])
-        inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
-        inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
+        # ephemeris_df_copy['UTC'] = pd.to_datetime(ephemeris_df_copy['UTC'])
+        # inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
+        # inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
 
-        print(f"first five utc times in inertial_gfo_data: {inertial_gfo_data['UTC'].head()}")
-        print(f"first five utc times in ephemeris_df_copy: {ephemeris_df_copy['UTC'].head()}")
-        merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
-        print(f"legnth of merged_df: {len(merged_df)}")
-        merged_df.rename(columns={'inertial_x_acc': 'accx', 'inertial_y_acc': 'accy', 'inertial_z_acc': 'accz'}, inplace=True)
-        density_inversion_dfs_acc = density_inversion(sat_name, merged_df, force_model_configs)
+        # print(f"first five utc times in inertial_gfo_data: {inertial_gfo_data['UTC'].head()}")
+        # print(f"first five utc times in ephemeris_df_copy: {ephemeris_df_copy['UTC'].head()}")
+        # merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
+        # print(f"legnth of merged_df: {len(merged_df)}")
+        # merged_df.rename(columns={'inertial_x_acc': 'accx', 'inertial_y_acc': 'accy', 'inertial_z_acc': 'accz'}, inplace=True)
+        density_inversion_dfs_acc = density_inversion(sat_name, interp_ephemeris_df, force_model_configs)
         save_density_inversion_data(sat_name, density_inversion_dfs_acc)
 
 if __name__ == "__main__":
-    main()
+    # main()
     # density_compare_scatter(champ_density_df, 45)
     # for i in range(0,200,1):
     #     densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-B/2024-04-25_GRACE-FO-B_fm0_density_inversion.csv")
@@ -318,8 +318,8 @@ if __name__ == "__main__":
 
     #TODO:
     # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
-    # densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-25_TerraSAR-X_fm0_density_inversion.csv")
+    densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
     # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
-    # density_dfs = [densitydf_df]
-    # sat_name = 'GRACE-FO-B'
-    # plot_density_arglat(density_dfs, 45, sat_name)
+    density_dfs = [densitydf_df]
+    sat_name = 'GRACE-FO-B'
+    plot_density_arglat(density_dfs, 45, sat_name)
