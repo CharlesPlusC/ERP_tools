@@ -246,10 +246,6 @@ if __name__ == '__main__':
         merged_df.loc[i, 'inertial_c_acc'] = c_diff_meas
         merged_df.loc[i, 'inertial_l_acc'] = l_diff_meas
 
-
-
-
-
     # avg_win_length_rms(merged_df)
 
     # components = ['h', 'c', 'l']
