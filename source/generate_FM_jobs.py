@@ -60,8 +60,8 @@ def setup_and_submit_jobs():
 module load python/miniconda3/4.10.3
 source $UCL_CONDA_PATH/etc/profile.d/conda.sh
 conda activate erp_tools_env
-cp {user_home_dir}/mc_collisions/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
-cp -r {user_home_dir}/mc_collisions/ERP_tools $TMPDIR
+cp {user_home_dir}/FMBenchmark/ERP_tools/erp_tools_env.yml $TMPDIR/erp_tools_env.yml
+cp -r {user_home_dir}/FMBenchmark/ERP_tools $TMPDIR
 cd $TMPDIR/ERP_tools
 
 echo '{OD_points_json}' > {work_dir}/OD_points.json

@@ -29,7 +29,7 @@ import seaborn as sns
 import pandas as pd
 import uuid
 import sys
-
+import json
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -43,7 +43,10 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
     #arc_number included for naming purposes
     estimate_drag = False
     boxwing = False
-    
+    OD_points = pd.read_json(OD_points)
+    OP_reference_trajectory = pd.read_json(OP_reference_trajectory)
+    with open(force_model_config) as f:
+        force_model_config = json.load(f)
     sat_info = get_satellite_info(sat_name)
     cd = sat_info['cd']
     cr = sat_info['cr']
@@ -188,16 +191,11 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
 #             benchmark(sat_name, date)
 
 if __name__ == "__main__":
-    sat_name = sys.argv[0]
-    #ensure sat name is a string
-    assert isinstance(sat_name, str), "sat_name must be a string"
-    OD_points = sys.argv[1]
-    assert isinstance(OD_points, pd.DataFrame), "OD_points must be a pandas dataframe"
-    OP_reference_trajectory = sys.argv[2]
-    assert isinstance(OP_reference_trajectory, pd.DataFrame), "OP_reference_trajectory must be a pandas dataframe"
-    prop_length = sys.argv[3]
-    assert isinstance(prop_length, int), "prop_length must be an integer"
-    arc_number  = sys.argv[4]
-    assert isinstance(arc_number, int), "arc_number must be an integer"
-    force_model_config = sys.argv[5:]
-    assert isinstance(force_model_config, dict), "force_model_config must be a dictionary"
+    folder_path = sys.argv[0]
+    sat_name = sys.argv[1]
+    OD_points = sys.argv[2]
+    OP_reference_trajectory = sys.argv[3]
+    prop_length = sys.argv[4]
+    arc_number  = sys.argv[5]
+    force_model_config = sys.argv[6:]
+    benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config)
