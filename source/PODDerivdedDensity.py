@@ -98,7 +98,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     plt.figure(figsize=(10, 6))
     for i, density_df in enumerate(data_frames):
         print(f'Processing density_df {i+1}')
-        print(f"density_df['Epoch']: {density_df['Epoch']}")
+        print(f'columns: {density_df.columns}')
         if density_df['Epoch'].dtype != 'datetime64[ns]':
             density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
         if not isinstance(density_df.index, pd.DatetimeIndex):
@@ -140,53 +140,121 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
 
-def plot_density_arglat(data_frames, moving_avg_minutes, sat_name):
-    sns.set_style("darkgrid", {'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white', 'axes.labelcolor': 'white', 'xtick.color': 'white', 'ytick.color': 'white', 'figure.facecolor': '#2d2d2d', 'text.color': 'white'})
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(10, 7), dpi=100)
-    #import lognorm for the colorbar
-    from matplotlib.colors import LogNorm
-    axes = axes.flatten()
+from matplotlib.colors import LogNorm
+# def plot_density_arglat(data_frames, moving_avg_minutes, sat_name):
+#     sns.set_style("darkgrid", {
+#         'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white', 
+#         'axes.labelcolor': 'white', 'xtick.color': 'white', 
+#         'ytick.color': 'white', 'figure.facecolor': '#2d2d2d', 'text.color': 'white'
+#     })
+    
+#     density_types = ['Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
+#     titles = ['Computed Density', 'JB08 Model Density', 'DTM2000 Model Density', 'NRLMSISE00 Model Density']
+
+#     # Check if 'Accelerometer Density' is present and add it to lists
+#     if 'Accelerometer Density' in data_frames[0].columns:
+#         density_types.append('Accelerometer Density')
+#         titles.append('Accelerometer Density')
+#         # Multiply all the accelerometer densities by -1
+#         for density_df in data_frames:
+#             density_df['Accelerometer Density'] *= -1
+    
+#     # Create subplot with a dynamic number of rows based on the number of density types
+#     nrows = len(density_types)
+#     fig, axes = plt.subplots(nrows=nrows, ncols=1, figsize=(10, 7 * nrows // 2), dpi=100)
+#     if nrows == 1:
+#         axes = [axes]  # Ensure axes is always iterable
+
+#     vmin, vmax = 3e-13, 2e-12
+
+#     for i, density_df in enumerate(data_frames):
+#         density_df = get_arglat_from_df(density_df)
+#         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
+#         density_df.set_index('Epoch', inplace=True)
+
+#         if moving_avg_minutes > 0:
+#             window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+#             shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+
+#             for density_type in density_types:
+#                 if density_type in density_df.columns:
+#                     density_df[f'{density_type} MA'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+#                     density_df = density_df.iloc[5:-5]  # Adjust indices as necessary
+#         else:
+#             for density_type in density_types:
+#                 if density_type in density_df.columns:
+#                     density_df[f'{density_type} MA'] = density_df[density_type]
+
+#         for j, density_type in enumerate(density_types):
+#             if f'{density_type} MA' in density_df.columns:
+#                 sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
+#                 axes[j].set_title(titles[j], fontsize=12)
+#                 axes[j].set_xlabel('Time (UTC)')
+#                 axes[j].set_ylabel('Argument of Latitude')
+#                 for label in axes[j].get_xticklabels():
+#                     label.set_rotation(45)
+#                     label.set_horizontalalignment('right')
+#                 cbar = fig.colorbar(sc, ax=axes[j])
+#                 cbar.set_label('Density (kg/m³)', rotation=270, labelpad=15)
+
+#     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name}')
+#     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+#     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/density_arglat_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
+#     plt.show()
+
+def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
+    sns.set_style("darkgrid", {
+        'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white', 
+        'axes.labelcolor': 'white', 'xtick.color': 'white', 
+        'ytick.color': 'white', 'figure.facecolor': '#2d2d2d', 'text.color': 'white'
+    })
+    
     density_types = ['Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
     titles = ['Computed Density', 'JB08 Model Density', 'DTM2000 Model Density', 'NRLMSISE00 Model Density']
+    density_diff_titles = ['|Computed - JB08|', '|Computed - DTM2000|', '|Computed - NRLMSISE00|']
+
+    nrows = len(density_types)
+    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 7 * nrows), dpi=100)
 
     vmin, vmax = 3e-13, 2e-12
+    diff_vmin, diff_vmax = 1e-15, 1e-11
 
     for i, density_df in enumerate(data_frames):
         density_df = get_arglat_from_df(density_df)
         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
         density_df.set_index('Epoch', inplace=True)
 
-        if moving_avg_minutes > 0:
-            window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
-            shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+        window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 1
+        shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 0
 
-            for density_type in density_types:
-                if density_type in density_df.columns:
-                    density_df[f'{density_type} MA'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
-                    density_df = density_df.iloc[5:-5]  # Adjust indices as necessary
-
-        else:
-            for density_type in density_types:
-                if density_type in density_df.columns:
-                    density_df[f'{density_type} MA'] = density_df[density_type]
+        for density_type in density_types:
+            if density_type in density_df.columns:
+                density_df[f'{density_type} MA'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+                if density_type != 'Computed Density':
+                    density_df[f'{density_type} Difference'] = abs(density_df['Computed Density MA'] - density_df[f'{density_type} MA'])
 
         for j, density_type in enumerate(density_types):
             if f'{density_type} MA' in density_df.columns:
-                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
-                axes[j].set_title(titles[j], fontsize=12)
-                axes[j].set_xlabel('Time (UTC)')
-                #rotate the x-axis labels
-                for label in axes[j].get_xticklabels():
-                    label.set_rotation(45)
-                    label.set_horizontalalignment('right')
-                axes[j].set_ylabel('Argument of Latitude')
-                cbar = fig.colorbar(sc, ax=axes[j])
+                sc = axes[j, 0].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} MA'], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
+                axes[j, 0].set_title(titles[j], fontsize=12)
+                axes[j, 0].set_xlabel('Time (UTC)')
+                axes[j, 0].set_ylabel('Argument of Latitude')
+                cbar = fig.colorbar(sc, ax=axes[j, 0])
                 cbar.set_label('Density (kg/m³)', rotation=270, labelpad=15)
+            if density_type != 'Computed Density' and f'{density_type} Difference' in density_df.columns:
+                sc_diff = axes[j, 1].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} Difference'], cmap='coolwarm', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=diff_vmin, vmax=diff_vmax))
+                axes[j, 1].set_title(density_diff_titles[j - 1], fontsize=12)
+                axes[j, 1].set_xlabel('Time (UTC)')
+                axes[j, 1].set_ylabel('Argument of Latitude')
+                cbar_diff = fig.colorbar(sc_diff, ax=axes[j, 1])
+                cbar_diff.set_label('Density Difference (kg/m³)', rotation=270, labelpad=15)
 
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name}')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/density_arglat_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
     plt.show()
+
+
 
 def get_arglat_from_df(densitydf_df):
     frame = FramesFactory.getEME2000()
@@ -290,8 +358,11 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
         accelerometer_data['UTC'] = pd.to_datetime(accelerometer_data['UTC'])
         accelerometer_data.set_index('UTC', inplace=True)
         accelerometer_data = accelerometer_data.asfreq(settings['density_freq'])
-        # Merge accelerometer data with interpolated ephemeris data
-        interp_ephemeris_df = pd.merge(interp_ephemeris_df, accelerometer_data, how='left', left_index=True, right_index=True, suffixes=('', '_inertial'))
+        interp_ephemeris_df = pd.merge(interp_ephemeris_df, accelerometer_data, how='left', left_index=True, right_index=True, suffixes=('', '_drop'))
+
+        # Drop the duplicate columns from the accelerometer data
+        columns_to_drop = [col for col in interp_ephemeris_df.columns if '_drop' in col]
+        interp_ephemeris_df.drop(columns=columns_to_drop, inplace=True)
 
         columns = [
             'Epoch', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz',
@@ -306,16 +377,14 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
             epoch = interp_ephemeris_df.index[i]
             vel = np.array([interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]])
             state_vector = np.array([interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i], vel[0], vel[1], vel[2]])
-            # if accelerometer_data is not None:
-            #     force_model_config = {'knocke_erp': True, 'relativity': True, 'SRP': True}
+            if accelerometer_data is not None:
+                force_model_config = {'3BP': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
 
             conservative_accelerations = state2acceleration(state_vector, epoch, settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
 
             computed_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
-            print(f"columns in interp_ephemeris_df: {interp_ephemeris_df.columns}")
             if accelerometer_data is not None:
-                observed_acc = np.array([interp_ephemeris_df['inertial_x_acc_inertial'][i], interp_ephemeris_df['inertial_y_acc_inertial'][i], interp_ephemeris_df['inertial_z_acc_inertial'][i]])
-                print(f"observed_acc: {observed_acc}")
+                observed_acc = np.array([interp_ephemeris_df['inertial_x_acc'][i], interp_ephemeris_df['inertial_y_acc'][i], interp_ephemeris_df['inertial_z_acc'][i]])
             else:
                 observed_acc = np.array(interp_ephemeris_df['accx'][i], interp_ephemeris_df['accy'][i], interp_ephemeris_df['accz'][i])
 
@@ -347,14 +416,10 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
                     **({key: interp_ephemeris_df[key][i] for key in ['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']})
                 }
 
-            if accelerometer_data is None:
-                new_row = pd.DataFrame(row_data, index=[0])
-                density_inversion_df = pd.concat([density_inversion_df, new_row], ignore_index=True)
-
-            print(f"row_data: {row_data}")
+            new_row = pd.DataFrame(row_data, index=[0])
+            density_inversion_df = pd.concat([density_inversion_df, new_row], ignore_index=True)
 
     return density_inversion_df
-
 
 def save_density_inversion_data(sat_name, density_inversion_dfs):
     save_folder = f"output/DensityInversion/PODBasedAccelerometry/Data/{sat_name}/"
@@ -379,34 +444,27 @@ def main():
         acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
         quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
         inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
-        print(f"columsn in inertial_gfo_data: {inertial_gfo_data.columns}")
         ephemeris_df_copy = interp_ephemeris_df.copy()
 
         # Ensure utc_time in both DataFrames is converted to datetime
-        print(f"columns in ephemeris_df_copy: {ephemeris_df_copy.columns}")
         ephemeris_df_copy['Epoch'] = pd.to_datetime(ephemeris_df_copy['Epoch'])
         #rename Epoch to UTC
         ephemeris_df_copy.rename(columns={'Epoch': 'UTC'}, inplace=True)
         inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
         inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
 
-        print(f"first five utc times in inertial_gfo_data: {inertial_gfo_data['UTC'].head()}")
-        print(f"first five utc times in ephemeris_df_copy: {ephemeris_df_copy['UTC'].head()}")
         merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
-        print(f"legnth of merged_df: {len(merged_df)}")
-        print(f"columns in merged_df: {merged_df.columns}")
         density_inversion_dfs_acc = density_inversion(sat_name, merged_df, force_model_config, accelerometer_data=inertial_gfo_data)
-        #save to dataframe: 
         pd.DataFrame(density_inversion_dfs_acc).to_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion_with_acc.csv")
-        # save_density_inversion_data(sat_name, density_inversion_dfs_acc)
 
 if __name__ == "__main__":
-    main()
+    # main()
 
     #TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
     
-    # densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
+    densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
     # # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
-    # density_dfs = [densitydf_df]
-    # sat_name = 'TerraSAR-X'
-    # plot_density_arglat(density_dfs, 45, sat_name)
+    density_dfs = [densitydf_df]
+    sat_name = 'GRACE-FO-A'
+    plot_density_arglat_diff(density_dfs, 45, sat_name)
+    # plot_density_data(density_dfs, 45, sat_name)
