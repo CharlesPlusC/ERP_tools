@@ -43,6 +43,12 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
     #arc_number included for naming purposes
     estimate_drag = False
     boxwing = False
+    print(f"Running benchmark for {sat_name} arc {arc_number + 1}")
+    print(f"first OD point: {OD_points.iloc[0]}")
+    print(f"first OP point: {OP_reference_trajectory.iloc[0]}")
+    print(f"propagation length: {prop_length}")
+    print(f"force model config: {force_model_config}")
+
     OD_points = pd.read_json(OD_points)
     OP_reference_trajectory = pd.read_json(OP_reference_trajectory)
     with open(force_model_config) as f:
@@ -135,11 +141,6 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
     np.save(f"{output_folder}_prop_residuals.npy", diffs_3d_abs_results) #These are not the residuals from the OD fitting process, but from the propagation
     np.savez(f"{output_folder}_state_vector_data.npz", times=state_vector_data[0], state_vectors=state_vector_data[1])
 
-    # Output directory for each arc
-    output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc_number + 1}"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
     for diff_type in ['H', 'C', 'L']:
         fig, ax = plt.subplots(figsize=(8, 4))
         vertical_offset = 0
@@ -155,9 +156,26 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
         ax.set_xlabel('Time')
         ax.set_ylabel(f'{diff_type} Difference')
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/{diff_type}_diff_{arc_length}obs_{prop_length}prop_{initial_t}.png")
-        print(f"saved {diff_type} differences plot for {sat_name} to {output_dir}")
+        plt.savefig(f"{output_folder}/{diff_type}_diff_{arc_length}obs_{prop_length}prop_{initial_t}.png")
+        print(f"saved {diff_type} differences plot for {sat_name} to {output_folder}")
         plt.close()
+
+if __name__ == "__main__":
+    folder_path = sys.argv[0]
+    sat_name = sys.argv[1]
+    OD_points = sys.argv[2]
+    OP_reference_trajectory = sys.argv[3]
+    prop_length = sys.argv[4]
+    arc_number  = sys.argv[5]
+    force_model_config = sys.argv[6:]
+    print(f"folder_path: {folder_path}")
+    print(f"sat_name: {sat_name}")
+    print(f"OD_points: {OD_points}")
+    print(f"OP_reference_trajectory: {OP_reference_trajectory}")
+    print(f"prop_length: {prop_length}")
+    print(f"arc_number: {arc_number}")
+    print(f"force_model_config: {force_model_config}")
+    benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config)
 
 #     output_dir = f"output/OD_BLS/Tapley/prop_estim_states/{sat_name}/arc{arc_number + 1}"
 #     if not os.path.exists(output_dir):
@@ -189,13 +207,3 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
 #     for sat_name in sat_names_to_test:
 #         for date in dates_to_test:
 #             benchmark(sat_name, date)
-
-if __name__ == "__main__":
-    folder_path = sys.argv[0]
-    sat_name = sys.argv[1]
-    OD_points = sys.argv[2]
-    OP_reference_trajectory = sys.argv[3]
-    prop_length = sys.argv[4]
-    arc_number  = sys.argv[5]
-    force_model_config = sys.argv[6:]
-    benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config)
