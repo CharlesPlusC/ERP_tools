@@ -39,18 +39,36 @@ def generate_config_name(config_dict, arc_number):
     config_keys = '+'.join(key for key, value in config_dict.items() if value)
     return f"arc{arc_number}_{config_keys}"
 
+import pandas as pd
+import sys
+import json
+from io import StringIO
+
+# Example function adjustments for reading JSON data correctly:
+def read_json_data(file_path):
+    try:
+        return pd.read_json(file_path, orient='split')
+    except ValueError as e:
+        print(f"Error reading JSON data from {file_path}: {e}")
+        raise
+
 def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_length, arc_number, force_model_config):
     #arc_number included for naming purposes
     estimate_drag = False
     boxwing = False
-    print(f"Running benchmark for {sat_name} arc {arc_number + 1}")
-    print(f"first OD point: {OD_points.iloc[0]}")
-    print(f"first OP point: {OP_reference_trajectory.iloc[0]}")
-    print(f"propagation length: {prop_length}")
-    print(f"force model config: {force_model_config}")
 
-    OD_points = pd.read_json(OD_points)
-    OP_reference_trajectory = pd.read_json(OP_reference_trajectory)
+    print(f"folder_path: {folder_path}")
+    print(f"sat_name: {sat_name}")
+    print(f"OD_points: {OD_points}")
+    print(f"OP_reference_trajectory: {OP_reference_trajectory}")
+    print(f"prop_length: {prop_length}")
+    print(f"arc_number: {arc_number}")
+    print(f"force_model_config: {force_model_config}")
+
+    print(f"reading OD_points from {OD_points}")
+    print(f"fisrt few characters of OD_points: {open(OD_points).read()[:100]}")
+    OD_points = read_json_data(OD_points)
+    OP_reference_trajectory = read_json_data(OP_reference_trajectory)
     with open(force_model_config) as f:
         force_model_config = json.load(f)
     sat_info = get_satellite_info(sat_name)
@@ -161,13 +179,14 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
         plt.close()
 
 if __name__ == "__main__":
-    folder_path = sys.argv[0]
-    sat_name = sys.argv[1]
-    OD_points = sys.argv[2]
-    OP_reference_trajectory = sys.argv[3]
-    prop_length = sys.argv[4]
-    arc_number  = sys.argv[5]
-    force_model_config = sys.argv[6:]
+    folder_path = sys.argv[1]
+    sat_name = sys.argv[2]
+    OD_points = sys.argv[3]
+    OP_reference_trajectory = sys.argv[4]
+    prop_length = sys.argv[5]  # Ensure this is converted to integer
+    arc_number = sys.argv[6]  # Ensure this is converted to integer
+    force_model_config = sys.argv[7:]  # This will capture all remaining arguments as the configuration
+
     print(f"folder_path: {folder_path}")
     print(f"sat_name: {sat_name}")
     print(f"OD_points: {OD_points}")
