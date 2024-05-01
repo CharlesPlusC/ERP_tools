@@ -415,7 +415,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from scipy.stats import shapiro
 
-def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, i, arc_num, estimate_drag):
+def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, final_RMS, sat_name, arc_num, estimate_drag):
     fig = plt.figure(figsize=(10, 8))
     sns.set_theme(style="whitegrid")
     gs = GridSpec(5, 4, figure=fig, hspace=0.6)
@@ -485,7 +485,8 @@ def combined_residuals_plot(observations_df, residuals_final, a_priori_estimate,
     obs_length_folder = f"{sat_name_folder}/{len(observations_df)}"
     if not os.path.exists(obs_length_folder):
         os.makedirs(obs_length_folder)
-    save_path = f"{obs_length_folder}/arcnum{arc_num}_fmodel_{i}_estdrag_{estimate_drag}_{initial_t}.png"
+    timenow = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    save_path = f"{obs_length_folder}/arcnum{arc_num}_{initial_t}_{timenow}.png"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
     print(f"saving to {save_path}")

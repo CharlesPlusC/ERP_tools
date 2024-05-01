@@ -42,7 +42,6 @@ def generate_config_name(config_dict, arc_number):
 import pandas as pd
 import sys
 import json
-from io import StringIO
 
 # Example function adjustments for reading JSON data correctly:
 def read_json_data(file_path):
@@ -68,8 +67,11 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
     print(f"reading OD_points from {OD_points}")
     print(f"fisrt few characters of OD_points: {open(OD_points).read()[:100]}")
     OD_points = read_json_data(OD_points)
+    OD_points['UTC'] = pd.to_datetime(OD_points['UTC'], unit='ms')
     OP_reference_trajectory = read_json_data(OP_reference_trajectory)
-    with open(force_model_config) as f:
+    OP_reference_trajectory['UTC'] = pd.to_datetime(OP_reference_trajectory['UTC'], unit='ms')
+
+    with open(force_model_config[0]) as f:
         force_model_config = json.load(f)
     sat_info = get_satellite_info(sat_name)
     cd = sat_info['cd']
@@ -104,7 +106,7 @@ def benchmark(folder_path, sat_name, OD_points, OP_reference_trajectory, prop_le
     optimized_state = optimized_states[min_RMS_index]
     residuals_final = residuals[min_RMS_index]
 
-    combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, i, arc_number, estimate_drag)
+    combined_residuals_plot(observations_df, residuals_final, a_priori_estimate, optimized_state, force_model_config, RMSs[min_RMS_index], sat_name, arc_number, estimate_drag)
     
     optimized_state_orbit = CartesianOrbit(PVCoordinates(Vector3D(float(optimized_state[0]), float(optimized_state[1]), float(optimized_state[2])),
                                                         Vector3D(float(optimized_state[3]), float(optimized_state[4]), float(optimized_state[5]))),
@@ -183,9 +185,9 @@ if __name__ == "__main__":
     sat_name = sys.argv[2]
     OD_points = sys.argv[3]
     OP_reference_trajectory = sys.argv[4]
-    prop_length = sys.argv[5]  # Ensure this is converted to integer
-    arc_number = sys.argv[6]  # Ensure this is converted to integer
-    force_model_config = sys.argv[7:]  # This will capture all remaining arguments as the configuration
+    prop_length = sys.argv[5]
+    arc_number = sys.argv[6]
+    force_model_config = sys.argv[7:]
 
     print(f"folder_path: {folder_path}")
     print(f"sat_name: {sat_name}")

@@ -91,7 +91,7 @@ source $UCL_CONDA_PATH/etc/profile.d/conda.sh
 conda activate erp_tools_env
 
 cp -r {user_home_dir}/FMBenchmark/ERP_tools $TMPDIR
-cp -r {user_home_dir}/FMBenchmark/output/FMBench/{sat_name} $TMPDIR/ERP_tools
+cp -r {user_home_dir}/FMBenchmark/ERP_tools/output/FMBench/{sat_name} $TMPDIR/ERP_tools
 cd $TMPDIR/ERP_tools
 """
             for arc_num in range(num_arcs):
