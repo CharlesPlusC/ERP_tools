@@ -49,8 +49,6 @@ def read_dst(filepath = "external/SWIndices/Dst_2000_2024.txt"):
 print(f"Reading Dst data from file")
 daily_dst_df = read_dst()
 
-
-
 print(daily_dst_df.head())
 
 def parse_hourly_values(hourly_str):
@@ -72,7 +70,6 @@ hourly_long_df = hourly_values_df.reset_index().melt(id_vars='Date', value_vars=
 hourly_long_df['Hour'] = hourly_long_df['Hour'].str.extract('(\d+)').astype(int)
 hourly_long_df['DateTime'] = hourly_long_df.apply(lambda x: x['Date'] + pd.Timedelta(hours=x['Hour']-1), axis=1)
 
-
 # Plotting a subset of hourly data
 plt.figure(figsize=(15, 7))
 plt.scatter(hourly_long_df['DateTime'], hourly_long_df['Value'], marker='o', linestyle='-', color='blue', s=1, alpha=0.5, label='Hourly Dst Index')
@@ -85,3 +82,135 @@ plt.legend()
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()
+
+def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_1932.txt'):
+    # Read the data, skipping the header lines
+    kp_data = pd.read_csv(filepath, delim_whitespace=True, skiprows=40, header=None,
+                          names=[
+                              "Year", "Month", "Day", "Days", "Days_m", "BSR", "dB",
+                              "Kp1", "Kp2", "Kp3", "Kp4", "Kp5", "Kp6", "Kp7", "Kp8",
+                              "ap1", "ap2", "ap3", "ap4", "ap5", "ap6", "ap7", "ap8",
+                              "Ap", "SN", "F10.7obs", "F10.7adj", "D"
+                          ])
+
+    # Convert date columns to datetime format
+    kp_data['Date'] = pd.to_datetime(kp_data[['Year', 'Month', 'Day']])
+
+    # Calculating the daily average Kp value
+    kp_columns = ['Kp1', 'Kp2', 'Kp3', 'Kp4', 'Kp5', 'Kp6', 'Kp7', 'Kp8']
+    kp_data['Kp_avg'] = kp_data[kp_columns].mean(axis=1)
+
+    kp_details = pd.DataFrame()
+
+    for i in range(1, 9):
+        temp_df = kp_data[['Date', f'Kp{i}', 'Ap', 'SN', 'F10.7obs']].copy()
+        temp_df.rename(columns={f'Kp{i}': 'Kp'}, inplace=True)
+        temp_df['DateTime'] = temp_df['Date'] + pd.to_timedelta((i-1)*3, unit='h')
+        kp_details = pd.concat([kp_details, temp_df], ignore_index=True)
+
+    return kp_data, kp_details
+
+kp_data, kp_details = process_kp_ap_f107_sn()
+
+# Merging the Dst data with the other indices data based on the 'Date' column
+merged_data = pd.merge(kp_data, daily_dst_df[['Date', 'DailyMean']], on='Date', how='left')
+
+# Plotting all indices over time with separate y-axes
+fig, ax1 = plt.subplots(figsize=(15, 9))
+
+# Daily Dst
+# color = 'black'
+# ax1.set_xlabel('DateTime')
+# ax1.set_ylabel('Dst', color=color)
+# ax1.plot(merged_data['Date'], merged_data['DailyMean'], label='Daily Dst', color=color, alpha=0.5)
+# ax1.tick_params(axis='y', labelcolor=color)
+
+# Hourly Dst
+color = 'blue'
+ax1.set_xlabel('DateTime')
+ax1.set_ylabel('Dst', color=color)
+ax1.scatter(hourly_long_df['DateTime'], hourly_long_df['Value'], label='Hourly Dst', color=color, alpha=0.5, s=1)
+ax1.tick_params(axis='y', labelcolor=color)
+
+# # Daily Kp
+# ax2 = ax1.twinx()
+# color = 'red'
+# ax2.set_ylabel('Kp', color=color)
+# ax2.plot(merged_data['Date'], merged_data['Kp_avg'], label='Daily Kp', color=color, alpha=0.5)
+# ax2.tick_params(axis='y', labelcolor=color)
+
+# Plotting 3-hour Kp
+ax2 = ax1.twinx()
+color = 'red'
+ax2.set_ylabel('Kp', color=color)
+ax2.scatter(kp_details['DateTime'], kp_details['Kp'], label='3-hour Kp', color=color, alpha=0.5, s=1)
+ax2.tick_params(axis='y', labelcolor=color)
+
+# Plotting Ap
+ax3 = ax1.twinx()
+color = 'green'
+ax3.spines['right'].set_position(('outward', 60))
+ax3.set_ylabel('Ap', color=color)
+ax3.plot(merged_data['Date'], merged_data['Ap'], label='Daily Ap', color=color, alpha=0.5)
+ax3.tick_params(axis='y', labelcolor=color)
+
+# Plotting SN
+ax4 = ax1.twinx()
+color = 'purple'
+ax4.spines['right'].set_position(('outward', 120))
+ax4.set_ylabel('SN', color=color)
+ax4.plot(merged_data['Date'], merged_data['SN'], label='Daily SN', color=color, alpha=0.5)
+ax4.tick_params(axis='y', labelcolor=color)
+
+# Plotting F10.7obs
+ax5 = ax1.twinx()
+color = 'orange'
+ax5.spines['right'].set_position(('outward', 180))
+ax5.set_ylabel('F10.7obs', color=color)
+ax5.plot(merged_data['Date'], merged_data['F10.7obs'], label='Daily F10.7obs', color=color, alpha=0.5)
+ax5.tick_params(axis='y', labelcolor=color)
+
+fig.tight_layout()
+plt.title('Geomagnetic and Solar Indices Over Time Including Dst')
+fig.legend(loc='upper left')
+plt.show()
+
+# # Plotting all indices over time with separate y-axes
+# fig, ax1 = plt.subplots(figsize=(15, 9))
+# color = 'red'
+# #Daily Kp values
+# # ax1.set_xlabel('DateTime')
+# # ax1.set_ylabel('Kp', color=color)
+# # ax1.scatter(kp_data['Date'], kp_data['Kp_avg'], label='Daily Kp', color=color, alpha=0.5, s=1)
+# # ax1.tick_params(axis='y', labelcolor=color)
+
+# #3 hour Kp values
+# ax1.set_xlabel('DateTime')
+# ax1.set_ylabel('Kp', color=color)
+# ax1.scatter(kp_details['DateTime'], kp_details['Kp'], label='3-hour Kp', color=color, alpha=0.5, s=1)
+# ax1.tick_params(axis='y', labelcolor=color)
+
+# ax2 = ax1.twinx()
+# color = 'green'
+# ax2.set_ylabel('Ap', color=color)
+# ax2.plot(kp_data['Date'], kp_data['Ap'], label='Daily Ap', color=color, alpha=0.5)
+# ax2.tick_params(axis='y', labelcolor=color)
+
+# ax3 = ax1.twinx()
+# color = 'purple'
+# ax3.spines['right'].set_position(('outward', 60))
+# ax3.set_ylabel('SN', color=color)
+# ax3.plot(kp_data['Date'], kp_data['SN'], label='Daily SN', color=color, alpha=0.5)
+# ax3.tick_params(axis='y', labelcolor=color)
+
+# ax4 = ax1.twinx()
+# color = 'orange'
+# ax4.spines['right'].set_position(('outward', 120))
+# ax4.set_ylabel('F10.7obs', color=color)
+# ax4.plot(kp_data['Date'], kp_data['F10.7obs'], label='Daily F10.7obs', color=color, alpha=0.5)
+# ax4.tick_params(axis='y', labelcolor=color)
+
+# fig.tight_layout()
+# plt.title('Geomagnetic and Solar Indices Over Time')
+# fig.legend(loc='upper left', bbox_to_anchor=(0.1,0.9))
+# plt.show()
