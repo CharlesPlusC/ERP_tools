@@ -110,8 +110,7 @@ cd $TMPDIR/ERP_tools
                 file.write(script_content)
             os.system(f"qsub {script_filename}")
 if __name__ == "__main__":
-    sat_names_to_test = ["GRACE-FO-A"]
-    #   "GRACE-FO-B", "TerraSAR-X", "TanDEM-X", "Sentinel-1A", "Sentinel-2A", "Sentinel-2B", "Sentinel-3A", "Sentinel-3B", "Sentinel-6A"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X", "Sentinel-1A", "Sentinel-2A", "Sentinel-2B", "Sentinel-3A", "Sentinel-3B", "Sentinel-6A"]
     dates_to_test = ["2023-05-04"]
     num_arcs = 20
     arc_length = 25

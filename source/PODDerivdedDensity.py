@@ -251,10 +251,8 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
 
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name}')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/density_arglat_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
+    # plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/density_arglat_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
     plt.show()
-
-
 
 def get_arglat_from_df(densitydf_df):
     frame = FramesFactory.getEME2000()
