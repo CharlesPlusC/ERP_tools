@@ -214,7 +214,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     density_diff_titles = ['|Computed - JB08|', '|Computed - DTM2000|', '|Computed - NRLMSISE00|']
 
     nrows = len(density_types)
-    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 7 * nrows), dpi=100)
+    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(12, 4 * nrows), dpi=100)
 
     vmin, vmax = 3e-13, 2e-12
     diff_vmin, diff_vmax = 1e-15, 1e-11
@@ -251,11 +251,12 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
 
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name}')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    # plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/density_arglat_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
-    plt.show()
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/densitydiff_arglat{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def get_arglat_from_df(densitydf_df):
     frame = FramesFactory.getEME2000()
+    use_column = 'Epoch' in densitydf_df.columns
+
     for index, row in densitydf_df.iterrows():
         x = row['x']
         y = row['y']
@@ -263,81 +264,24 @@ def get_arglat_from_df(densitydf_df):
         xv = row['xv']
         yv = row['yv']
         zv = row['zv']
-        UTC = row['Epoch']
-        #convert UTC strings to AbsoluteDate (including milliseconds)
-        UTC = datetime.datetime.strptime(UTC, '%Y-%m-%d %H:%M:%S')
+        
+        if use_column:
+            UTC = row['Epoch']
+            # Check if UTC needs to be converted from string to datetime
+            if isinstance(UTC, str):
+                UTC = datetime.datetime.strptime(UTC, '%Y-%m-%d %H:%M:%S')
+        else:
+            UTC = index  # Use the index directly, which should already be in datetime format
+
         position = Vector3D(float(x), float(y), float(z))
         velocity = Vector3D(float(xv), float(yv), float(zv))
         pvCoordinates = PVCoordinates(position, velocity)
         time = datetime_to_absolutedate(UTC)
         kep_els = pv_to_kep(pvCoordinates, frame, time)
-        #arg lat is the sum of the argument of perigee and the true anomaly (4th and 6th)
         arglat = kep_els[3] + kep_els[5]
         densitydf_df.at[index, 'arglat'] = arglat
 
     return densitydf_df
-
-# def density_inversion(sat_name, interp_ephemeris_df, force_model_configs, accelerometer_data=None):
-#     density_inversion_dfs = []
-#     sat_info = get_satellite_info(sat_name)
-#     settings = {
-#         'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
-#         'density_freq': '15S'
-#     }
-
-#     interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
-#     interp_ephemeris_df.set_index('UTC', inplace=True)
-#     interp_ephemeris_df = interp_ephemeris_df.asfreq(settings['density_freq'])
-
-#     for force_model_config_number, force_model_config in enumerate(force_model_configs):
-#         if force_model_config_number == 0:
-#             density_inversion_df = pd.DataFrame(columns=[
-#                 'Epoch', 'Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density',
-#                 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz'
-#             ])
-#         else:
-#             density_inversion_df = pd.DataFrame(columns=[
-#                 'Epoch', 'Computed Density', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz'
-#             ])
-
-#         for i in tqdm(range(1, len(interp_ephemeris_df)), desc='Processing Density Inversion'):
-#             epoch = interp_ephemeris_df.index[i]
-#             vel = np.array([interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]])
-#             state_vector = np.array([interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i], vel[0], vel[1], vel[2]])
-#             conservative_accelerations = state2acceleration(state_vector, epoch, settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
-
-#             computed_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
-#             observed_acc = np.array([interp_ephemeris_df['accx'][i], interp_ephemeris_df['accy'][i], interp_ephemeris_df['accz'][i]])
-#             diff = computed_accelerations_sum - observed_acc
-#             diff_x, diff_y, diff_z = diff[0], diff[1], diff[2]
-#             _, _, diff_l = project_acc_into_HCL(diff_x, diff_y, diff_z, interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i], interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i])
-
-#             r = np.array([interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i]])
-#             v = np.array([interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]])
-#             atm_rot = np.array([0, 0, 72.9211e-6])
-#             v_rel = v - np.cross(atm_rot, r)
-#             rho = -2 * (diff_l / (settings['cd'] * settings['cross_section'])) * (settings['mass'] / np.abs(np.linalg.norm(v_rel))**2)
-#             time = interp_ephemeris_df.index[i]
-#             if force_model_config_number == 0:
-#                 jb_08_rho = query_jb08(r, time)
-#                 dtm2000_rho = query_dtm2000(r, time)
-#                 nrlmsise00_rho = query_nrlmsise00(r, time)
-#                 new_row = pd.DataFrame({
-#                     'Epoch': [time], 'Computed Density': [rho], 'JB08 Density': [jb_08_rho], 'DTM2000 Density': [dtm2000_rho], 'NRLMSISE00 Density': [nrlmsise00_rho],
-#                     'x': [r[0]], 'y': [r[1]], 'z': [r[2]], 'xv': [v[0]], 'yv': [v[1]], 'zv': [v[2]],
-#                     'accx': [diff_x], 'accy': [diff_y], 'accz': [diff_z]
-#                 })
-#             else:
-#                 new_row = pd.DataFrame({
-#                     'Epoch': [time], 'Computed Density': [rho],
-#                     'x': [r[0]], 'y': [r[1]], 'z': [r[2]], 'xv': [v[0]], 'yv': [v[1]], 'zv': [v[2]],
-#                     'accx': [diff_x], 'accy': [diff_y], 'accz': [diff_z]
-#                 })
-#             density_inversion_df = pd.concat([density_inversion_df, new_row], ignore_index=True)
-
-#             density_inversion_dfs.append(density_inversion_df)
-
-#     return density_inversion_dfs
 
 def density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None):
     sat_info = get_satellite_info(sat_name)
@@ -428,6 +372,56 @@ def save_density_inversion_data(sat_name, density_inversion_dfs):
         if isinstance(df, pd.DataFrame):
             df.to_csv(os.path.join(save_folder, filename), index=False)
 
+def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name):
+    sns.set_style("darkgrid", {
+        'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white',
+        'axes.labelcolor': 'white', 'xtick.color': 'white',
+        'ytick.color': 'white', 'figure.facecolor': '#2d2d2d', 'text.color': 'white'
+    })
+
+    density_types = ['Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
+    titles = ['Delta Density: Computed vs JB08', 'Delta Density: Computed vs DTM2000', 'Delta Density: Computed vs NRLMSISE00']
+
+    fig, axes = plt.subplots(nrows=len(titles), ncols=1, figsize=(7, 3 * len(titles)), dpi=200)
+
+    for density_df in data_frames:
+        density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True) if 'Epoch' in density_df.columns else density_df.index
+        density_df = get_arglat_from_df(density_df)
+        if 'Epoch' in density_df.columns:
+            density_df.set_index('Epoch', inplace=True)
+
+        
+        # Calculate moving average
+        window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 1
+        for density_type in density_types:
+            if density_type in density_df.columns:
+                density_df[f'{density_type} MA'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
+                #drop the first and last 450 points
+                density_df = density_df.iloc[450:-450]
+
+        # Calculate delta density relative to initial value
+        for density_type in density_types:
+            initial_value = density_df[f'{density_type} MA'].iloc[0]
+            density_df[f'{density_type} Delta'] = density_df[f'{density_type} MA'] - initial_value
+
+        # Calculate relative change in delta densities
+        for j, title in enumerate(titles):
+            model_density = density_types[j + 1]  # skip 'Computed Density' for title indexing
+            if f'{model_density} Delta' in density_df.columns:
+                density_df[f'Relative Change {model_density}'] = density_df['Computed Density Delta'] - density_df[f'{model_density} Delta']
+                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'Relative Change {model_density}'], cmap='nipy_spectral', alpha=0.6, edgecolor='none')
+                axes[j].set_title(title, fontsize=12)
+                axes[j].set_xlabel('Time (UTC)')
+                for label in axes[j].get_xticklabels():
+                    label.set_rotation(45)
+                    label.set_horizontalalignment('right')
+                axes[j].set_ylabel('Argument of Latitude')
+                cbar = fig.colorbar(sc, ax=axes[j])
+                cbar.set_label('Delta Density Difference (kg/m³)', rotation=270, labelpad=15)
+
+    plt.suptitle(f'Relative Change in Atmospheric Density for {sat_name}')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/rel_densitydiff_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def main():
     sat_names_to_test = ["GRACE-FO-A"]
@@ -459,10 +453,77 @@ if __name__ == "__main__":
     # main()
 
     #TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
-    
-    densitydf_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
+    densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
+    densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
     # # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
-    density_dfs = [densitydf_df]
-    sat_name = 'GRACE-FO-A'
-    plot_density_arglat_diff(density_dfs, 45, sat_name)
-    # plot_density_data(density_dfs, 45, sat_name)
+    sat_names = ["GRACE-FO-A", "TerraSAR-X"]
+    for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx]):
+        density_dfs = [density_df]
+        #SELECT THE SAT NAME IN USING THE NU
+        sat_name = sat_names[df_num]
+        print(f"sat_name: {sat_name}")
+        plot_density_arglat_diff(density_dfs, 45, sat_name)
+        # plot_density_data(density_dfs, 45, sat_name)
+        plot_relative_density_change(density_dfs, 45, sat_name)
+
+# def density_inversion(sat_name, interp_ephemeris_df, force_model_configs, accelerometer_data=None):
+#     density_inversion_dfs = []
+#     sat_info = get_satellite_info(sat_name)
+#     settings = {
+#         'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
+#         'density_freq': '15S'
+#     }
+
+#     interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
+#     interp_ephemeris_df.set_index('UTC', inplace=True)
+#     interp_ephemeris_df = interp_ephemeris_df.asfreq(settings['density_freq'])
+
+#     for force_model_config_number, force_model_config in enumerate(force_model_configs):
+#         if force_model_config_number == 0:
+#             density_inversion_df = pd.DataFrame(columns=[
+#                 'Epoch', 'Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density',
+#                 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz'
+#             ])
+#         else:
+#             density_inversion_df = pd.DataFrame(columns=[
+#                 'Epoch', 'Computed Density', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz'
+#             ])
+
+#         for i in tqdm(range(1, len(interp_ephemeris_df)), desc='Processing Density Inversion'):
+#             epoch = interp_ephemeris_df.index[i]
+#             vel = np.array([interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]])
+#             state_vector = np.array([interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i], vel[0], vel[1], vel[2]])
+#             conservative_accelerations = state2acceleration(state_vector, epoch, settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
+
+#             computed_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
+#             observed_acc = np.array([interp_ephemeris_df['accx'][i], interp_ephemeris_df['accy'][i], interp_ephemeris_df['accz'][i]])
+#             diff = computed_accelerations_sum - observed_acc
+#             diff_x, diff_y, diff_z = diff[0], diff[1], diff[2]
+#             _, _, diff_l = project_acc_into_HCL(diff_x, diff_y, diff_z, interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i], interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i])
+
+#             r = np.array([interp_ephemeris_df['x'][i], interp_ephemeris_df['y'][i], interp_ephemeris_df['z'][i]])
+#             v = np.array([interp_ephemeris_df['xv'][i], interp_ephemeris_df['yv'][i], interp_ephemeris_df['zv'][i]])
+#             atm_rot = np.array([0, 0, 72.9211e-6])
+#             v_rel = v - np.cross(atm_rot, r)
+#             rho = -2 * (diff_l / (settings['cd'] * settings['cross_section'])) * (settings['mass'] / np.abs(np.linalg.norm(v_rel))**2)
+#             time = interp_ephemeris_df.index[i]
+#             if force_model_config_number == 0:
+#                 jb_08_rho = query_jb08(r, time)
+#                 dtm2000_rho = query_dtm2000(r, time)
+#                 nrlmsise00_rho = query_nrlmsise00(r, time)
+#                 new_row = pd.DataFrame({
+#                     'Epoch': [time], 'Computed Density': [rho], 'JB08 Density': [jb_08_rho], 'DTM2000 Density': [dtm2000_rho], 'NRLMSISE00 Density': [nrlmsise00_rho],
+#                     'x': [r[0]], 'y': [r[1]], 'z': [r[2]], 'xv': [v[0]], 'yv': [v[1]], 'zv': [v[2]],
+#                     'accx': [diff_x], 'accy': [diff_y], 'accz': [diff_z]
+#                 })
+#             else:
+#                 new_row = pd.DataFrame({
+#                     'Epoch': [time], 'Computed Density': [rho],
+#                     'x': [r[0]], 'y': [r[1]], 'z': [r[2]], 'xv': [v[0]], 'yv': [v[1]], 'zv': [v[2]],
+#                     'accx': [diff_x], 'accy': [diff_y], 'accz': [diff_z]
+#                 })
+#             density_inversion_df = pd.concat([density_inversion_df, new_row], ignore_index=True)
+
+#             density_inversion_dfs.append(density_inversion_df)
+
+#     return density_inversion_dfs
