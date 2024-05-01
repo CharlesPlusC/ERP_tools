@@ -80,7 +80,7 @@ def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_19
 
     return kp_data, kp_details
 
-def get_sw_indices(start_date =None, stop_date = None):
+def get_sw_indices():
 
     daily_dst_df = read_dst()
 
@@ -101,16 +101,6 @@ def get_sw_indices(start_date =None, stop_date = None):
 
     # Merging the Dst data with the other indices data based on the 'Date' column
     daily_indices = pd.merge(kp_data, daily_dst_df[['Date', 'DailyMean']], on='Date', how='left')
-
-    if start_date is not None:
-        daily_indices = daily_indices[daily_indices['Date'] >= start_date]
-        kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] >= start_date]
-        hourly_dst = hourly_dst[hourly_dst['DateTime'] >= start_date]
-
-    if stop_date is not None:
-        daily_indices = daily_indices[daily_indices['Date'] <= stop_date]
-        kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] <= stop_date]
-        hourly_dst = hourly_dst[hourly_dst['DateTime'] <= stop_date]
 
     return daily_indices, kp_3hrly, hourly_dst
 
