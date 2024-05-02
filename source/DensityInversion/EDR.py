@@ -10,9 +10,9 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 
 import os
-from tools.utilities import utc_to_mjd, get_satellite_info, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
-from tools.sp3_2_ephemeris import sp3_ephem_to_df
-from tools.orekit_tools import query_jb08, query_dtm2000, query_nrlmsise00, state2acceleration
+from ..tools.utilities import utc_to_mjd, get_satellite_info, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
+from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
+from ..tools.orekit_tools import query_jb08, query_dtm2000, query_nrlmsise00, state2acceleration
 import numpy as np
 import datetime
 import matplotlib.pyplot as plt
@@ -72,16 +72,26 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
 
     return -V_dev
 
+# def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
+#     # Calculate the integral part for rho_eff computation
+#     time_diffs = np.diff(MJDs) * 86400  # Convert MJDs to seconds
+#     rho_eff = np.zeros(len(velocity))
+#     for i in range(1, len(velocity)):
+#         # Use the time differences for the trapezoidal integration
+#         # We multiply velocity^3 by the time interval (in seconds) to get the integral value
+#         if i < len(time_diffs):  # Ensure we don't go out of bounds
+#             integral_value = trapz(CD * A_ref * velocity[i-1:i+1]*3, dx=time_diffs[i-1])
+#             rho_eff[i] = - 2 * EDR[i] / (integral_value)
+#     return rho_eff
+
 def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
-    # Calculate the integral part for rho_eff computation
-    time_diffs = np.diff(MJDs) * 86400  # Convert MJDs to seconds
+    time_diffs = np.diff(MJDs) * 86400
     rho_eff = np.zeros(len(velocity))
-    for i in range(1, len(velocity)):
-        # Use the time differences for the trapezoidal integration
-        # We multiply velocity^3 by the time interval (in seconds) to get the integral value
-        if i < len(time_diffs):  # Ensure we don't go out of bounds
-            integral_value = trapz(CD * A_ref * velocity[i-1:i+1]*3, dx=time_diffs[i-1])
-            rho_eff[i] = - 2 * EDR[i] / (integral_value)
+    for i in range(1, len(time_diffs) + 1):
+        if i < len(velocity):
+            function_value = CD * A_ref * np.power(velocity[i-1:i+1], 3)
+            integral_value = trapz(function_value, dx=time_diffs[i-1])
+            rho_eff[i] = - 2 * EDR[i] / integral_value
     return rho_eff
 
 def main():
@@ -202,7 +212,8 @@ def main():
             energy_ephemeris_df['j2_total_diff'] = j2_total_diff
             energy_ephemeris_df['HOT_total_diff'] = HOT_total_diff
             export_df = energy_ephemeris_df[['MJD','x', 'y', 'z', 'xv', 'yv', 'zv', 'lat', 'lon', 'alt', 'kinetic_energy', 'monopole', 'U_j2', 'U_non_spherical', 'j2_total_diff', 'HOT_total_diff']]
-            export_df.to_csv(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.csv"), index=False)
+            datenow = datetime.datetime.now().strftime("%Y-%m-%d")
+            export_df.to_csv(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
 
         #if the ephemeris does not contain a columns called MJD, then use start_date_utc and assume 30s time steps
         if 'MJD' not in energy_ephemeris_df.columns:
@@ -220,6 +231,7 @@ def main():
         A_ref = 1.004  # From Mehta et al 2013
         mass = 600.0
         rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
+        print(f"first five values of rho_eff: {rho_eff[:5]}")
         rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
         rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
         print(f"first five values of rho_eff: {rho_eff[:5]}")
@@ -244,8 +256,6 @@ def main():
             energy_ephemeris_df.at[i, 'sma'] = sma
             pos = np.array([x[i], y[i], z[i]])
             print(f"pos: {pos}, t: {t[i]}")
-            #every hour get the rho_eff from the JB08, DTM2000, and NRLMSISE00 models
-            # if i % 100 == 0:
             print(f"querying JB08, DTM2000, and NRLMSISE00 at time: {t[i]}")
             jb08_rho = query_jb08(pos, t[i])
             dtm2000_rho = query_dtm2000(pos, t[i])
@@ -256,115 +266,118 @@ def main():
             jb08_rhos.append((jb08_rho, t[i]))
             dtm2000_rhos.append((dtm2000_rho, t[i]))
             nrlmsise00_rhos.append((nrlmsise00_rho, t[i]))
-            
-        # smas = energy_ephemeris_df['sma']
-
-        # #get the rolling average of the sma
-        # smas_180 = smas.rolling(window=180, min_periods=1).mean()
-
-        # #slice the rolling sma and rho_eff by 180 points at the start and at the finish
-        # smas_180 = smas_180[180:-180]
-        # rho_eff_180 = rho_eff_180[180:-180]
-        # rho_eff_60 = rho_eff_60[180:-180]
-        # rho_eff = rho_eff[180:-180]
-        # #slice the MJDs to be the same length as the rolling sma and rho_eff
-        UTCs = energy_ephemeris_df['UTC']
-
-        plt.plot(UTCs, rho_eff)
-        plt.xlabel('Modified Julian Date')
-        plt.ylabel('EDR Density (kg/m^3)')
-        plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
-        plt.grid(True)
-        plot_folder_save = "output/DensityInversion/EDR/Plots"
-        savefile = os.path.join(plot_folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
-
-        #now same as above but with the 180-point rolling average
-        jb08_rhos = np.array(jb08_rhos)
-        dtm2000_rhos = np.array(dtm2000_rhos)
-        nrlmsise00_rhos = np.array(nrlmsise00_rhos)
-
-        # Now you can properly index the arrays
-        plt.plot(UTCs, rho_eff_180, label='EDR Density 180-point moving average')
-        plt.plot(UTCs, rho_eff_60, label='EDR Density 60-point moving average')
-        plt.plot(UTCs, rho_eff, label='EDR Density')
-        plt.plot(jb08_rhos[:, 1], jb08_rhos[:, 0], label='JB08 Density')
-        plt.plot(dtm2000_rhos[:, 1], dtm2000_rhos[:, 0], label='DTM2000 Density')
-        plt.plot(nrlmsise00_rhos[:, 1], nrlmsise00_rhos[:, 0], label='NRLMSISE00 Density')
-        plt.xlabel('Modified Julian Date')
-        plt.ylabel('Effective Density (kg/m^3)')
-        plt.title(f"{sat_name}: 180-point Rolling Density")
-        plt.grid(True)
-        plt.legend()
-        plot_folder_save = "output/DensityInversion/EDR/Plots"
-        # savefile = os.path.join(plot_folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
-        # plt.savefig(savefile)
-        plt.show()
-
-        # sns.set_theme(style='whitegrid')
-        # fig, axs = plt.subplots(3, 1, figsize=(10, 10))
-        # #plot total energy differences
-        # axs[0].plot(ephemeris_df['MJD'], spherical_total_diff, label='Spherical Total Energy Difference', color='xkcd:hot magenta')
-        # axs[0].plot(ephemeris_df['MJD'], j2_total_diff, label='J2 Total Energy Difference', color='xkcd:tangerine')
-        # axs[0].plot(ephemeris_df['MJD'], HOT_total_diff, label='HOT Total Energy Difference', color='xkcd:greenish', linestyle='--')
-        # axs[0].grid(True)
-        # axs[0].legend()
-        # axs[0].set_xlabel('')
-        # axs[0].set_ylabel('Energy_i - Energy_0 (J/kg)')
-        # axs[0].set_title('Total Relative Energy Differences')
-
-        # #plot same as the top but only J2 and HOT
-        # axs[1].plot(ephemeris_df['MJD'], j2_total_diff, label='J2 Total Energy Difference', color='xkcd:tangerine')
-        # axs[1].plot(ephemeris_df['MJD'], HOT_total_diff, label='HOT Total Energy Difference', color='xkcd:greenish', linestyle='--')
-        # axs[1].legend()
-        # axs[1].grid(True)
-        # axs[1].set_xlabel('')
-        # axs[1].set_ylabel('Energy_i - Energy_0 (J/kg)')
-        # axs[1].set_title('Total Relative Energy Differences (J2 and H.O.T only)')
-        
-        # #plot individual energy differences
-        # axs[2].plot(ephemeris_df['MJD'], kinetic_energy_diff, label='Kinetic Energy Difference', color='xkcd:minty green')
-        # axs[2].plot(ephemeris_df['MJD'], monopole_potential_diff, label='Monopole Potential Difference', color='xkcd:easter purple')
-        # axs[2].plot(ephemeris_df['MJD'], j2_diff, label='J2 Potential Difference', color='xkcd:tangerine')
-        # axs[2].plot(ephemeris_df['MJD'], HOT_diff, label='HOT Potential Difference', color='xkcd:greenish', linestyle='--')
-        # axs[2].legend()
-        # axs[2].grid(True)
-        # axs[2].set_xlabel('Modified Julian Date')
-        # axs[2].set_ylabel('Energy_i - Energy_0 (J/kg)')
-        # axs[2].set_title('Individual Relative Energy Differences')
-
-        # #main title with satellite name
-        # fig.suptitle(f"{sat_name}: Energy Budget", fontsize=14)
-
-        # plt.tight_layout()
-
-        # plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.png"))
-
-        # import cartopy.crs as ccrs
-        # import cartopy.feature as cfeature
-
-        # # Plot a lat-lon map with landmasses outlined and the rest in light grey
-        # fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
-        # ax.add_feature(cfeature.LAND, edgecolor='black', facecolor='lightgrey')
-        # ax.add_feature(cfeature.OCEAN, facecolor='lightgrey')
-        # ax.add_feature(cfeature.COASTLINE)
-        # ax.add_feature(cfeature.BORDERS, linestyle=':')
-
-        # # Ensure the colormap is centered at zero
-        # max_abs_val = np.max(np.abs(HOT_total_diff))
-        # norm = plt.Normalize(-max_abs_val, max_abs_val)
-
-        # # Scatter plot for HOT total energy differences with 'seismic' colormap
-        # sc = ax.scatter(ephemeris_df['lon'], ephemeris_df['lat'], c=HOT_total_diff, cmap='seismic', norm=norm, s=5, transform=ccrs.PlateCarree())
-
-        # ax.set_title(f"{sat_name}: HOT Total Energy Differences")
-        # cbar = plt.colorbar(sc)
-        # cbar.set_label('Energy_i - Energy_0 (J/kg)')
-
-        # plt.savefig(os.path.join(folder_save, f"{sat_name}_HOT_total_energy_diff_map_{start_date_utc}_{end_date_utc}.png"))
-        # plt.show()
-
-        # # plt.show()
 
 if __name__ == "__main__":
     main()
 #### PLOTTING ####
+
+            
+        # # smas = energy_ephemeris_df['sma']
+
+        # # #get the rolling average of the sma
+        # # smas_180 = smas.rolling(window=180, min_periods=1).mean()
+
+        # # #slice the rolling sma and rho_eff by 180 points at the start and at the finish
+        # # smas_180 = smas_180[180:-180]
+        # # rho_eff_180 = rho_eff_180[180:-180]
+        # # rho_eff_60 = rho_eff_60[180:-180]
+        # # rho_eff = rho_eff[180:-180]
+        # # #slice the MJDs to be the same length as the rolling sma and rho_eff
+        # UTCs = energy_ephemeris_df['UTC']
+
+        # plt.plot(UTCs, rho_eff)
+        # plt.xlabel('Modified Julian Date')
+        # plt.ylabel('EDR Density (kg/m^3)')
+        # plt.title(f"{sat_name}: \"Instantaneous\" Effective Density")
+        # plt.grid(True)
+        # plot_folder_save = "output/DensityInversion/EDR/Plots"
+        # savefile = os.path.join(plot_folder_save, f"{sat_name}_EDR_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
+        # plt.savefig(savefile)
+        # plt.show()
+
+        # #now same as above but with the 180-point rolling average
+        # jb08_rhos = np.array(jb08_rhos)
+        # dtm2000_rhos = np.array(dtm2000_rhos)
+        # nrlmsise00_rhos = np.array(nrlmsise00_rhos)
+
+        # # Now you can properly index the arrays
+        # plt.plot(UTCs, rho_eff_180, label='EDR Density 180-point moving average')
+        # plt.plot(UTCs, rho_eff_60, label='EDR Density 60-point moving average')
+        # plt.plot(UTCs, rho_eff, label='EDR Density')
+        # plt.plot(jb08_rhos[:, 1], jb08_rhos[:, 0], label='JB08 Density')
+        # plt.plot(dtm2000_rhos[:, 1], dtm2000_rhos[:, 0], label='DTM2000 Density')
+        # plt.plot(nrlmsise00_rhos[:, 1], nrlmsise00_rhos[:, 0], label='NRLMSISE00 Density')
+        # plt.xlabel('Modified Julian Date')
+        # plt.ylabel('Effective Density (kg/m^3)')
+        # plt.title(f"{sat_name}: 180-point Rolling Density")
+        # plt.grid(True)
+        # plt.legend()
+        # plot_folder_save = "output/DensityInversion/EDR/Plots"
+        # savefile = os.path.join(plot_folder_save, f"{sat_name}_EDR_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
+        # plt.savefig(savefile)
+        # plt.show()
+
+        # # sns.set_theme(style='whitegrid')
+        # # fig, axs = plt.subplots(3, 1, figsize=(10, 10))
+        # # #plot total energy differences
+        # # axs[0].plot(ephemeris_df['MJD'], spherical_total_diff, label='Spherical Total Energy Difference', color='xkcd:hot magenta')
+        # # axs[0].plot(ephemeris_df['MJD'], j2_total_diff, label='J2 Total Energy Difference', color='xkcd:tangerine')
+        # # axs[0].plot(ephemeris_df['MJD'], HOT_total_diff, label='HOT Total Energy Difference', color='xkcd:greenish', linestyle='--')
+        # # axs[0].grid(True)
+        # # axs[0].legend()
+        # # axs[0].set_xlabel('')
+        # # axs[0].set_ylabel('Energy_i - Energy_0 (J/kg)')
+        # # axs[0].set_title('Total Relative Energy Differences')
+
+        # # #plot same as the top but only J2 and HOT
+        # # axs[1].plot(ephemeris_df['MJD'], j2_total_diff, label='J2 Total Energy Difference', color='xkcd:tangerine')
+        # # axs[1].plot(ephemeris_df['MJD'], HOT_total_diff, label='HOT Total Energy Difference', color='xkcd:greenish', linestyle='--')
+        # # axs[1].legend()
+        # # axs[1].grid(True)
+        # # axs[1].set_xlabel('')
+        # # axs[1].set_ylabel('Energy_i - Energy_0 (J/kg)')
+        # # axs[1].set_title('Total Relative Energy Differences (J2 and H.O.T only)')
+        
+        # # #plot individual energy differences
+        # # axs[2].plot(ephemeris_df['MJD'], kinetic_energy_diff, label='Kinetic Energy Difference', color='xkcd:minty green')
+        # # axs[2].plot(ephemeris_df['MJD'], monopole_potential_diff, label='Monopole Potential Difference', color='xkcd:easter purple')
+        # # axs[2].plot(ephemeris_df['MJD'], j2_diff, label='J2 Potential Difference', color='xkcd:tangerine')
+        # # axs[2].plot(ephemeris_df['MJD'], HOT_diff, label='HOT Potential Difference', color='xkcd:greenish', linestyle='--')
+        # # axs[2].legend()
+        # # axs[2].grid(True)
+        # # axs[2].set_xlabel('Modified Julian Date')
+        # # axs[2].set_ylabel('Energy_i - Energy_0 (J/kg)')
+        # # axs[2].set_title('Individual Relative Energy Differences')
+
+        # # #main title with satellite name
+        # # fig.suptitle(f"{sat_name}: Energy Budget", fontsize=14)
+
+        # # plt.tight_layout()
+
+        # # plt.savefig(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}.png"))
+
+        # # import cartopy.crs as ccrs
+        # # import cartopy.feature as cfeature
+
+        # # # Plot a lat-lon map with landmasses outlined and the rest in light grey
+        # # fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+        # # ax.add_feature(cfeature.LAND, edgecolor='black', facecolor='lightgrey')
+        # # ax.add_feature(cfeature.OCEAN, facecolor='lightgrey')
+        # # ax.add_feature(cfeature.COASTLINE)
+        # # ax.add_feature(cfeature.BORDERS, linestyle=':')
+
+        # # # Ensure the colormap is centered at zero
+        # # max_abs_val = np.max(np.abs(HOT_total_diff))
+        # # norm = plt.Normalize(-max_abs_val, max_abs_val)
+
+        # # # Scatter plot for HOT total energy differences with 'seismic' colormap
+        # # sc = ax.scatter(ephemeris_df['lon'], ephemeris_df['lat'], c=HOT_total_diff, cmap='seismic', norm=norm, s=5, transform=ccrs.PlateCarree())
+
+        # # ax.set_title(f"{sat_name}: HOT Total Energy Differences")
+        # # cbar = plt.colorbar(sc)
+        # # cbar.set_label('Energy_i - Energy_0 (J/kg)')
+
+        # # plt.savefig(os.path.join(folder_save, f"{sat_name}_HOT_total_energy_diff_map_{start_date_utc}_{end_date_utc}.png"))
+        # # plt.show()
+
+        # # # plt.show()
