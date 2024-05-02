@@ -85,14 +85,14 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
 #             rho_eff[i] = - 2 * EDR[i] / (integral_value)
 #     return rho_eff
 
-def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
+def compute_rho_eff(EDR, velocity, CD, A_ref,mass, MJDs):
     time_diffs = np.diff(MJDs) * 86400
     rho_eff = np.zeros(len(velocity))
     for i in range(1, len(time_diffs) + 1):
         if i < len(velocity):
             function_value = CD * A_ref * np.power(velocity[i-1:i+1], 3)
             integral_value = trapz(function_value, dx=time_diffs[i-1])
-            rho_eff[i] = - 2 * EDR[i] / integral_value
+            rho_eff[i] = - EDR[i] / integral_value
     return rho_eff
     
 def calculate_orbital_energy(sat_name, force_model_config):
@@ -103,7 +103,7 @@ def calculate_orbital_energy(sat_name, force_model_config):
     settings = {'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass']}   
     ephemeris_df = sp3_ephem_to_df(sat_name)
     # select from the 6th of may at midnight to 12 hours later by using the UTC time tage
-    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= '2023-05-06 00:00:00') & (ephemeris_df['UTC'] <= '2023-05-06 02:00:00')]
+    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= '2023-05-06 02:00:00') & (ephemeris_df['UTC'] <= '2023-05-06 08:00:00')]
     print(f"length of ephemeris_df after filtering: {len(ephemeris_df)}")
     # take the UTC column and convert to mjd
     ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
@@ -210,12 +210,12 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
 
     if query_models:
         EDR_df['jb08_rho'] = None
-        EDR_df['dtm2000_rho'] = None
-        EDR_df['nrlmsise00_rho'] = None
+        # EDR_df['dtm2000_rho'] = None
+        # EDR_df['nrlmsise00_rho'] = None
 
     if 'UTC' not in energy_ephemeris_df.columns:
         energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
-        #TODO: the above will only really work if the ephemeris is 30s time steps
+        #TODO: the above will only work if the ephemeris is 30s time steps
 
     EDR = -energy_ephemeris_df['HOT_total_diff']
     EDR60 = EDR.rolling(window=60, min_periods=1).mean()
@@ -234,8 +234,8 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
     print(f"rho_eff_180: {rho_eff_180}")
     if query_models:
         jb08_rhos = []
-        dtm2000_rhos = []
-        nrlmsise00_rhos = []
+        # dtm2000_rhos = []
+        # nrlmsise00_rhos = []
         x = energy_ephemeris_df['x']
         y = energy_ephemeris_df['y']
         z = energy_ephemeris_df['z']
@@ -252,14 +252,14 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
             pos = np.array([x[i], y[i], z[i]])
             print(f"querying model(/s) at time: {t[i]}")
             jb08_rho = query_jb08(pos, t[i])
-            dtm2000_rho = query_dtm2000(pos, t[i])
-            nrlmsise00_rho = query_nrlmsise00(pos, t[i])
+            # dtm2000_rho = query_dtm2000(pos, t[i])
+            # nrlmsise00_rho = query_nrlmsise00(pos, t[i])
             energy_ephemeris_df.at[i, 'jb08_rho'] = jb08_rho
-            energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
-            energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
-            jb08_rhos.append((jb08_rho, t[i]))
-            dtm2000_rhos.append((dtm2000_rho, t[i]))
-            nrlmsise00_rhos.append((nrlmsise00_rho, t[i]))
+            # energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
+            # energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
+            jb08_rhos.append(jb08_rho)
+            # dtm2000_rhos.append((dtm2000_rho, t[i]))
+            # nrlmsise00_rhos.append((nrlmsise00_rho, t[i]))
     EDR_df['MJD'] = time_steps
     EDR_df['EDR'] = EDR
     EDR_df['EDR60'] = EDR60
@@ -269,8 +269,8 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
     EDR_df['rho_eff_180'] = rho_eff_180
     if query_models:
         EDR_df['jb08_rho'] = jb08_rhos
-        EDR_df['dtm2000_rho'] = dtm2000_rhos
-        EDR_df['nrlmsise00_rho'] = nrlmsise00_rhos
+        # EDR_df['dtm2000_rho'] = dtm2000_rhos
+        # EDR_df['nrlmsise00_rho'] = nrlmsise00_rhos
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
     EDR_df.to_csv(os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
     return EDR_df
@@ -279,14 +279,27 @@ def main():
     sat_names_to_test = ["GRACE-FO-A"]   
     for sat_name in sat_names_to_test:
         # orbital_energy_df = calculate_orbital_energy(sat_name, force_model_config=force_model_config)
-        orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-06 00:00:12_2023-05-06 01:59:42_2024-05-02.csv")
-        edr_df = get_EDR_from_orbital_energy(sat_name, orbital_energy_df)
-        print(f"edr_density: {edr_df}")
+        # orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-06 02:00:12_2023-05-06 07:59:42_2024-05-02.csv")
+        # edr_df = get_EDR_from_orbital_energy(sat_name, orbital_energy_df, query_models=True)
+        edr_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-06 02:00:12_2023-05-06 07:59:42_2024-05-02.csv")
+        
+        #fill in the values in rho_eff_180 that are negative with the last positive value until the next positive value
+        # rho_eff_180 = edr_df['rho_eff_180']
+        # for i in range(len(rho_eff_180)):
+        #     if rho_eff_180[i] < 0:
+        #         rho_eff_180[i] = rho_eff_180[i-1]
+        # edr_df['rho_eff_180'] = rho_eff_180
 
         #plot rho_eff, rho_eff_60, and rho_eff_180 over MJD
-        plt.plot(edr_df['MJD'], edr_df['rho_eff'], label='EDR Density')
-        plt.plot(edr_df['MJD'], edr_df['rho_eff_60'], label='EDR Density 60-point moving average')
-        plt.plot(edr_df['MJD'], edr_df['rho_eff_180'], label='EDR Density 180-point moving average')
+        # plt.plot(edr_df['MJD'], edr_df['rho_eff'], label='EDR Density')
+        # plt.plot(edr_df['MJD'], edr_df['rho_eff_60'], label='EDR Density 60-point moving average')
+        plt.plot(edr_df['MJD'], edr_df['rho_eff_180'], label='EDR Density 1-orbit moving average')
+        #plot the JB08, density (plotjust density part of tuple)
+        plt.plot(edr_df['MJD'], edr_df['jb08_rho'], label='JB08 Density')
+        # plt.plot(edr_df['MJD'], edr_df['dtm2000_rho'], label='DTM2000 Density')
+        # plt.plot(edr_df['MJD'], edr_df['nrlmsise00_rho'], label='NRLMSISE00 Density')
+        plt.legend()
+        # plt.yscale('log')
         plt.xlabel('Modified Julian Date')
         plt.ylabel('Effective Density (kg/m^3)')
         plt.title(f"{sat_name}: Effective Density")
