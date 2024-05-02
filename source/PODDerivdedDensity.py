@@ -422,6 +422,11 @@ def save_density_inversion_data(sat_name, density_inversion_dfs):
 #     plt.suptitle(f'Relative Change in Atmospheric Density for {sat_name}')
 #     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 #     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/rel_densitydiff_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
+import datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from pandas.tseries import offsets
 
 def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, start_date=None, stop_date=None):
     sns.set_style("darkgrid", {
@@ -433,7 +438,12 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, star
     density_types = ['Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
     titles = ['Delta Density: Computed vs JB08', 'Delta Density: Computed vs DTM2000', 'Delta Density: Computed vs NRLMSISE00']
 
-    fig, axes = plt.subplots(nrows=len(titles) + 1, ncols=1, figsize=(10, 5 * (len(titles) + 1)), dpi=200, constrained_layout=True)
+    fig, axes = plt.subplots(nrows=len(titles), ncols=1, figsize=(5, 3 * len(titles)), dpi=200, constrained_layout=True)
+
+    daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
+
+    global_min = float('inf')
+    global_max = float('-inf')
 
     for density_df in data_frames:
         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True) if 'Epoch' in density_df.columns else density_df.index
@@ -450,11 +460,18 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, star
             initial_value = density_df[f'{density_type} MA'].iloc[0]
             density_df[f'{density_type} Delta'] = density_df[f'{density_type} MA'] - initial_value
 
+        density_df.index = density_df.index.tz_localize(None)
+        daily_indices = daily_indices[(daily_indices['Date'] >= density_df.index[0]) & (daily_indices['Date'] <= density_df.index[-1] + offsets.Hour())]
+        kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= density_df.index[0]) & (kp_3hrly['DateTime'] <= density_df.index[-1] + offsets.Hour())]
+        hourly_dst = hourly_dst[(hourly_dst['DateTime'] >= density_df.index[0]) & (hourly_dst['DateTime'] <= density_df.index[-1] + offsets.Hour())]
+        hourly_dst = hourly_dst.sort_values('DateTime')
+        kp_3hrly = kp_3hrly.sort_values('DateTime')
+
         for j, title in enumerate(titles):
             model_density = density_types[j + 1]
             if f'{model_density} Delta' in density_df.columns:
                 density_df[f'Relative Change {model_density}'] = density_df['Computed Density Delta'] - density_df[f'{model_density} Delta']
-                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'Relative Change {model_density}'], cmap='nipy_spectral', alpha=0.6, edgecolor='none')
+                sc = axes[j].scatter(density_df.index, density_df['arglat'], c=density_df[f'Relative Change {model_density}'], cmap='rainbow', alpha=0.6, edgecolor='none')
                 axes[j].set_title(title, fontsize=12)
                 axes[j].set_xlabel('Time (UTC)')
                 for label in axes[j].get_xticklabels():
@@ -462,36 +479,32 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, star
                     label.set_horizontalalignment('right')
                 axes[j].set_ylabel('Argument of Latitude')
                 cbar = fig.colorbar(sc, ax=axes[j], aspect=10)
-                cbar.set_label('Delta Density Difference (kg/m³)', rotation=270, labelpad=15)
+                cbar.set_label('delta drho/dt (kg/m³/s)', rotation=270, labelpad=15)
 
-    if start_date is None:
-        start_date = data_frames[0].index[0]
-    if stop_date is None:
-        stop_date = data_frames[0].index[-1]
+                # Update global min and max values
+                global_min = min(global_min, density_df[f'Relative Change {model_density}'].min())
+                global_max = max(global_max, density_df[f'Relative Change {model_density}'].max())
 
-    daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
+                # Overlay Space Weather Indices
+                axes_secondary = axes[j].twinx()
+                axes_secondary.plot(hourly_dst['DateTime'], hourly_dst['Value'], label='Dst Index', c='xkcd:purple', linewidth=2)
+                axes_secondary.set_ylabel('Dst Index', color='xkcd:purple')
+                axes_secondary.tick_params(axis='y', colors='xkcd:purple')  # Adjusted color of y-axis ticks
+                axes_secondary.yaxis.label.set_color('xkcd:purple')  # Adjusted color of y-axis label
 
-    from pandas.tseries import offsets
-    density_df.index = density_df.index.tz_localize(None)
-    daily_indices = daily_indices[(daily_indices['Date'] >= density_df.index[0]) & (daily_indices['Date'] <= density_df.index[-1] + offsets.Hour())]
-    kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= density_df.index[0]) & (kp_3hrly['DateTime'] <= density_df.index[-1] + offsets.Hour())]
-    hourly_dst = hourly_dst[(hourly_dst['DateTime'] >= density_df.index[0]) & (hourly_dst['DateTime'] <= density_df.index[-1] + offsets.Hour())]
-    hourly_dst = hourly_dst.sort_values('DateTime')
-    kp_3hrly = kp_3hrly.sort_values('DateTime')
+                axes_tertiary = axes[j].twinx()
+                axes_tertiary.plot(kp_3hrly['DateTime'], kp_3hrly['Kp'], label='Kp Index', c='xkcd:bright pink', linewidth=2)
+                axes_tertiary.set_ylabel('Kp Index', color='xkcd:bright pink')
+                axes_tertiary.tick_params(axis='y', colors='xkcd:bright pink')  # Adjusted color of y-axis ticks
+                axes_tertiary.yaxis.label.set_color('xkcd:bright pink')  # Adjusted color of y-axis label
+                axes_tertiary.spines['right'].set_position(('outward', 40))  # Offset Kp Index axis
 
-    axes[-1].plot(hourly_dst['DateTime'], hourly_dst['Value'], label='Dst Index', c='tab:red')
-    axes[-1].set_ylabel('Dst Index', color='tab:red')
-    axes[-1].tick_params(axis='y', labelcolor='tab:red')
-    axes_secondary = axes[-1].twinx()
-    axes_secondary.plot(kp_3hrly['DateTime'], kp_3hrly['Kp'], label='Kp Index', c='tab:purple')
-    axes_secondary.set_ylabel('Kp Index', color='tab:purple')
-    axes_secondary.tick_params(axis='y', labelcolor='tab:purple')
+    # Set the colorbar limits
+    for ax in axes:
+        for c in ax.collections:
+            c.set_clim(global_min, global_max)
 
-    axes[-1].legend(loc='upper right')
-    axes[-1].set_xlabel('Time (UTC)')
-    axes[-1].set_title('Space Weather Indices Over Time')
-
-    plt.suptitle(f'Relative Change in Atmospheric Density for {sat_name}')
+    plt.suptitle(f'Relative Change in Atmospheric Density for {sat_name}', color='white')  # Adjusted color of title
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/rel_densitydiff_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def main():

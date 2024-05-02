@@ -227,3 +227,8 @@ def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst
     plt.title('Geomagnetic and Solar Indices Over Time')
     fig.legend(loc='upper left', bbox_to_anchor=(0.1,0.9))
     plt.show()
+
+if __name__ == "__main__":
+    daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
+    plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
