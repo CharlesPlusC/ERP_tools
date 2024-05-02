@@ -9,3 +9,4 @@ output/OD_BLS/Tapley/saved_runs/
 *.csv
 !output/DensityInversion/PODBasedAccelerometry/Data/*/*.csv
 !output/Collisions/MC/TCA_DCA/*/data/*.csv
+!output/DensityInversion/EDR/Data/*

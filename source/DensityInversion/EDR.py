@@ -17,6 +17,7 @@ import numpy as np
 import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
+from tqdm import tqdm
 import numpy as np
 from scipy.special import lpmn
 from scipy.integrate import trapz
@@ -93,150 +94,145 @@ def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
             integral_value = trapz(function_value, dx=time_diffs[i-1])
             rho_eff[i] = - 2 * EDR[i] / integral_value
     return rho_eff
+    
+def calculate_orbital_energy(sat_name, force_model_config):
+    folder_save = "output/DensityInversion/EDR/Data"
+    datenow = datetime.datetime.now().strftime("%Y-%m-%d")
 
-def main():
-    # sat_names_to_test = ["GRACE-FO-B", "TerraSAR-X", "TanDEM-X", "CHAMP"]
-    force_model_config = {'3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    sat_names_to_test = ["GRACE-FO-A"]   
-    for sat_name in sat_names_to_test:
-        sat_info = get_satellite_info(sat_name)
-        settings = {'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass']}   
-        ephemeris_df = sp3_ephem_to_df(sat_name)
-        print(f'length of ephemeris_df: {len(ephemeris_df)}')
-        ephemeris_df = ephemeris_df.head(10)
-        # take the UTC column and convert to mjd
-        ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
-        start_date_utc = ephemeris_df['UTC'].iloc[0]
-        end_date_utc = ephemeris_df['UTC'].iloc[-1]
-        folder_save = "output/DensityInversion/EDR/Data"
-        datenow = datetime.datetime.now().strftime("%Y-%m-%d")
-        file_name = os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}_tstamp{datenow}.csv")
-        #find the time difference between the first two points
-        delta_t = ephemeris_df['MJD'].iloc[1] - ephemeris_df['MJD'].iloc[0]
+    sat_info = get_satellite_info(sat_name)
+    settings = {'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass']}   
+    ephemeris_df = sp3_ephem_to_df(sat_name)
+    # select from the 6th of may at midnight to 12 hours later by using the UTC time tage
+    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= '2023-05-06 00:00:00') & (ephemeris_df['UTC'] <= '2023-05-06 02:00:00')]
+    print(f"length of ephemeris_df after filtering: {len(ephemeris_df)}")
+    # take the UTC column and convert to mjd
+    ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
+    start_date_utc = ephemeris_df['UTC'].iloc[0]
+    end_date_utc = ephemeris_df['UTC'].iloc[-1]
 
-        if os.path.exists(file_name):
-            print(f"Fetching data from {file_name}")
-            energy_ephemeris_df = pd.read_csv(file_name)
-        else:
-            print(f"Computing data for {sat_name}")
-            energy_ephemeris_df = ephemeris_df.copy()
-            x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
-            # Convert EME2000 to ITRF for each point
-            for _, row in energy_ephemeris_df.iterrows():
-                pos = [row['x'], row['y'], row['z']]
-                vel = [row['xv'], row['yv'], row['zv']]
-                mjd = [row['MJD']]
-                itrs_pos, itrs_vel = EME2000_to_ITRF(np.array([pos]), np.array([vel]), pd.Series(mjd))
-                # Append the converted coordinates to their respective lists
-                x_ecef.append(itrs_pos[0][0])
-                y_ecef.append(itrs_pos[0][1])
-                z_ecef.append(itrs_pos[0][2])
-                xv_ecef.append(itrs_vel[0][0])
-                yv_ecef.append(itrs_vel[0][1])
-                zv_ecef.append(itrs_vel[0][2])
-            # Assign the converted coordinates back to the dataframe
-            energy_ephemeris_df['x_ecef'] = x_ecef
-            energy_ephemeris_df['y_ecef'] = y_ecef
-            energy_ephemeris_df['z_ecef'] = z_ecef
-            energy_ephemeris_df['xv_ecef'] = xv_ecef
-            energy_ephemeris_df['yv_ecef'] = yv_ecef
-            energy_ephemeris_df['zv_ecef'] = zv_ecef
+    delta_t = ephemeris_df['MJD'].iloc[1] - ephemeris_df['MJD'].iloc[0] #assuming constant time steps
 
-            #conver the ecef coordinates to lla
-            converted_coords = np.vectorize(ecef_to_lla, signature='(),(),()->(),(),()')(energy_ephemeris_df['x_ecef'], energy_ephemeris_df['y_ecef'], energy_ephemeris_df['z_ecef'])
-            energy_ephemeris_df[['lat', 'lon', 'alt']] = np.column_stack(converted_coords)
+    energy_ephemeris_df = ephemeris_df.copy()
+    x_ecef, y_ecef, z_ecef, xv_ecef, yv_ecef, zv_ecef = ([] for _ in range(6))
+    for _, row in energy_ephemeris_df.iterrows():
+        pos = [row['x'], row['y'], row['z']]
+        vel = [row['xv'], row['yv'], row['zv']]
+        mjd = [row['MJD']]
+        itrs_pos, itrs_vel = EME2000_to_ITRF(np.array([pos]), np.array([vel]), pd.Series(mjd))
 
-            kinetic_energy = (np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0))**2/2
-            print(f"first five values of kinetic energy: {kinetic_energy[:5]}")
-            energy_ephemeris_df['kinetic_energy'] = kinetic_energy
+        x_ecef.append(itrs_pos[0][0])
+        y_ecef.append(itrs_pos[0][1])
+        z_ecef.append(itrs_pos[0][2])
+        xv_ecef.append(itrs_vel[0][0])
+        yv_ecef.append(itrs_vel[0][1])
+        zv_ecef.append(itrs_vel[0][2])
 
-            monopole_potential = mu / np.linalg.norm([energy_ephemeris_df['x'], energy_ephemeris_df['y'], energy_ephemeris_df['z']], axis=0)
-            print(f"first five values of monopole potential: {monopole_potential[:5]}")
-            energy_ephemeris_df['monopole'] = monopole_potential
+    energy_ephemeris_df['x_ecef'] = x_ecef
+    energy_ephemeris_df['y_ecef'] = y_ecef
+    energy_ephemeris_df['z_ecef'] = z_ecef
+    energy_ephemeris_df['xv_ecef'] = xv_ecef
+    energy_ephemeris_df['yv_ecef'] = yv_ecef
+    energy_ephemeris_df['zv_ecef'] = zv_ecef
 
-            # Initializations
-            U_non_sphericals = []
-            U_j2s = []
-            work_done_by_other_accs = []  # This will store the work done at each timestep
+    converted_coords = np.vectorize(ecef_to_lla, signature='(),(),()->(),(),()')(energy_ephemeris_df['x_ecef'], energy_ephemeris_df['y_ecef'], energy_ephemeris_df['z_ecef'])
+    energy_ephemeris_df[['lat', 'lon', 'alt']] = np.column_stack(converted_coords)
 
-            for _, row in energy_ephemeris_df.iterrows():
-                phi_rad = np.radians(row['lat'])
-                lambda_rad = np.radians(row['lon'])
-                r = row['alt']
-                degree = 80
-                order = 80
-                date = datetime_to_absolutedate(row['UTC'])
+    kinetic_energy = (np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0))**2/2
+    energy_ephemeris_df['kinetic_energy'] = kinetic_energy
 
-                # Compute non-spherical and J2 potential
-                U_non_spher = compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
-                U_j2 = U_J2(r, phi_rad, lambda_rad)
-                U_j2s.append(U_j2)
-                U_non_sphericals.append(U_non_spher)
+    monopole_potential = mu / np.linalg.norm([energy_ephemeris_df['x'], energy_ephemeris_df['y'], energy_ephemeris_df['z']], axis=0)
+    energy_ephemeris_df['monopole'] = monopole_potential
 
-                # Compute the work done by third body forces
-                state_vector = np.array([row['x'], row['y'], row['z'], row['xv'], row['yv'], row['zv']])
-                other_acceleration = state2acceleration(state_vector, row['UTC'], settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
-                # Sum all the accelerations in the other_accelerations dict
-                other_acceleration = np.sum(list(other_acceleration.values()), axis=0)
-                print(f'other_accelerations: {other_acceleration}')
+    U_non_sphericals = []
+    U_j2s = []
+    work_done_by_other_accs = []
 
-                # Compute dot product of acceleration vector with the velocity vector
-                velocity_vector = state_vector[3:]  # Extract velocity components
-                work = np.dot(other_acceleration, velocity_vector) * delta_t  # Multiply by delta_t to get work over that timestep
-                work_done_by_other_accs.append(work)
+    for _, row in tqdm(energy_ephemeris_df.iterrows(), total=energy_ephemeris_df.shape[0]):
+        phi_rad = np.radians(row['lat'])
+        lambda_rad = np.radians(row['lon'])
+        r = row['alt']
+        degree = 80
+        order = 80
+        date = datetime_to_absolutedate(row['UTC'])
 
-            print(f"first five values of U_j2: {U_j2s[:5]}")
-            print(f"first five values of U_non_spherical: {U_non_sphericals[:5]}")
-            print(f"first five values of work_done_by_other_accs: {work_done_by_other_accs[:5]}")
-            print(f"first five values of kinetic_energy: {kinetic_energy[:5]}")
+        # Compute non-spherical and J2 potential
+        U_non_spher = compute_gravitational_potential(r, phi_rad, lambda_rad, degree, order, date)
+        U_j2 = U_J2(r, phi_rad, lambda_rad)
+        U_j2s.append(U_j2)
+        U_non_sphericals.append(U_non_spher)
 
-            #total energies
-            energy_total_spherical = kinetic_energy  - monopole_potential
-            energy_total_J2 = kinetic_energy  - monopole_potential + U_j2s
-            energy_total_HOT = kinetic_energy  - monopole_potential + U_non_sphericals + work_done_by_other_accs
+        # Compute the work done by other non-conservative forces (NOT drag!)
+        state_vector = np.array([row['x'], row['y'], row['z'], row['xv'], row['yv'], row['zv']])
+        other_acceleration = state2acceleration(state_vector, row['UTC'], settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
+        other_acceleration = np.sum(list(other_acceleration.values()), axis=0)
+        print(f'other_accelerations: {other_acceleration}')
 
-            #difference between total energies
-            spherical_total_diff = energy_total_spherical[0] - energy_total_spherical
-            j2_total_diff = energy_total_J2[0] - energy_total_J2
-            HOT_total_diff = energy_total_HOT[0] - energy_total_HOT
-            
-            #individual energy components diff
-            kinetic_energy_diff = kinetic_energy[0] - kinetic_energy
-            monopole_potential_diff = monopole_potential[0] - monopole_potential
-            j2_diff = U_j2s[0] - U_j2s
-            HOT_diff = U_non_sphericals[0] - U_non_sphericals
-            
-            #in a dataframe save , x,y,z,u,v,w, lat, lon, alt, kinetic_energy, monopole, U_j2, U_non_spherical, j2_total_diff, HOT_total_diff
-            energy_ephemeris_df['U_j2'] = U_j2s
-            energy_ephemeris_df['U_non_spherical'] = U_non_sphericals
-            energy_ephemeris_df['j2_total_diff'] = j2_total_diff
-            energy_ephemeris_df['HOT_total_diff'] = HOT_total_diff
-            export_df = energy_ephemeris_df[['MJD','x', 'y', 'z', 'xv', 'yv', 'zv', 'lat', 'lon', 'alt', 'kinetic_energy', 'monopole', 'U_j2', 'U_non_spherical', 'j2_total_diff', 'HOT_total_diff']]
-            datenow = datetime.datetime.now().strftime("%Y-%m-%d")
-            export_df.to_csv(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
+        # Compute dot product of acceleration vector with the velocity vector
+        velocity_vector = state_vector[3:]  # Extract velocity components
+        work = np.dot(other_acceleration, velocity_vector) * delta_t  # Multiply by delta_t to get work over that timestep
+        work_done_by_other_accs.append(work)
 
-        #if the ephemeris does not contain a columns called MJD, then use start_date_utc and assume 30s time steps
-        if 'MJD' not in energy_ephemeris_df.columns:
-            energy_ephemeris_df['MJD'] = [utc_to_mjd(start_date_utc) + 30/86400 * i for i in range(len(energy_ephemeris_df))]
-        if 'UTC' not in energy_ephemeris_df.columns:
-            energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
-            #TODO: the above will only really work if the ephemeris is 30s time steps
-        EDR = -energy_ephemeris_df['HOT_total_diff']
-        #now get the 180-point rolling average of the EDR
-        EDR60 = EDR.rolling(window=60, min_periods=1).mean()
-        EDR_180 = EDR.rolling(window=180, min_periods=1).mean()
-        velocity = np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0)
-        time_steps = energy_ephemeris_df['MJD']
-        CD = 3.2  # From Mehta et al 2013
-        A_ref = 1.004  # From Mehta et al 2013
-        mass = 600.0
-        rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
-        print(f"first five values of rho_eff: {rho_eff[:5]}")
-        rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
-        rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
-        print(f"first five values of rho_eff: {rho_eff[:5]}")
-        print(f"first five values of rho_eff_60: {rho_eff_60[:5]}")
-        print(f"first five values of rho_eff_180: {rho_eff_180[:5]}")
+    #total energies
+    # energy_total_spherical = kinetic_energy  - monopole_potential
+    # energy_total_J2 = kinetic_energy  - monopole_potential + U_j2s
+    energy_total_HOT = kinetic_energy  - monopole_potential + U_non_sphericals + work_done_by_other_accs
+    #difference between total energies
+    # spherical_total_diff = energy_total_spherical[0] - energy_total_spherical
+    # j2_total_diff = energy_total_J2[0] - energy_total_J2
+    HOT_total_diff = energy_total_HOT[0] - energy_total_HOT
+    
+    # #individual energy components diff
+    # kinetic_energy_diff = kinetic_energy[0] - kinetic_energy
+    # monopole_potential_diff = monopole_potential[0] - monopole_potential
+    # j2_diff = U_j2s[0] - U_j2s
+    # HOT_diff = U_non_sphericals[0] - U_non_sphericals
+    
+    energy_ephemeris_df['U_j2'] = U_j2s
+    energy_ephemeris_df['U_non_spherical'] = U_non_sphericals
+    # energy_ephemeris_df['j2_total_diff'] = j2_total_diff
+    energy_ephemeris_df['HOT_total_diff'] = HOT_total_diff
+    energy_df = energy_ephemeris_df[['MJD','x', 'y', 'z', 'xv', 'yv', 'zv', 'lat', 'lon', 'alt', 'kinetic_energy', 'monopole', 'U_j2', 'U_non_spherical', 'HOT_total_diff']]
+    energy_df.to_csv(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
+    return energy_df
+
+def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=False):
+
+    MJD_EPOCH = datetime.datetime(1858, 11, 17)
+    EDR_df = pd.DataFrame(columns=['MJD', 'EDR', 'EDR60', 'EDR180', 'rho_eff', 'rho_eff_60', 'rho_eff_180'])
+
+    start_date_mjd = energy_ephemeris_df['MJD'].iloc[0]
+    start_date_utc = MJD_EPOCH + datetime.timedelta(days=start_date_mjd)
+    print(f"start_date_utc: {start_date_utc}")
+
+    end_date_mjd = energy_ephemeris_df['MJD'].iloc[-1]
+    end_date_utc = MJD_EPOCH + datetime.timedelta(days=end_date_mjd)
+    print(f"end_date_utc: {end_date_utc}")
+
+    if query_models:
+        EDR_df['jb08_rho'] = None
+        EDR_df['dtm2000_rho'] = None
+        EDR_df['nrlmsise00_rho'] = None
+
+    if 'UTC' not in energy_ephemeris_df.columns:
+        energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
+        #TODO: the above will only really work if the ephemeris is 30s time steps
+
+    EDR = -energy_ephemeris_df['HOT_total_diff']
+    EDR60 = EDR.rolling(window=60, min_periods=1).mean()
+    EDR_180 = EDR.rolling(window=180, min_periods=1).mean()
+    velocity = np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0)
+    time_steps = energy_ephemeris_df['MJD']
+    CD = 3.2  # From Mehta et al 2013
+    A_ref = 1.004  # From Mehta et al 2013
+    mass = 600.0
+    rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
+    print(f"rho_eff: {rho_eff[:5]}")
+    rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
+    rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
+    print(f"rho_eff: {rho_eff}")
+    print(f"rho_eff_60: {rho_eff_60}")
+    print(f"rho_eff_180: {rho_eff_180}")
+    if query_models:
         jb08_rhos = []
         dtm2000_rhos = []
         nrlmsise00_rhos = []
@@ -246,7 +242,6 @@ def main():
         u = energy_ephemeris_df['xv']
         v = energy_ephemeris_df['yv']
         w = energy_ephemeris_df['zv']
-        print(f"columns in ephemeris_df: {energy_ephemeris_df.columns}")
         t = pd.to_datetime(energy_ephemeris_df['UTC'])
         
         #use posvel_to_sma to get the semi-major axis for each point
@@ -255,8 +250,7 @@ def main():
             sma = posvel_to_sma(x[i], y[i], z[i], u[i], v[i], w[i])
             energy_ephemeris_df.at[i, 'sma'] = sma
             pos = np.array([x[i], y[i], z[i]])
-            print(f"pos: {pos}, t: {t[i]}")
-            print(f"querying JB08, DTM2000, and NRLMSISE00 at time: {t[i]}")
+            print(f"querying model(/s) at time: {t[i]}")
             jb08_rho = query_jb08(pos, t[i])
             dtm2000_rho = query_dtm2000(pos, t[i])
             nrlmsise00_rho = query_nrlmsise00(pos, t[i])
@@ -266,9 +260,43 @@ def main():
             jb08_rhos.append((jb08_rho, t[i]))
             dtm2000_rhos.append((dtm2000_rho, t[i]))
             nrlmsise00_rhos.append((nrlmsise00_rho, t[i]))
+    EDR_df['MJD'] = time_steps
+    EDR_df['EDR'] = EDR
+    EDR_df['EDR60'] = EDR60
+    EDR_df['EDR180'] = EDR_180
+    EDR_df['rho_eff'] = rho_eff
+    EDR_df['rho_eff_60'] = rho_eff_60
+    EDR_df['rho_eff_180'] = rho_eff_180
+    if query_models:
+        EDR_df['jb08_rho'] = jb08_rhos
+        EDR_df['dtm2000_rho'] = dtm2000_rhos
+        EDR_df['nrlmsise00_rho'] = nrlmsise00_rhos
+    datenow = datetime.datetime.now().strftime("%Y-%m-%d")
+    EDR_df.to_csv(os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
+    return EDR_df
+def main():
+    force_model_config = {'3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    sat_names_to_test = ["GRACE-FO-A"]   
+    for sat_name in sat_names_to_test:
+        # orbital_energy_df = calculate_orbital_energy(sat_name, force_model_config=force_model_config)
+        orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-06 00:00:12_2023-05-06 01:59:42_2024-05-02.csv")
+        edr_df = get_EDR_from_orbital_energy(sat_name, orbital_energy_df)
+        print(f"edr_density: {edr_df}")
+
+        #plot rho_eff, rho_eff_60, and rho_eff_180 over MJD
+        plt.plot(edr_df['MJD'], edr_df['rho_eff'], label='EDR Density')
+        plt.plot(edr_df['MJD'], edr_df['rho_eff_60'], label='EDR Density 60-point moving average')
+        plt.plot(edr_df['MJD'], edr_df['rho_eff_180'], label='EDR Density 180-point moving average')
+        plt.xlabel('Modified Julian Date')
+        plt.ylabel('Effective Density (kg/m^3)')
+        plt.title(f"{sat_name}: Effective Density")
+        plt.grid(True)
+        plt.show()
+
 
 if __name__ == "__main__":
     main()
+
 #### PLOTTING ####
 
             
