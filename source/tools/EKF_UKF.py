@@ -1,11 +1,6 @@
 # ERP_estimation.py
-
 # Author: Benjamin Hanson
-
 # Date: 2/7/2024
-
-# Miscellaneous estimation functions used for ERP research
-
 
 import numpy as np
 import sys

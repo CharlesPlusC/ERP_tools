@@ -9,7 +9,7 @@ import tempfile
 from datetime import datetime
 import os
 import glob
-from tools.utilities import SP3_to_EME2000, utc_to_mjd
+from ..tools.utilities import SP3_to_EME2000, utc_to_mjd
 #run from CLI from root using: python source/tools/sp3_2_ephemeris.py
 
 def read_sp3_gz_file(sp3_gz_file_path):

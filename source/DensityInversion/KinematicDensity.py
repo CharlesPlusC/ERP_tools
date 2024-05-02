@@ -6,7 +6,7 @@ vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 
 import os
-from tools.utilities import project_acc_into_HCL, get_satellite_info
+from tools.utilities import project_acc_into_HCL, get_satellite_info, interpolate_positions, calculate_acceleration
 from tools.sp3_2_ephemeris import sp3_ephem_to_df
 from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
 import numpy as np
@@ -15,7 +15,7 @@ from tqdm import tqdm
 import pandas as pd
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from tools.GFODataReadTools import get_gfo_inertial_accelerations
-from SWIndices import get_sw_indices
+from source.tools.SWIndices import get_sw_indices
 from .Plotting.PODDerivedDensityPlotting import plot_density_arglat_diff, plot_density_data, plot_relative_density_change
 
 def density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None):
@@ -112,10 +112,10 @@ def main():
     force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
-        # ephemeris_df = ephemeris_df.head(180*35)
-        # interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-        # interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
-        interp_ephemeris_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
+        ephemeris_df = ephemeris_df.head(180*35)
+        interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
+        interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
+        # interp_ephemeris_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
 
         acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
         quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"

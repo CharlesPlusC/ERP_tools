@@ -29,7 +29,7 @@ from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00
 from org.orekit.data import DataSource
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
-from tools.utilities import extract_acceleration, download_file_url, pos_vel_from_orekit_ephem
+from ..tools.utilities import extract_acceleration, download_file_url, pos_vel_from_orekit_ephem
 
 import numpy as np
 import pandas as pd
