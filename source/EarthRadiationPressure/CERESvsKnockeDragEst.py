@@ -135,8 +135,6 @@ def main():
             plt.savefig(filepath)
             plt.close()
 
-#TODO: gravity, drag and SRP and ERP models
-#TODO: use percentage forcing difference from Ray paper as basis for comparison
 #TODO: see if the relative importance of ERP is reflected in the estimated drag coefficient
 
 if __name__ == "__main__":

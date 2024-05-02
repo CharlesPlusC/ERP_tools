@@ -104,63 +104,51 @@ def get_sw_indices():
 
     return daily_indices, kp_3hrly, hourly_dst
 
-def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst = False, daily_kp = False):
-
-    # Plotting all indices over time with separate y-axes
+def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
     fig, ax1 = plt.subplots(figsize=(15, 9))
 
     if daily_dst:
-        # Daily Dst
         color = 'black'
         ax1.set_xlabel('DateTime')
         ax1.set_ylabel('Dst', color=color)
-        ax1.plot(merged_data['Date'], merged_data['DailyMean'], label='Daily Dst', color=color, alpha=0.5)
+        ax1.plot(merged_data['Date'], merged_data['DailyMean'], color=color, alpha=0.5)
         ax1.tick_params(axis='y', labelcolor=color)
     else:
-        # Hourly Dst
         color = 'blue'
         ax1.set_xlabel('DateTime')
         ax1.set_ylabel('Dst', color=color)
-        ax1.scatter(hourly_long_df['DateTime'], hourly_long_df['Value'], label='Hourly Dst', color=color, alpha=0.5, s=1)
+        ax1.scatter(hourly_long_df['DateTime'], hourly_long_df['Value'], color=color, alpha=0.5, s=1)
         ax1.tick_params(axis='y', labelcolor=color)
 
-    # # Daily Kp
+    ax2 = ax1.twinx()
+    color = 'red'
     if daily_kp:
-        color = 'red'
-        ax1.set_xlabel('DateTime')
-        ax1.set_ylabel('Kp', color=color)
-        ax1.plot(merged_data['Date'], merged_data['Kp_avg'], label='Daily Kp', color=color, alpha=0.5)
-        ax1.tick_params(axis='y', labelcolor=color)
-    else:
-        # Plotting 3-hour Kp
-        ax2 = ax1.twinx()
-        color = 'red'
         ax2.set_ylabel('Kp', color=color)
-        ax2.scatter(kp_details['DateTime'], kp_details['Kp'], label='3-hour Kp', color=color, alpha=0.5, s=1)
-        ax2.tick_params(axis='y', labelcolor=color)
+        ax2.plot(merged_data['Date'], merged_data['Kp_avg'], color=color, alpha=0.5)
+    else:
+        ax2.set_ylabel('Kp', color=color)
+        ax2.scatter(kp_details['DateTime'], kp_details['Kp'], color=color, alpha=0.5, s=1)
+    ax2.tick_params(axis='y', labelcolor=color)
 
-    # Plotting Ap
     ax3 = ax1.twinx()
     color = 'green'
     ax3.spines['right'].set_position(('outward', 60))
     ax3.set_ylabel('Ap', color=color)
-    ax3.plot(merged_data['Date'], merged_data['Ap'], label='Daily Ap', color=color, alpha=0.5)
+    ax3.plot(merged_data['Date'], merged_data['Ap'], color=color, alpha=0.5)
     ax3.tick_params(axis='y', labelcolor=color)
 
-    # Plotting SN
     ax4 = ax1.twinx()
     color = 'purple'
     ax4.spines['right'].set_position(('outward', 120))
     ax4.set_ylabel('SN', color=color)
-    ax4.plot(merged_data['Date'], merged_data['SN'], label='Daily SN', color=color, alpha=0.5)
+    ax4.plot(merged_data['Date'], merged_data['SN'], color=color, alpha=0.5)
     ax4.tick_params(axis='y', labelcolor=color)
 
-    # Plotting F10.7obs
     ax5 = ax1.twinx()
     color = 'orange'
     ax5.spines['right'].set_position(('outward', 180))
     ax5.set_ylabel('F10.7obs', color=color)
-    ax5.plot(merged_data['Date'], merged_data['F10.7obs'], label='Daily F10.7obs', color=color, alpha=0.5)
+    ax5.plot(merged_data['Date'], merged_data['F10.7obs'], color=color, alpha=0.5)
     ax5.tick_params(axis='y', labelcolor=color)
 
     fig.tight_layout()
@@ -168,60 +156,53 @@ def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst =
     fig.legend(loc='upper left')
     plt.show()
 
-def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst = False, daily_kp = False):
-    # Plotting all indices over time with separate y-axes
+def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
     fig, ax1 = plt.subplots(figsize=(15, 9))
 
     if daily_dst:
-        # Daily Dst
         color = 'black'
         ax1.set_xlabel('DateTime')
         ax1.set_ylabel('Dst', color=color)
-        ax1.plot(merged_data['Date'], merged_data['DailyMean'], label='Daily Dst', color=color, alpha=0.5)
+        ax1.plot(merged_data['Date'], merged_data['DailyMean'], color=color, alpha=0.5)
         ax1.tick_params(axis='y', labelcolor=color)
     else:
-        # Hourly Dst
         color = 'blue'
         ax1.set_xlabel('DateTime')
         ax1.set_ylabel('Dst', color=color)
-        ax1.scatter(hourly_long_df['DateTime'], hourly_long_df['Value'], label='Hourly Dst', color=color, alpha=0.5, s=1)
+        ax1.scatter(hourly_long_df['DateTime'], hourly_long_df['Value'], color=color, alpha=0.5, s=1)
         ax1.tick_params(axis='y', labelcolor=color)
 
-    if daily_kp:
-        color = 'red'
-        #Daily Kp values
-        ax2 = ax1.twinx()
-        ax2.set_xlabel('DateTime')
-        ax2.set_ylabel('Kp', color=color)
-        ax2.scatter(merged_data['Date'], merged_data['Kp_avg'], label='Daily Kp', color=color, alpha=0.5, s=1)
-        ax2.tick_params(axis='y', labelcolor=color)
-    else:
-        # #3 hour Kp values
-        ax2 = ax1.twinx()
-        color = 'red'
-        ax2.set_xlabel('DateTime')
-        ax2.set_ylabel('Kp', color=color)
-        ax2.scatter(kp_details['DateTime'], kp_details['Kp'], label='3-hour Kp', color=color, alpha=0.5, s=1)
-        ax2.tick_params(axis='y', labelcolor=color)
+    ax1.tick_params(axis='x', rotation=45)
 
-    color = 'green'
-    ax2.set_ylabel('Ap', color=color)
-    ax2.plot(merged_data['Date'], merged_data['Ap'], label='Daily Ap', color=color, alpha=0.5)
+    ax2 = ax1.twinx()
+    color = 'red'
+    ax2.set_ylabel('Kp', color=color)
+    if daily_kp:
+        ax2.scatter(merged_data['Date'], merged_data['Kp_avg'], color=color, alpha=0.5, s=1)
+    else:
+        ax2.scatter(kp_details['DateTime'], kp_details['Kp'], color=color, alpha=0.5, s=1)
     ax2.tick_params(axis='y', labelcolor=color)
 
     ax3 = ax1.twinx()
-    color = 'purple'
+    color = 'green'
     ax3.spines['right'].set_position(('outward', 60))
-    ax3.set_ylabel('SN', color=color)
-    ax3.plot(merged_data['Date'], merged_data['SN'], label='Daily SN', color=color, alpha=0.5)
+    ax3.set_ylabel('Ap', color=color)
+    ax3.plot(merged_data['Date'], merged_data['Ap'], color=color, alpha=0.5)
     ax3.tick_params(axis='y', labelcolor=color)
 
     ax4 = ax1.twinx()
-    color = 'orange'
+    color = 'purple'
     ax4.spines['right'].set_position(('outward', 120))
-    ax4.set_ylabel('F10.7obs', color=color)
-    ax4.plot(merged_data['Date'], merged_data['F10.7obs'], label='Daily F10.7obs', color=color, alpha=0.5)
+    ax4.set_ylabel('SN', color=color)
+    ax4.plot(merged_data['Date'], merged_data['SN'], color=color, alpha=0.5)
     ax4.tick_params(axis='y', labelcolor=color)
+
+    ax5 = ax1.twinx()
+    color = 'orange'
+    ax5.spines['right'].set_position(('outward', 180))
+    ax5.set_ylabel('F10.7obs', color=color)
+    ax5.plot(merged_data['Date'], merged_data['F10.7obs'], color=color, alpha=0.5)
+    ax5.tick_params(axis='y', labelcolor=color)
 
     fig.tight_layout()
     plt.title('Geomagnetic and Solar Indices Over Time')

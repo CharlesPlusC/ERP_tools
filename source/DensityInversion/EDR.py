@@ -296,8 +296,8 @@ def main():
         plt.grid(True)
         plt.legend()
         plot_folder_save = "output/DensityInversion/EDR/Plots"
-        savefile = os.path.join(plot_folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
-        plt.savefig(savefile)
+        # savefile = os.path.join(plot_folder_save, f"{sat_name}_effective_density_{start_date_utc}_{end_date_utc}_tstamp{datenow}.png")
+        # plt.savefig(savefile)
         plt.show()
 
         # sns.set_theme(style='whitegrid')
