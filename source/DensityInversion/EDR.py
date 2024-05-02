@@ -73,19 +73,7 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
 
     return -V_dev
 
-# def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
-#     # Calculate the integral part for rho_eff computation
-#     time_diffs = np.diff(MJDs) * 86400  # Convert MJDs to seconds
-#     rho_eff = np.zeros(len(velocity))
-#     for i in range(1, len(velocity)):
-#         # Use the time differences for the trapezoidal integration
-#         # We multiply velocity^3 by the time interval (in seconds) to get the integral value
-#         if i < len(time_diffs):  # Ensure we don't go out of bounds
-#             integral_value = trapz(CD * A_ref * velocity[i-1:i+1]*3, dx=time_diffs[i-1])
-#             rho_eff[i] = - 2 * EDR[i] / (integral_value)
-#     return rho_eff
-
-def compute_rho_eff(EDR, velocity, CD, A_ref,mass, MJDs):
+def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
     time_diffs = np.diff(MJDs) * 86400
     rho_eff = np.zeros(len(velocity))
     for i in range(1, len(time_diffs) + 1):
@@ -220,6 +208,7 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
     EDR = -energy_ephemeris_df['HOT_total_diff']
     EDR60 = EDR.rolling(window=60, min_periods=1).mean()
     EDR_180 = EDR.rolling(window=180, min_periods=1).mean()
+    EDR_360 = EDR.rolling(window=360, min_periods=1).mean()
     velocity = np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0)
     time_steps = energy_ephemeris_df['MJD']
     CD = 3.2  # From Mehta et al 2013
@@ -229,9 +218,8 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
     print(f"rho_eff: {rho_eff[:5]}")
     rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
     rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
-    print(f"rho_eff: {rho_eff}")
-    print(f"rho_eff_60: {rho_eff_60}")
-    print(f"rho_eff_180: {rho_eff_180}")
+    rho_eff_360 = compute_rho_eff(EDR_360, velocity, CD, A_ref, mass, time_steps)
+
     if query_models:
         jb08_rhos = []
         # dtm2000_rhos = []
@@ -267,6 +255,7 @@ def get_EDR_from_orbital_energy(sat_name, energy_ephemeris_df, query_models=Fals
     EDR_df['rho_eff'] = rho_eff
     EDR_df['rho_eff_60'] = rho_eff_60
     EDR_df['rho_eff_180'] = rho_eff_180
+    EDR_df['rho_eff_360'] = rho_eff_360
     if query_models:
         EDR_df['jb08_rho'] = jb08_rhos
         # EDR_df['dtm2000_rho'] = dtm2000_rhos
@@ -279,7 +268,7 @@ def main():
     sat_names_to_test = ["GRACE-FO-A"]   
     for sat_name in sat_names_to_test:
         # orbital_energy_df = calculate_orbital_energy(sat_name, force_model_config=force_model_config)
-        # orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-06 02:00:12_2023-05-06 07:59:42_2024-05-02.csv")
+        orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-06 02:00:12_2023-05-06 07:59:42_2024-05-02.csv")
         # edr_df = get_EDR_from_orbital_energy(sat_name, orbital_energy_df, query_models=True)
         edr_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-06 02:00:12_2023-05-06 07:59:42_2024-05-02.csv")
         
@@ -294,6 +283,7 @@ def main():
         # plt.plot(edr_df['MJD'], edr_df['rho_eff'], label='EDR Density')
         # plt.plot(edr_df['MJD'], edr_df['rho_eff_60'], label='EDR Density 60-point moving average')
         plt.plot(edr_df['MJD'], edr_df['rho_eff_180'], label='EDR Density 1-orbit moving average')
+        plt.plot(edr_df['MJD'], edr_df['rho_eff_360'], label='EDR Density 2-orbit moving average')
         #plot the JB08, density (plotjust density part of tuple)
         plt.plot(edr_df['MJD'], edr_df['jb08_rho'], label='JB08 Density')
         # plt.plot(edr_df['MJD'], edr_df['dtm2000_rho'], label='DTM2000 Density')
@@ -304,6 +294,10 @@ def main():
         plt.ylabel('Effective Density (kg/m^3)')
         plt.title(f"{sat_name}: Effective Density")
         plt.grid(True)
+        datenow = datetime.datetime.now().strftime("%Y-%m-%d")
+        start_date = edr_df['MJD'].iloc[0]
+        end_date = edr_df['MJD'].iloc[-1]
+        plt.savefig(f"output/DensityInversion/EDR/Plots/{sat_name}_EDR_{start_date}_{end_date}_tstamp{datenow}.png")
         plt.show()
 
 
