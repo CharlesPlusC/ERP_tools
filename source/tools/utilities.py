@@ -28,6 +28,15 @@ from org.orekit.orbits import KeplerianOrbit, CartesianOrbit
 from org.orekit.forces import ForceModel, BoxAndSolarArraySpacecraft, Panel
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
+from math import sin, cos, sqrt, radians
+
+def geocentric_distance(latitude_degrees, altitude):
+    phi = radians(latitude_degrees)
+    a = 6378137  # semi-major axis in meters
+    b = 6356752  # semi-minor axis in meters
+
+    R = sqrt((a**2 * cos(phi))**2 + (b**2 * sin(phi))**2) / sqrt((a * cos(phi))**2 + (b * sin(phi))**2)
+    return R + altitude
 
 def ecef_to_lla(x, y, z):
     """
@@ -63,7 +72,10 @@ def ecef_to_lla(x, y, z):
     # Convert altitude to kilometers
     alt_km = alt_m / 1000
 
-    return lat, lon, alt_km
+    #convert altitude to distance from the center of the earth
+    R = geocentric_distance(lat, alt_km)
+
+    return lat, lon, R
 
 def lla_to_ecef(lat2d, lon2d, alt):
     # Ensure alt is in meters for Astropy and broadcast it to match the shape of lat2d and lon2d
