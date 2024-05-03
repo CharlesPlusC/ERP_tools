@@ -275,22 +275,22 @@ def main():
     force_model_config = {'3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
     sat_names_to_test = ["GRACE-FO-A", "TerraSAR-X", "CHAMP", "GRACE-FO-B", "TanDEM-X"]
     for sat_name in sat_names_to_test:
-        # orbital_energy_df_degord20 = calculate_orbital_energy(sat_name, force_model_config=force_model_config, gravity_degree=20, gravity_order=20, other_accs=False)
-        # plt.plot(orbital_energy_df_degord20['MJD'], orbital_energy_df_degord20['HOT_total_diff'], label='HOT_total_diff_degree_30')
-        # plt.xlabel('Modified Julian Date')
-        # plt.ylabel('Δ Specific Energy (J/kg)')
-        # plt.title(f"{sat_name}: HOT_total_diff")
-        # plt.legend()
-        # plt.grid(True)
-        # #log the y-axis
-        # plt.savefig(f"output/DensityInversion/EDR/Plots/EDR_tseries/{sat_name}_OrbitalEnergy_{orbital_energy_df_degord20['MJD'].iloc[0]}_{orbital_energy_df_degord20['MJD'].iloc[-1]}.png")
-        # plt.show()
+        orbital_energy_df_degord20 = calculate_orbital_energy(sat_name, force_model_config=force_model_config, gravity_degree=80, gravity_order=80, other_accs=False)
+        plt.plot(orbital_energy_df_degord20['MJD'], orbital_energy_df_degord20['HOT_total_diff'], label='HOT_total_diff_degree_30')
+        plt.xlabel('Modified Julian Date')
+        plt.ylabel('Δ Specific Energy (J/kg)')
+        plt.title(f"{sat_name}: HOT_total_diff")
+        plt.legend()
+        plt.grid(True)
+        #log the y-axis
+        plt.savefig(f"output/DensityInversion/EDR/Plots/EDR_tseries/{sat_name}_OrbitalEnergy_{orbital_energy_df_degord20['MJD'].iloc[0]}_{orbital_energy_df_degord20['MJD'].iloc[-1]}.png")
+        plt.show()
 
         # tdx_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/TanDEM-X_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-03.csv")
         # gfoa_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-02.csv")
 
-        # density_df = Density_from_EDR(sat_name, orbital_energy_df_degord20, query_models=True)
-        density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-04 21:59:42_2023-05-05 09:59:42_2024-05-03.csv")
+        density_df = Density_from_EDR(sat_name, orbital_energy_df_degord20, query_models=True)
+        # density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-04 21:59:42_2023-05-05 09:59:42_2024-05-03.csv")
         
         plt.figure(figsize=(10, 5))
         # Plotting various density metrics
@@ -316,7 +316,7 @@ def main():
         start_date = density_df['MJD'].iloc[0]
         end_date = density_df['MJD'].iloc[-1]
         plt.savefig(f"output/DensityInversion/EDR/Plots/Density/{sat_name}_EDR_{start_date}_{end_date}_tstamp{datenow}.png")
-        plt.show()
+        # plt.show()
 
 if __name__ == "__main__":
     main()

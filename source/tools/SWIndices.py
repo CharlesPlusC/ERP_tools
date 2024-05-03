@@ -8,13 +8,6 @@ import pandas as pd
 import re
 import matplotlib.pyplot as plt
 
-NOAA_storm_classification = {
-    'G1': {'Kp': 5, 'description': 'Minor'},
-    'G2': {'Kp': 6, 'description': 'Moderate'},
-    'G3': {'Kp': 7, 'description': 'Strong'},
-    'G4': {'Kp': 8, 'description': 'Severe'},
-    'G5': {'Kp': 9, 'description': 'Extreme'}
-}
 
 
 def read_dst(filepath = "external/SWIndices/Dst_2000_2024.txt"):
@@ -63,10 +56,6 @@ def parse_hourly_values(hourly_str):
     return [float(val) if val != 'NaN' else None for val in hourly_list]
 
 def classify_storm(kp_val):
-    kp_int = int(float(kp_val))
-    return NOAA_storm_classification.get(kp_int, 'G1')  # Default to 'G1' if Kp is 5 or below
-
-def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_1932.txt'):
     NOAA_storm_classification = {
         5: 'G1',
         6: 'G2',
@@ -74,7 +63,13 @@ def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_19
         8: 'G4',
         9: 'G5'
     }
-    
+    kp_int = round(float(kp_val))
+    if kp_int <= 5:
+        return 'G1'
+    else:
+        return NOAA_storm_classification.get(kp_int, 'G1')
+
+def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_1932.txt'):
     # Read the data, skipping the header lines
     kp_data = pd.read_csv(filepath, delim_whitespace=True, skiprows=40, header=None,
                           names=[
@@ -87,22 +82,21 @@ def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_19
     # Convert date columns to datetime format
     kp_data['Date'] = pd.to_datetime(kp_data[['Year', 'Month', 'Day']])
 
-    # Calculating the daily average Kp value
-    kp_columns = ['Kp1', 'Kp2', 'Kp3', 'Kp4', 'Kp5', 'Kp6', 'Kp7', 'Kp8']
-    kp_data['Kp_avg'] = kp_data[kp_columns].mean(axis=1)
-
-    for col in kp_columns:
-        kp_data[f'{col}_scale'] = kp_data[col].apply(classify_storm)
-
     kp_details = pd.DataFrame()
 
     for i in range(1, 9):
-        temp_df = kp_data[['Date', f'Kp{i}', f'Kp{i}_scale', 'Ap', 'SN', 'F10.7obs']].copy()
-        temp_df.rename(columns={f'Kp{i}': 'Kp', f'Kp{i}_scale': 'storm_scale'}, inplace=True)
+        # Extract each Kp value and its datetime
+        temp_df = kp_data[['Date', f'Kp{i}', 'Ap', 'SN', 'F10.7obs']].copy()
+        temp_df.rename(columns={f'Kp{i}': 'Kp'}, inplace=True)
         temp_df['DateTime'] = temp_df['Date'] + pd.to_timedelta((i-1)*3, unit='h')
+        
+        # Apply classification to each individual Kp
+        temp_df['storm_scale'] = temp_df['Kp'].apply(classify_storm)
+        
         kp_details = pd.concat([kp_details, temp_df], ignore_index=True)
 
     return kp_data, kp_details
+
 
 def get_sw_indices():
 
@@ -129,7 +123,23 @@ def get_sw_indices():
     return daily_indices, kp_3hrly, hourly_dst
 
 def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
+    cmap = plt.cm.get_cmap('tab20')
+    g_index_colors = {f'G{i}': cmap(i / 5) for i in range(1, 6)}  # Dynamically create colors for G1 to G5
+
     fig, ax1 = plt.subplots(figsize=(15, 9))
+
+    # Set background color blocks based on G-index
+    legend_handles = []  # List to hold the legend handles
+    used_labels = set()  # Set to track which labels have been used
+    for idx, row in kp_details.iterrows():
+        g_index = row['storm_scale']
+        if g_index in g_index_colors:
+            if g_index not in used_labels:
+                # Create a patch for the legend if it's the first time this label is used
+                patch = plt.Rectangle((0, 0), 1, 1, color=g_index_colors[g_index], label=g_index)
+                legend_handles.append(patch)
+                used_labels.add(g_index)
+            ax1.axvspan(row['DateTime'], row['DateTime'] + pd.Timedelta(hours=3), color=g_index_colors[g_index], alpha=0.3)
 
     if daily_dst:
         color = 'black'
@@ -155,30 +165,105 @@ def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst=F
     ax2.tick_params(axis='y', labelcolor=color)
 
     ax3 = ax1.twinx()
-    color = 'green'
     ax3.spines['right'].set_position(('outward', 60))
+    color = 'green'
     ax3.set_ylabel('Ap', color=color)
     ax3.plot(merged_data['Date'], merged_data['Ap'], color=color, alpha=0.5)
     ax3.tick_params(axis='y', labelcolor=color)
 
     ax4 = ax1.twinx()
-    color = 'purple'
     ax4.spines['right'].set_position(('outward', 120))
+    color = 'purple'
     ax4.set_ylabel('SN', color=color)
     ax4.plot(merged_data['Date'], merged_data['SN'], color=color, alpha=0.5)
     ax4.tick_params(axis='y', labelcolor=color)
 
     ax5 = ax1.twinx()
-    color = 'orange'
     ax5.spines['right'].set_position(('outward', 180))
+    color = 'orange'
     ax5.set_ylabel('F10.7obs', color=color)
     ax5.plot(merged_data['Date'], merged_data['F10.7obs'], color=color, alpha=0.5)
     ax5.tick_params(axis='y', labelcolor=color)
 
-    fig.tight_layout()
+    # Adjust layout to make room for the legend
+    fig.tight_layout(rect=[0, 0, 0.85, 1])
+
+    # Add the legend with unique entries
+    ax1.legend(handles=legend_handles, loc='upper left', bbox_to_anchor=(1.02, 1), title="G-storm Level")
     plt.title('Geomagnetic and Solar Indices Over Time Including Dst')
-    fig.legend(loc='upper left')
+
     plt.show()
+
+import plotly.graph_objects as go
+
+def plot_all_indices_in_one_plotly(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
+    cmap = ['rgb(31, 119, 180)', 'rgb(255, 127, 14)', 'rgb(44, 160, 44)', 'rgb(214, 39, 40)', 'rgb(148, 103, 189)']
+    g_index_colors = {f'G{i}': cmap[i - 1] for i in range(1, 6)}  # Define colors for G1 to G5
+
+    fig = go.Figure()
+
+    # Set background color blocks based on G-index, merging consecutive periods
+    current_start = None
+    current_g_index = None
+    for idx, row in kp_details.iterrows():
+        if current_g_index != row['storm_scale']:
+            if current_start is not None:
+                fig.add_vrect(
+                    x0=current_start, x1=row['DateTime'],
+                    fillcolor=g_index_colors[current_g_index], opacity=0.3,
+                    layer="below", line_width=0
+                )
+            current_start = row['DateTime']
+            current_g_index = row['storm_scale']
+
+    # Add the last vrect if needed
+    if current_start is not None:
+        fig.add_vrect(
+            x0=current_start, x1=kp_details['DateTime'].iloc[-1] + pd.Timedelta(hours=3),
+            fillcolor=g_index_colors[current_g_index], opacity=0.3,
+            layer="below", line_width=0
+        )
+
+    # Plot Dst or hourly data
+    if daily_dst:
+        fig.add_trace(go.Scattergl(x=merged_data['Date'], y=merged_data['DailyMean'],
+                                   mode='lines', name='Daily Mean Dst',
+                                   line=dict(color='black')))
+    else:
+        fig.add_trace(go.Scattergl(x=hourly_long_df['DateTime'], y=hourly_long_df['Value'],
+                                   mode='markers', name='Hourly Dst',
+                                   marker=dict(color='blue', size=3)))
+
+    # Plot Kp or average Kp
+    if daily_kp:
+        fig.add_trace(go.Scattergl(x=merged_data['Date'], y=merged_data['Kp_avg'],
+                                   mode='lines', name='Daily Avg Kp',
+                                   line=dict(color='red'), yaxis='y2'))
+    else:
+        fig.add_trace(go.Scattergl(x=kp_details['DateTime'], y=kp_details['Kp'],
+                                   mode='markers', name='Hourly Kp',
+                                   marker=dict(color='red', size=3), yaxis='y2'))
+
+    # Additional indices with axis specifications
+    fig.add_trace(go.Scattergl(x=merged_data['Date'], y=merged_data['Ap'], name='Ap',
+                               line=dict(color='green'), yaxis='y3'))
+    fig.add_trace(go.Scattergl(x=merged_data['Date'], y=merged_data['SN'], name='SN',
+                               line=dict(color='purple'), yaxis='y4'))
+    fig.add_trace(go.Scattergl(x=merged_data['Date'], y=merged_data['F10.7obs'], name='F10.7obs',
+                               line=dict(color='orange'), yaxis='y5'))
+
+    # Configure layout and axes
+    fig.update_layout(
+        xaxis=dict(title='DateTime'),
+        yaxis=dict(title='Dst', color='blue', side='left', position=0.05),
+        yaxis2=dict(title='Kp', color='red', overlaying='y', side='right', position=0.95),
+        yaxis3=dict(title='Ap', color='green', overlaying='y', side='right', position=0.90),
+        yaxis4=dict(title='SN', color='purple', overlaying='y', side='right', position=0.85),
+        yaxis5=dict(title='F10.7obs', color='orange', overlaying='y', side='right', position=0.80),
+        title='Geomagnetic and Solar Indices Over Time Including Dst'
+    )
+
+    fig.show()
 
 def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
     fig, ax1 = plt.subplots(figsize=(15, 9))
@@ -235,5 +320,11 @@ def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst
 
 if __name__ == "__main__":
     daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
-    plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
-    plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    #filter all the data to onbly include 2022 onwards
+    daily_indices = daily_indices[daily_indices['Date'] > '2010-01-01']
+    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2010-01-01']
+    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2010-01-01']
+
+    # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
