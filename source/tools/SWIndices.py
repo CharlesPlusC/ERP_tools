@@ -8,6 +8,15 @@ import pandas as pd
 import re
 import matplotlib.pyplot as plt
 
+NOAA_storm_classification = {
+    'G1': {'Kp': 5, 'description': 'Minor'},
+    'G2': {'Kp': 6, 'description': 'Moderate'},
+    'G3': {'Kp': 7, 'description': 'Strong'},
+    'G4': {'Kp': 8, 'description': 'Severe'},
+    'G5': {'Kp': 9, 'description': 'Extreme'}
+}
+
+
 def read_dst(filepath = "external/SWIndices/Dst_2000_2024.txt"):
     """
         From: https://wdc.kugi.kyoto-u.ac.jp/dstae/format/dstformat.html
@@ -53,7 +62,19 @@ def parse_hourly_values(hourly_str):
     hourly_list = hourly_str.replace('-', ' -').split()  # Splitting properly with space before negative sign
     return [float(val) if val != 'NaN' else None for val in hourly_list]
 
+def classify_storm(kp_val):
+    kp_int = int(float(kp_val))
+    return NOAA_storm_classification.get(kp_int, 'G1')  # Default to 'G1' if Kp is 5 or below
+
 def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_1932.txt'):
+    NOAA_storm_classification = {
+        5: 'G1',
+        6: 'G2',
+        7: 'G3',
+        8: 'G4',
+        9: 'G5'
+    }
+    
     # Read the data, skipping the header lines
     kp_data = pd.read_csv(filepath, delim_whitespace=True, skiprows=40, header=None,
                           names=[
@@ -70,11 +91,14 @@ def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_19
     kp_columns = ['Kp1', 'Kp2', 'Kp3', 'Kp4', 'Kp5', 'Kp6', 'Kp7', 'Kp8']
     kp_data['Kp_avg'] = kp_data[kp_columns].mean(axis=1)
 
+    for col in kp_columns:
+        kp_data[f'{col}_scale'] = kp_data[col].apply(classify_storm)
+
     kp_details = pd.DataFrame()
 
     for i in range(1, 9):
-        temp_df = kp_data[['Date', f'Kp{i}', 'Ap', 'SN', 'F10.7obs']].copy()
-        temp_df.rename(columns={f'Kp{i}': 'Kp'}, inplace=True)
+        temp_df = kp_data[['Date', f'Kp{i}', f'Kp{i}_scale', 'Ap', 'SN', 'F10.7obs']].copy()
+        temp_df.rename(columns={f'Kp{i}': 'Kp', f'Kp{i}_scale': 'storm_scale'}, inplace=True)
         temp_df['DateTime'] = temp_df['Date'] + pd.to_timedelta((i-1)*3, unit='h')
         kp_details = pd.concat([kp_details, temp_df], ignore_index=True)
 

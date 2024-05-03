@@ -92,7 +92,7 @@ def calculate_orbital_energy(sat_name, force_model_config, gravity_degree=90, gr
     settings = {'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass']}   
     ephemeris_df = sp3_ephem_to_df(sat_name)
     first_day = ephemeris_df['UTC'].iloc[0]
-    three_days_later = first_day + datetime.timedelta(hours=5)
+    three_days_later = first_day + datetime.timedelta(hours=12)
     ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= first_day) & (ephemeris_df['UTC'] <= three_days_later)]
     print(f"length of ephemeris_df after filtering: {len(ephemeris_df)}")
     # take the UTC column and convert to mjd
@@ -207,7 +207,7 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     if query_models:
         EDR_df['jb08_rho'] = None
         # EDR_df['dtm2000_rho'] = None
-        # EDR_df['nrlmsise00_rho'] = None
+        EDR_df['nrlmsise00_rho'] = None
 
     if 'UTC' not in energy_ephemeris_df.columns:
         energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
@@ -219,8 +219,8 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     EDR_360 = EDR.rolling(window=360, min_periods=1).mean()
     velocity = np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0)
     time_steps = energy_ephemeris_df['MJD']
-    CD = 3.2  # From Mehta et al 2013
-    A_ref = 1.004  # From Mehta et al 2013
+    CD = 2.2
+    A_ref = 1.004
     mass = 600.0
     rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
     rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
@@ -229,8 +229,8 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
 
     if query_models:
         jb08_rhos = []
-        dtm2000_rhos = []
-        # nrlmsise00_rhos = []
+        # dtm2000_rhos = []
+        nrlmsise00_rhos = []
         x = energy_ephemeris_df['x']
         y = energy_ephemeris_df['y']
         z = energy_ephemeris_df['z']
@@ -247,14 +247,14 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
             pos = np.array([x.iloc[i], y.iloc[i], z.iloc[i]])
             print(f"querying model(/s) at time: {t.iloc[i]}")
             jb08_rho = query_jb08(pos, t.iloc[i])
-            dtm2000_rho = query_dtm2000(pos, t[i])
-            # nrlmsise00_rho = query_nrlmsise00(pos, t[i])
+            # dtm2000_rho = query_dtm2000(pos, t[i])
+            nrlmsise00_rho = query_nrlmsise00(pos, t[i])
             energy_ephemeris_df.at[i, 'jb08_rho'] = jb08_rho
-            energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
-            # energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
+            # energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
+            energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
             jb08_rhos.append(jb08_rho)
-            dtm2000_rhos.append(dtm2000_rho)
-            # nrlmsise00_rhos.append(nrlmsise00_rho)
+            # dtm2000_rhos.append(dtm2000_rho)
+            nrlmsise00_rhos.append(nrlmsise00_rho)
     EDR_df['MJD'] = time_steps
     EDR_df['EDR'] = EDR
     EDR_df['EDR60'] = EDR60
@@ -265,8 +265,8 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     EDR_df['rho_eff_360'] = rho_eff_360
     if query_models:
         EDR_df['jb08_rho'] = jb08_rhos
-        EDR_df['dtm2000_rho'] = dtm2000_rhos
-        # EDR_df['nrlmsise00_rho'] = nrlmsise00_rhos
+        # EDR_df['dtm2000_rho'] = dtm2000_rhos
+        EDR_df['nrlmsise00_rho'] = nrlmsise00_rhos
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
     EDR_df.to_csv(os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
     return EDR_df
@@ -290,54 +290,33 @@ def main():
         # gfoa_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-02.csv")
 
         # density_df = Density_from_EDR(sat_name, orbital_energy_df_degord20, query_models=True)
-        density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-04 21:59:42_2023-05-05 02:59:42_2024-05-03.csv")
+        density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-04 21:59:42_2023-05-05 09:59:42_2024-05-03.csv")
         
-        #fill in the values in rho_eff_180 that are negative with the last positive value until the next positive value
-        # rho_eff_180 = edr_df['rho_eff_180']
-        # for i in range(len(rho_eff_180)):
-        #     if rho_eff_180[i] < 0:
-        #         rho_eff_180[i] = rho_eff_180[i-1]
-        # edr_df['rho_eff_180'] = rho_eff_180
+        plt.figure(figsize=(10, 5))
+        # Plotting various density metrics
+        # plt.plot(density_df['MJD'], density_df['rho_eff'], label='EDR Density', linewidth=0.5)
+        # plt.plot(density_df['MJD'], density_df['rho_eff_60'], label='60-point MA', linewidth=1)
+        plt.plot(density_df['MJD'], density_df['rho_eff_180'], label='180-point MA', linewidth=1)
+        plt.plot(density_df['MJD'], density_df['rho_eff_360'], label='360-point MA', linewidth=1)
+        plt.plot(density_df['MJD'], density_df['jb08_rho'], label='JB08 Density', linestyle='dashed')
+        # Plotting DTM2000 and NRLMSISE00 densities
+        # plt.plot(density_df['MJD'], density_df['dtm2000_rho'], label='DTM2000 Density', linestyle='dashed')
+        plt.plot(density_df['MJD'], density_df['nrlmsise00_rho'], label='NRLMSISE00 Density', linestyle='dashed')
 
-        # plot rho_eff, rho_eff_60, and rho_eff_180 over MJD
-# Function to extract the first element from the tuple in the density columns
-    def extract_density(value):
-        try:
-            return float(value.split(',')[0].strip('('))
-        except Exception as e:
-            print(f"Error extracting density: {e}")
-            return None
-
-    plt.figure(figsize=(10, 5))
-    # Plotting various density metrics
-    # plt.plot(density_df['MJD'], density_df['rho_eff'], label='EDR Density', linewidth=0.5)
-    # plt.plot(density_df['MJD'], density_df['rho_eff_60'], label='60-point MA', linewidth=1)
-    plt.plot(density_df['MJD'], density_df['rho_eff_180'], label='180-point MA', linewidth=1)
-    plt.plot(density_df['MJD'], density_df['rho_eff_360'], label='360-point MA', linewidth=1)
-    plt.plot(density_df['MJD'], density_df['jb08_rho'], label='JB08 Density', linestyle='dashed')
-    
-    # Applying the density extraction function to dtm2000_rho and nrlmsise00_rho columns
-    density_df['dtm2000_rho'] = density_df['dtm2000_rho'].apply(extract_density)
-    density_df['nrlmsise00_rho'] = density_df['nrlmsise00_rho'].apply(extract_density)
-    
-    # Plotting DTM2000 and NRLMSISE00 densities
-    plt.plot(density_df['MJD'], density_df['dtm2000_rho'], label='DTM2000 Density', linestyle='dashed')
-    plt.plot(density_df['MJD'], density_df['nrlmsise00_rho'], label='NRLMSISE00 Density', linestyle='dashed')
-
-    # Plot settings
-    plt.legend()
-    plt.yscale('log')
-    plt.xlabel('Modified Julian Date')
-    plt.ylabel('Effective Density (kg/m^3)')
-    plt.title(f"{sat_name}: Effective Density")
-    plt.grid(True)
-    
-    # Save and show plot
-    datenow = datetime.datetime.now().strftime("%Y-%m-%d")
-    start_date = density_df['MJD'].iloc[0]
-    end_date = density_df['MJD'].iloc[-1]
-    plt.savefig(f"output/DensityInversion/EDR/Plots/Density/{sat_name}_EDR_{start_date}_{end_date}_tstamp{datenow}.png")
-    plt.show()
+        # Plot settings
+        plt.legend()
+        plt.yscale('log')
+        plt.xlabel('Modified Julian Date')
+        plt.ylabel('Effective Density (kg/m^3)')
+        plt.title(f"{sat_name}: Effective Density")
+        plt.grid(True)
+        
+        # Save and show plot
+        datenow = datetime.datetime.now().strftime("%Y-%m-%d")
+        start_date = density_df['MJD'].iloc[0]
+        end_date = density_df['MJD'].iloc[-1]
+        plt.savefig(f"output/DensityInversion/EDR/Plots/Density/{sat_name}_EDR_{start_date}_{end_date}_tstamp{datenow}.png")
+        plt.show()
 
 if __name__ == "__main__":
     main()
