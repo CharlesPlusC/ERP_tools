@@ -98,44 +98,43 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
 
     return density_inversion_df
 
-def save_density_inversion_data(sat_name, density_inversion_dfs):
-    save_folder = f"output/DensityInversion/PODBasedAccelerometry/Data/{sat_name}/"
-    if not os.path.exists(save_folder):
-        os.makedirs(save_folder)
-    for i, df in enumerate(density_inversion_dfs):
-        filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_fm{i}_density_inversion.csv"
-        if isinstance(df, pd.DataFrame):
-            df.to_csv(os.path.join(save_folder, filename), index=False)
-
 def main():
     sat_names_to_test = ["GRACE-FO-A"]
     force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
     for sat_name in sat_names_to_test:
         ephemeris_df = sp3_ephem_to_df(sat_name)
         ephemeris_df = ephemeris_df.head(180*35)
-        interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-        interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
-        # interp_ephemeris_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
+        ephemeris_to_density(sat_name, ephemeris_df, force_model_config)
 
-        acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
-        quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
-        inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
-        ephemeris_df_copy = interp_ephemeris_df.copy()
+def ephemeris_to_density(sat_name, ephemeris_df, force_model_config, path_output_folder="output/DensityInversion/PODBasedAccelerometry/Data/"):
+    interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
+    interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
+    density_inversion_dfs = density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None)
+    # interp_ephemeris_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
 
-        # Ensure utc_time in both DataFrames is converted to datetime
-        ephemeris_df_copy['Epoch'] = pd.to_datetime(ephemeris_df_copy['Epoch'])
-        #rename Epoch to UTC
-        ephemeris_df_copy.rename(columns={'Epoch': 'UTC'}, inplace=True)
-        inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
-        inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
+    #TODO: integrate the accelerometer data for GFO-A
+    # acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
+    # quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
+    # inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
+    # ephemeris_df_copy = interp_ephemeris_df.copy()
 
-        merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
-        density_inversion_dfs_acc = density_inversion(sat_name, merged_df, force_model_config, accelerometer_data=inertial_gfo_data)
-        pd.DataFrame(density_inversion_dfs_acc).to_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion_with_acc.csv")
+    # # Ensure utc_time in both DataFrames is converted to datetime
+    # ephemeris_df_copy['Epoch'] = pd.to_datetime(ephemeris_df_copy['Epoch'])
+    # #rename Epoch to UTC
+    # ephemeris_df_copy.rename(columns={'Epoch': 'UTC'}, inplace=True)
+    # inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
+    # inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
+    # merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
+
+
+    if path_output_folder is not None:
+        file_out = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_density_inversion.csv"
+        pd.DataFrame(density_inversion_dfs).to_csv(f"{path_output_folder}/{sat_name}/{file_out}")
+    return pd.DataFrame(density_inversion_dfs)
 
 if __name__ == "__main__":
     # main()
-    daily_indices, kp3hrly, dst_hrly = get_sw_indices()
+    # daily_indices, kp3hrly, dst_hrly = get_sw_indices()
 
     #TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
     densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
