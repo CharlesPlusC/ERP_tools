@@ -10,7 +10,7 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 
 import os
-from ..tools.utilities import utc_to_mjd, get_satellite_info, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
+from ..tools.utilities import utc_to_mjd, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
 from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
 from ..tools.orekit_tools import query_jb08, query_dtm2000, query_nrlmsise00, state2acceleration
 import numpy as np

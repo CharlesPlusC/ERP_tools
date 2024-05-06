@@ -49,7 +49,6 @@ def read_sp3_gz_file(sp3_gz_file_path):
     print(f"Read {len(df)} records from {temp_file_path}")
     os.remove(temp_file_path)
     return df
-
 def process_sp3_files(base_path, sat_list):
     all_dataframes = {sat_name: [] for sat_name in sat_list}
 

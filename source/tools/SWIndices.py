@@ -321,9 +321,9 @@ def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst
 if __name__ == "__main__":
     daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
     #filter all the data to onbly include 2022 onwards
-    daily_indices = daily_indices[daily_indices['Date'] > '2010-01-01']
-    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2010-01-01']
-    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2010-01-01']
+    daily_indices = daily_indices[daily_indices['Date'] > '2018-01-01']
+    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2018-01-01']
+    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2018-01-01']
 
     # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
