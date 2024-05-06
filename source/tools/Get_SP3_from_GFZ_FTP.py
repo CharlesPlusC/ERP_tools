@@ -1,15 +1,16 @@
 import os
 import json
 import ftplib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def load_sp3_codes(json_path):
     with open(json_path, 'r') as file:
         return json.load(file)
 
-def create_ftp_url(spacecraft, sp3_code, year, day):
-    day_str = f"{day:03d}"
-    return f"{spacecraft}/ORBIT/{sp3_code}/RSO/{year}/{day_str}/"
+def create_ftp_url(spacecraft, sp3_code, date, orbit_type="RSO"):
+    day_str = f"{date.timetuple().tm_yday:03d}"
+    year = date.year
+    return f"{spacecraft}/ORBIT/{sp3_code}/{orbit_type}/{year}/{day_str}/"
 
 def download_files(ftp_server, path, local_directory):
     try:
@@ -25,12 +26,7 @@ def download_files(ftp_server, path, local_directory):
     except ftplib.all_errors as e:
         print(f"FTP error: {e}")
 
-def main():
-    spacecraft_name = "TerraSAR-X"
-    year = 2019
-    day_of_year = 335
-    json_path = "misc/sat_list.json"
-    local_directory = "external/sp3_files"
+def download_sp3(start_date, end_date, spacecraft_name, json_path="misc/sat_list.json"):
     sp3_codes = load_sp3_codes(json_path)
     if spacecraft_name in sp3_codes:
         sp3_code = sp3_codes[spacecraft_name]["sp3-c_code"]
@@ -42,10 +38,13 @@ def main():
             "TerraSAR-X": "tsxtdx",
             "TanDEM-X": "tsxtdx"
         }.get(spacecraft_name, "")
-        ftp_path = create_ftp_url(spacecraft_folder, sp3_code, year, day_of_year)
-        download_files(base_url, ftp_path, local_directory)
+        
+        current_date = start_date
+        while current_date <= end_date:
+            ftp_path = create_ftp_url(spacecraft_folder, sp3_code, current_date)
+            local_directory = f"external/sp3_files/{sp3_code}/{current_date.year}/{current_date.strftime('%j')}"
+            os.makedirs(local_directory, exist_ok=True)
+            download_files(base_url, ftp_path, local_directory)
+            current_date += timedelta(days=1)
     else:
         print(f"No SP3-C code found for {spacecraft_name}")
-
-if __name__ == "__main__":
-    main()

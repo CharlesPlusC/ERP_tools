@@ -260,7 +260,7 @@ def plot_all_indices_in_one_plotly(merged_data, kp_details, hourly_long_df, dail
         yaxis3=dict(title='Ap', color='green', overlaying='y', side='right', position=0.90),
         yaxis4=dict(title='SN', color='purple', overlaying='y', side='right', position=0.85),
         yaxis5=dict(title='F10.7obs', color='orange', overlaying='y', side='right', position=0.80),
-        title='Geomagnetic and Solar Indices Over Time Including Dst'
+        title='Geomagnetic and Solars Indices Over Time Including Dst'
     )
 
     fig.show()
@@ -318,13 +318,51 @@ def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst
     fig.legend(loc='upper left', bbox_to_anchor=(0.1,0.9))
     plt.show()
 
+
 if __name__ == "__main__":
+    import numpy as np  
+    def distribute_selection(dates, num_selections):
+        if len(dates) <= num_selections:
+            return dates
+        # Choose indices to distribute selections evenly
+        indices = np.round(np.linspace(0, len(dates) - 1, num_selections)).astype(int)
+        return dates[indices]
+    def filter_by_date_range(df, start_date, end_date, date_column='DateTime'):
+        return df[(df[date_column] >= start_date) & (df[date_column] <= end_date)]
+
+    def select_storms(kp_3hrly):
+        satellite_periods = {
+            'CHAMP': ('2001-01-01', '2010-12-31'),
+            'GRACE-FO/A/B': ('2019-01-01', '2024-05-06'),
+            'TerraSAR-X/TanDEM-X': ('2010-01-01', '2024-05-06')
+        }
+
+        storm_levels = ['G2', 'G3', 'G4', 'G5']
+        storm_selections = {sat: {level: [] for level in storm_levels} for sat in satellite_periods}
+
+        # Collect storm dates per satellite and storm level
+        for satellite, (start, end) in satellite_periods.items():
+            filtered_storms = filter_by_date_range(kp_3hrly, start, end)
+            for level in storm_levels:
+                storm_dates = filtered_storms[filtered_storms['storm_scale'] == level]['DateTime'].dt.date.unique()
+                storm_dates.sort()
+                storm_selections[satellite][level] = distribute_selection(storm_dates, 5)
+
+        # Write selected storm periods to a file
+        with open("output/DensityInversion/PODBasedAccelerometry/selected_storms.txt", "w") as file:
+            for satellite, levels in storm_selections.items():
+                file.write(f"{satellite} Satellite:\n")
+                for level, dates in levels.items():
+                    file.write(f"  {level}: {dates}\n")
+                file.write("\n")
+
     daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
-    #filter all the data to onbly include 2022 onwards
-    daily_indices = daily_indices[daily_indices['Date'] > '2018-01-01']
-    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2018-01-01']
-    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2018-01-01']
+
+    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']  # Filter to 2010 onwards
+
+    select_storms(kp_3hrly)
+    print("Storm selection completed and written to 'selected_storms.txt'.")
 
     # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
-    plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)

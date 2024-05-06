@@ -7,6 +7,7 @@ output/OD_BLS/Tapley/saved_runs/
 *.ini
 *misc/CDDIS.ini
 *.csv
+*.sp3*
 !output/DensityInversion/PODBasedAccelerometry/Data/*/*.csv
 !output/Collisions/MC/TCA_DCA/*/data/*.csv
 !output/DensityInversion/EDR/Data/*
