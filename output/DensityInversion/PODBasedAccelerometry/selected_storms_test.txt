@@ -1,0 +1,13 @@
+CHAMP Satellite:
+  G2: [datetime.date(2001, 3, 20) datetime.date(2002, 10, 25)
+ datetime.date(2003, 10, 14) datetime.date(2005, 2, 18)
+ datetime.date(2010, 8, 4)]
+  G3: [datetime.date(2001, 3, 19) datetime.date(2002, 4, 18)
+ datetime.date(2003, 8, 7) datetime.date(2004, 11, 10)
+ datetime.date(2010, 8, 3)]
+  G4: [datetime.date(2001, 3, 31) datetime.date(2003, 10, 29)
+ datetime.date(2004, 11, 8) datetime.date(2005, 5, 8)
+ datetime.date(2010, 4, 5)]
+  G5: [datetime.date(2001, 3, 31) datetime.date(2003, 10, 29)
+ datetime.date(2003, 11, 20) datetime.date(2004, 11, 9)
+ datetime.date(2005, 8, 24)]
