@@ -56,7 +56,7 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
         vel = np.array([interp_ephemeris_df['xv'].iloc[i], interp_ephemeris_df['yv'].iloc[i], interp_ephemeris_df['zv'].iloc[i]])
         state_vector = np.array([interp_ephemeris_df['x'].iloc[i], interp_ephemeris_df['y'].iloc[i], interp_ephemeris_df['z'].iloc[i], vel[0], vel[1], vel[2]])
         if accelerometer_data is not None:
-            force_model_config = {'3BP': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
+            force_model_config = {'3BP': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}, #TODO: check what the right force model config is here
         conservative_accelerations = state2acceleration(state_vector, epoch, settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
 
         computed_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
@@ -131,7 +131,7 @@ def ephemeris_to_density(sat_name, ephemeris_df, force_model_config, path_output
     # merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
 
 
-    if path_output_folder is not None:
+    if path_output_folder is None:
         file_out = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_density_inversion.csv"
         pd.DataFrame(density_inversion_dfs).to_csv(f"{path_output_folder}/{sat_name}/{file_out}")
     return pd.DataFrame(density_inversion_dfs)

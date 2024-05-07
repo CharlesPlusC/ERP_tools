@@ -25,7 +25,7 @@ def download_files(ftp_server, path, local_directory):
     except ftplib.all_errors as e:
         print(f"FTP error: {e}")
 
-def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selected_storms.txt'):
+def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selected_storms_test.txt'):
     with open(selected_storms_file, 'r') as file:
         data = file.read()
 
@@ -64,6 +64,7 @@ def download_storm_time_ephems(selected_storms_file='output/DensityInversion/POD
 
 def load_storm_sp3(storm_data):
     all_data = {}
+    print(f"storm_data: {storm_data}")
     for satellite, storm_periods in storm_data.items():
         # Initialize a list to store DataFrames for each period for the satellite
         all_data[satellite] = []
@@ -76,37 +77,49 @@ def load_storm_sp3(storm_data):
 
     return all_data
 
-if __name__ == "__main__":
-    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    storm_data = download_storm_time_ephems()
+def filter_non_empty_dataframes(data_groups):
+    return [df for df in data_groups if not df.empty]
 
+def main():
+    force_model_config = {
+        '120x120gravity': True, '3BP': True, 'solid_tides': True,
+        'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True
+    }
+
+    storm_data = download_storm_time_ephems()
     storm_ephem_data = load_storm_sp3(storm_data)
-    for satellite in storm_ephem_data:
+    seen_identifiers = set()
+
+    for satellite, data_groups in storm_ephem_data.items():
         new_df_list = []
-        for df_group in storm_ephem_data[satellite]:
-            # Filter out empty DataFrames within each group/list
-            filtered_group = [df for df in df_group if not df.empty]
+        for df_group in data_groups:
+            filtered_group = filter_non_empty_dataframes(df_group)
             if filtered_group:  # Only add non-empty groups
                 new_df_list.append(filtered_group)
         storm_ephem_data[satellite] = new_df_list
-    print(f"storm_ephem_data: {storm_ephem_data}")
+
     for satellite, df_list in storm_ephem_data.items():
         print(f"Processing {satellite}")
         for storm_period_index, df_period in enumerate(df_list):
             print(f"Processing storm period {storm_period_index} for {satellite}")
             for df_index, df in enumerate(df_period):
                 if not df.empty:
-                    ephemeris_df = df.head(50)
-                    print(f"head of df: {df.head()}")
-                    print(f"Processing {satellite} storm {df_index}")
-                    density_inversion_df = ephemeris_to_density(satellite, ephemeris_df, force_model_config, path_output_folder="output/DensityInversion/PODBasedAccelerometry/Data/")
+                    identifier = tuple(df['UTC'].tolist())
+                    if identifier in seen_identifiers:
+                        print(f"Duplicate detected: Skipping storm {df_index} for {satellite}")
+                        continue
+                    seen_identifiers.add(identifier)
+
+                    density_inversion_df = ephemeris_to_density(satellite, df, force_model_config)
                     datenow = datetime.now().strftime("%Y%m%d%H%M%S")
-                    density_inversion_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/{satellite}/storm_rho_{df_index}_{datenow}.csv")
+                    output_path = f"output/DensityInversion/PODBasedAccelerometry/Data/{satellite}/storm_density_{storm_period_index}_{datenow}.csv"
+                    density_inversion_df.to_csv(output_path)
+                    print(f"Data saved to {output_path}")
                 else:
                     print(f"Skipping processing for {satellite} storm {df_index} due to empty DataFrame.")
 
-
-
+if __name__ == "__main__":
+    main()
     #then load each of the downloaded sp3 files using the datetimes in the selected_storms.txt file and the sp3_epheme_to_df function
     # Use ephemeris_to_density to:
         #1. ingest the ephemeris
