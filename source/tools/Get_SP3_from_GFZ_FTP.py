@@ -30,6 +30,7 @@ def download_sp3(start_date, end_date, spacecraft_name, json_path="misc/sat_list
     sp3_codes = load_sp3_codes(json_path)
     if spacecraft_name in sp3_codes:
         sp3_code = sp3_codes[spacecraft_name]["sp3-c_code"]
+        norad = sp3_codes[spacecraft_name]["norad_id"]
         base_url = "isdcftp.gfz-potsdam.de"
         spacecraft_folder = {
             "CHAMP": "champ",
@@ -38,6 +39,11 @@ def download_sp3(start_date, end_date, spacecraft_name, json_path="misc/sat_list
             "TerraSAR-X": "tsxtdx",
             "TanDEM-X": "tsxtdx"
         }.get(spacecraft_name, "")
+        
+        ephemeris_path = f"external/ephems/{spacecraft_name}/NORAD{norad}-{start_date}-{end_date}.txt"
+        if os.path.exists(ephemeris_path):
+            print(f"Ephemeris file already exists for {spacecraft_name} from {start_date} to {end_date}.")
+            return
         
         current_date = start_date
         while current_date <= end_date:

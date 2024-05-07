@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 from datetime import datetime
-from tools.utilities import gps_time_to_utc
+from ..tools.utilities import gps_time_to_utc
 
 def read_accelerometer(file_path):
     column_names = [

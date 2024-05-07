@@ -358,9 +358,12 @@ if __name__ == "__main__":
 
     daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
 
-    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']  # Filter to 2010 onwards
+    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']
+    daily_indices = daily_indices[daily_indices['Date'] > '2000-01-01']  
+    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2000-01-01'] 
 
     select_storms(kp_3hrly)
+
     print("Storm selection completed and written to 'selected_storms.txt'.")
 
     # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)

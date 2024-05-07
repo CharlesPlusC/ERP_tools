@@ -7,13 +7,13 @@ vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
 from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
-from tools.utilities import interpolate_positions,calculate_acceleration, get_satellite_info, project_acc_into_HCL
-from tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
-from tools.sp3_2_ephemeris import sp3_ephem_to_df
+from ..tools.utilities import interpolate_positions,calculate_acceleration, get_satellite_info, project_acc_into_HCL
+from ..tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
+from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
 import numpy as np
 import datetime
 from tqdm import tqdm
-from tools.GFODataReadTools import get_gfo_inertial_accelerations
+from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 
 def compute_acc_from_vel(sat_name = "GRACE-FO-A", 
                          start_date = datetime.datetime(2023, 5, 5, 0, 0, 0), 

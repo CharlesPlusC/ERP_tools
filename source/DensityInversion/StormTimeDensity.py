@@ -25,8 +25,8 @@ def download_files(ftp_server, path, local_directory):
     except ftplib.all_errors as e:
         print(f"FTP error: {e}")
 
-def parse_dates_and_download():
-    with open('output/DensityInversion/PODBasedAccelerometry/selected_storms_test.txt', 'r') as file:
+def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selected_storms.txt'):
+    with open(selected_storms_file, 'r') as file:
         data = file.read()
 
     # Dictionary to store satellite data
@@ -40,7 +40,6 @@ def parse_dates_and_download():
             # Correctly parse the satellite name from the line
             satellite_name = line.split('Satellite:')[0].strip()
             satellite_data[satellite_name] = []  # Initialize a list for this satellite
-            print(f"Satellite: {satellite_name}")
         elif 'G' in line and '[' in line and satellite_name:  # Looking for lines that contain dates
             storm_level = line.strip().split(':')[0].strip()
             date_list_str = line[line.find('[') + 1:line.find(']')]
@@ -58,21 +57,18 @@ def parse_dates_and_download():
             for date in dates:
                 start_date = date - timedelta(days=1)
                 end_date = date + timedelta(days=2)
-                # Storing geomagnetic storm level and time period in satellite data
                 satellite_data[satellite_name].append((storm_level, start_date, end_date))
-                # Assuming download_sp3 is a defined function elsewhere
                 # download_sp3(start_date, end_date, satellite_name)
 
     return satellite_data
 
-def load_sp3_data_for_storms(storm_data):
+def load_storm_sp3(storm_data):
     all_data = {}
     for satellite, storm_periods in storm_data.items():
         # Initialize a list to store DataFrames for each period for the satellite
         all_data[satellite] = []
         
         for storm_index, (storm_level, start_date, end_date) in enumerate(storm_periods):
-
             df_list = []
             df = sp3_ephem_to_df(satellite, date=str(start_date))
             df_list.append(df)
@@ -82,14 +78,35 @@ def load_sp3_data_for_storms(storm_data):
 
 if __name__ == "__main__":
     force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    storm_data = parse_dates_and_download()
-    storm_ephem_data = load_sp3_data_for_storms(storm_data)
+    storm_data = download_storm_time_ephems()
+
+    storm_ephem_data = load_storm_sp3(storm_data)
+    for satellite in storm_ephem_data:
+        new_df_list = []
+        for df_group in storm_ephem_data[satellite]:
+            # Filter out empty DataFrames within each group/list
+            filtered_group = [df for df in df_group if not df.empty]
+            if filtered_group:  # Only add non-empty groups
+                new_df_list.append(filtered_group)
+        storm_ephem_data[satellite] = new_df_list
+    print(f"storm_ephem_data: {storm_ephem_data}")
     for satellite, df_list in storm_ephem_data.items():
-        for df in df_list:
-            for i, df in enumerate(df):
-                density_inversion_df = density_inversion(satellite, df, force_model_config)
-                #save density_inversion_df to a CSV file
-                density_inversion_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/{satellite}_storm_{i}.csv")
+        print(f"Processing {satellite}")
+        for storm_period_index, df_period in enumerate(df_list):
+            print(f"Processing storm period {storm_period_index} for {satellite}")
+            for df_index, df in enumerate(df_period):
+                if not df.empty:
+                    ephemeris_df = df.head(50)
+                    print(f"head of df: {df.head()}")
+                    print(f"Processing {satellite} storm {df_index}")
+                    density_inversion_df = ephemeris_to_density(satellite, ephemeris_df, force_model_config, path_output_folder="output/DensityInversion/PODBasedAccelerometry/Data/")
+                    datenow = datetime.now().strftime("%Y%m%d%H%M%S")
+                    density_inversion_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/{satellite}/storm_rho_{df_index}_{datenow}.csv")
+                else:
+                    print(f"Skipping processing for {satellite} storm {df_index} due to empty DataFrame.")
+
+
+
     #then load each of the downloaded sp3 files using the datetimes in the selected_storms.txt file and the sp3_epheme_to_df function
     # Use ephemeris_to_density to:
         #1. ingest the ephemeris

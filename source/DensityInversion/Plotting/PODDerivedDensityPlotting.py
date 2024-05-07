@@ -8,7 +8,7 @@ from source.tools.SWIndices import get_sw_indices
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates
 from orekit.pyhelpers import datetime_to_absolutedate
-from tools.utilities import pv_to_kep, interpolate_positions, calculate_acceleration
+from source.tools.utilities import project_acc_into_HCL, pv_to_kep, interpolate_positions, calculate_acceleration
 from org.orekit.frames import FramesFactory
 import os
 
