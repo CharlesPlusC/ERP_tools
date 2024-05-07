@@ -61,6 +61,7 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, star
 
     for density_df in data_frames:
         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True) if 'Epoch' in density_df.columns else density_df.index
+        first_epoch = density_df['Epoch'].iloc[0]
         density_df = get_arglat_from_df(density_df)
         density_df.set_index('Epoch', inplace=True)
 
@@ -119,7 +120,7 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, star
             c.set_clim(global_min, global_max)
 
     plt.suptitle(f'Relative Change in Atmospheric Density for {sat_name}', color='white')  # Adjusted color of title
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/rel_densitydiff_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/rel_densitydiff_{first_epoch}.jpg', dpi=600)
 
 def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     sns.set_style("darkgrid", {

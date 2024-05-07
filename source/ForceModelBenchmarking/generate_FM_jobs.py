@@ -52,15 +52,6 @@ def generate_json_files(sat_names_to_test, dates_to_test, num_arcs, arc_length, 
                     with open(f"{arc_folder}/force_model_config_{config_num}.json", 'w') as f:
                         json.dump(force_model_config, f)
 
-import pandas as pd
-# Example function adjustments for reading JSON data correctly:
-def read_json_data(file_path):
-    try:
-        return pd.read_json(file_path, orient='split')
-    except ValueError as e:
-        print(f"Error reading JSON data from {file_path}: {e}")
-        raise
-
 def write_array_scripts(sat_names_to_test, num_arcs, prop_length):
     user_home_dir = os.path.expanduser("~")
     local_output = "output/FMBench"

@@ -114,6 +114,14 @@ def ephemeris_to_density(sat_name, ephemeris_df, force_model_config, path_output
     interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
     interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
     density_inversion_dfs = density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None)
+
+    if path_output_folder is None:
+        file_out = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_density_inversion.csv"
+        pd.DataFrame(density_inversion_dfs).to_csv(f"{path_output_folder}/{sat_name}/{file_out}")
+    return pd.DataFrame(density_inversion_dfs)
+
+
+def accelerometer_density(ephemeris_df):
     # interp_ephemeris_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
 
     #TODO: integrate the accelerometer data for GFO-A
@@ -129,12 +137,8 @@ def ephemeris_to_density(sat_name, ephemeris_df, force_model_config, path_output
     # inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
     # inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
     # merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
+    pass
 
-
-    if path_output_folder is None:
-        file_out = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_density_inversion.csv"
-        pd.DataFrame(density_inversion_dfs).to_csv(f"{path_output_folder}/{sat_name}/{file_out}")
-    return pd.DataFrame(density_inversion_dfs)
 
 if __name__ == "__main__":
     # main()

@@ -23,4 +23,4 @@ dependencies:
   - plotly
   - kaleido
   - sp3
-  - poliastro
+  - seaborn

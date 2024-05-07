@@ -27,9 +27,9 @@ import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import uuid
 import sys
 import json
+
 INTEGRATOR_MIN_STEP = 0.001
 INTEGRATOR_MAX_STEP = 15.0
 INTEGRATOR_INIT_STEP = 60.0
@@ -39,11 +39,6 @@ def generate_config_name(config_dict, arc_number):
     config_keys = '+'.join(key for key, value in config_dict.items() if value)
     return f"arc{arc_number}_{config_keys}"
 
-import pandas as pd
-import sys
-import json
-
-# Example function adjustments for reading JSON data correctly:
 def read_json_data(file_path):
     try:
         return pd.read_json(file_path, orient='split')
