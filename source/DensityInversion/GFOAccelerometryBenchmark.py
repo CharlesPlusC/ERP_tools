@@ -201,18 +201,18 @@ if __name__ == '__main__':
     inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
     inertial_gfo_data['utc_time'] = pd.to_datetime(inertial_gfo_data['utc_time'])
     intertial_t0 = inertial_gfo_data['utc_time'].iloc[0]
-    inertial_gfo_data = inertial_gfo_data[(inertial_gfo_data['utc_time'] >= intertial_t0) & (inertial_gfo_data['utc_time'] <= intertial_t0 + pd.Timedelta(minutes=180))]
+    inertial_gfo_data = inertial_gfo_data[(inertial_gfo_data['utc_time'] >= intertial_t0) & (inertial_gfo_data['utc_time'] <= intertial_t0 + pd.Timedelta(hours=2))]
 
     ephemeris_df = sp3_ephem_to_df(satellite="GRACE-FO-A", date="2023-05-05")
     print(f"start date: {ephemeris_df['UTC'].iloc[0]}, end date: {ephemeris_df['UTC'].iloc[-1]}")
     
     ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= intertial_t0) & (ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(minutes=25))]
+    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= intertial_t0) & (ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(hours=2))]
     print(f"new start date: {ephemeris_df['UTC'].iloc[0]}, new end date: {ephemeris_df['UTC'].iloc[-1]}")
     
     velocity_based_accelerations = ephemeris_to_density(sat_name="GRACE-FO-A", ephemeris_df = ephemeris_df, 
                                                         force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-                                                        savgol_poly=10, savgol_window=35)
+                                                        savgol_poly=7, savgol_window=21)
     
     print(f"columns in velocity_based_accelerations: {velocity_based_accelerations.columns}")
     
@@ -245,14 +245,13 @@ if __name__ == '__main__':
         r = np.array([merged_df['x'][i], merged_df['y'][i], merged_df['z'][i]])
         v = np.array([merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i]])
         v_rel = v - np.cross(atm_rot, r)        
-        merged_df.at[i, 'ACT_rho'] = -2 * (-l_acc_meas / (2.2 * 1.004)) * (600.2 / np.abs(np.linalg.norm(v_rel))**2)
+        merged_df.at[i, 'ACT_rho'] = -2 * (l_acc_meas / (2.2 * 1.004)) * (600.2 / np.abs(np.linalg.norm(v_rel))**2)
 
-        
     #calculte the 45-point rolling average of the inverted and measured accelerations and add them to a new column called 'rolling_inverted_acc' and 'rolling_savgol_acc'
     merged_df[f'rolling_inverted_l_acc'] = merged_df[f'inverted_l_acc'].rolling(window=45, center=True).mean()
 
     #drop the frist and last 90 points
-    # merged_df = merged_df[90:-90] 
+    merged_df = merged_df[90:-90] 
     plt.figure(figsize=(15, 6))
     plt.plot(merged_df['utc_time'], merged_df['inverted_l_acc'], label='Inverted L Acceleration')
     plt.plot(merged_df['utc_time'], merged_df['rolling_inverted_l_acc'], label='Rolling Inverted-for L Acceleration')
