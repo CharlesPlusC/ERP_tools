@@ -42,7 +42,7 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
         interp_ephemeris_df.drop(columns=columns_to_drop, inplace=True)
 
     columns = [
-        'Epoch', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz',
+        'UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz',
         *(['JB08 Density'])
         # *(['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density'])
     ]
@@ -78,7 +78,7 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
 
         if accelerometer_data is None:
             row_data = {
-                'Epoch': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
+                'UTC': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
                 'accx': diff_x, 'accy': diff_y, 'accz': diff_z, 'Computed Density': rho,
                 **({key: value for key, value in zip(['JB08 Density'], 
                                                      [query_jb08(r, time)])})
@@ -89,7 +89,7 @@ def density_inversion(sat_name, interp_ephemeris_df, force_model_config, acceler
             
         if accelerometer_data is not None:
             row_data = {
-                'Epoch': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
+                'UTC': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
                 'accx': diff_x, 'accy': diff_y, 'accz': diff_z, 'Accelerometer Density': rho, 'Computed Density': interp_ephemeris_df['Computed Density'][i],
                 #TODO: somehow the accelerometer density is inverted... 
                 #take the exisitng jb08, dtm2000, and nrlmsise00 densities from the interp_ephemeris_df 
@@ -110,34 +110,15 @@ def main():
         ephemeris_df = ephemeris_df.head(180*35)
         ephemeris_to_density(sat_name, ephemeris_df, force_model_config)
 
-def ephemeris_to_density(sat_name, ephemeris_df, force_model_config, path_output_folder="output/DensityInversion/PODBasedAccelerometry/Data/"):
+def ephemeris_to_density(sat_name, ephemeris_df, force_model_config,savgol_window=21, savgol_poly=7, path_output_folder="output/DensityInversion/PODBasedAccelerometry/Data/"):
     interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-    interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', 21, 7)
+    interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', savgol_window, savgol_poly)
     density_inversion_dfs = density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None)
 
     if path_output_folder is None:
         file_out = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_density_inversion.csv"
         pd.DataFrame(density_inversion_dfs).to_csv(f"{path_output_folder}/{sat_name}/{file_out}")
     return pd.DataFrame(density_inversion_dfs)
-
-
-def accelerometer_density(ephemeris_df):
-    # interp_ephemeris_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
-
-    #TODO: integrate the accelerometer data for GFO-A
-    # acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
-    # quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
-    # inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
-    # ephemeris_df_copy = interp_ephemeris_df.copy()
-
-    # # Ensure utc_time in both DataFrames is converted to datetime
-    # ephemeris_df_copy['Epoch'] = pd.to_datetime(ephemeris_df_copy['Epoch'])
-    # #rename Epoch to UTC
-    # ephemeris_df_copy.rename(columns={'Epoch': 'UTC'}, inplace=True)
-    # inertial_gfo_data.rename(columns={'utc_time': 'UTC'}, inplace=True)
-    # inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['UTC'])
-    # merged_df = pd.merge(inertial_gfo_data, ephemeris_df_copy, on='UTC')
-    pass
 
 
 if __name__ == "__main__":

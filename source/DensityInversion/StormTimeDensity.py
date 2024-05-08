@@ -134,65 +134,65 @@ def main():
 
 
 #### Myriad compute jobs
-def create_and_submit_density_jobs():
-    import os
-    import json
+# def create_and_submit_density_jobs():
+#     import os
+#     import json
 
-    user_home_dir = os.getenv("HOME")
-    folder_for_jobs = f"{user_home_dir}/Scratch/DensityJobs/sge_jobs"
-    work_dir = f"{user_home_dir}/Scratch/DensityJobs/working"
-    logs_folder = f"{user_home_dir}/Scratch/DensityJobs/logs"
-    output_folder = f"{user_home_dir}/Scratch/DensityJobs/output"
+#     user_home_dir = os.getenv("HOME")
+#     folder_for_jobs = f"{user_home_dir}/Scratch/DensityJobs/sge_jobs"
+#     work_dir = f"{user_home_dir}/Scratch/DensityJobs/working"
+#     logs_folder = f"{user_home_dir}/Scratch/DensityJobs/logs"
+#     output_folder = f"{user_home_dir}/Scratch/DensityJobs/output"
 
-    os.makedirs(folder_for_jobs, exist_ok=True)
-    os.makedirs(work_dir, exist_ok=True)
-    os.makedirs(logs_folder, exist_ok=True)
-    os.makedirs(output_folder, exist_ok=True)
+#     os.makedirs(folder_for_jobs, exist_ok=True)
+#     os.makedirs(work_dir, exist_ok=True)
+#     os.makedirs(logs_folder, exist_ok=True)
+#     os.makedirs(output_folder, exist_ok=True)
 
-    storm_data = download_storm_time_ephems()
-    storm_ephem_data = load_storm_sp3(storm_data)
+#     storm_data = download_storm_time_ephems()
+#     storm_ephem_data = load_storm_sp3(storm_data)
 
-    for satellite, periods in storm_ephem_data.items():
-        for period_index, df_list in enumerate(periods):
-            if df_list:
-                script_filename = f"{folder_for_jobs}/{satellite}_period{period_index}.sh"
-                script_content = f"""#!/bin/bash -l
-#$ -l h_rt=4:0:0
-#$ -l mem=8G
-#$ -l tmpfs=15G
-#$ -N {satellite}_period{period_index}
-#$ -wd {work_dir}
-#$ -o {logs_folder}/out_{satellite}_period{period_index}.txt
-#$ -e {logs_folder}/err_{satellite}_period{period_index}.txt
+#     for satellite, periods in storm_ephem_data.items():
+#         for period_index, df_list in enumerate(periods):
+#             if df_list:
+#                 script_filename = f"{folder_for_jobs}/{satellite}_period{period_index}.sh"
+#                 script_content = f"""#!/bin/bash -l
+# #$ -l h_rt=4:0:0
+# #$ -l mem=8G
+# #$ -l tmpfs=15G
+# #$ -N {satellite}_period{period_index}
+# #$ -wd {work_dir}
+# #$ -o {logs_folder}/out_{satellite}_period{period_index}.txt
+# #$ -e {logs_folder}/err_{satellite}_period{period_index}.txt
 
-module load python/miniconda3/latest
-source $CONDA_PREFIX/etc/profile.d/conda.sh
+# module load python/miniconda3/latest
+# source $CONDA_PREFIX/etc/profile.d/conda.sh
 
-conda activate myenv
-python {user_home_dir}/path/to/main_script.py {satellite} {period_index} '{json.dumps(df_list)}' {output_folder}
-"""
-                with open(script_filename, 'w') as file:
-                    file.write(script_content)
+# conda activate myenv
+# python {user_home_dir}/path/to/main_script.py {satellite} {period_index} '{json.dumps(df_list)}' {output_folder}
+# """
+#                 with open(script_filename, 'w') as file:
+#                     file.write(script_content)
 
-                os.system(f"qsub {script_filename}")
+#                 os.system(f"qsub {script_filename}")
 
-def main_script(satellite, period_index, df_json, output_folder):
-    import pandas as pd
-    from datetime import datetime
-    from ..DensityInversion.KinematicDensity import ephemeris_to_density
+# def main_script(satellite, period_index, df_json, output_folder):
+#     import pandas as pd
+#     from datetime import datetime
+#     from ..DensityInversion.KinematicDensity import ephemeris_to_density
 
-    df_list = json.loads(df_json)
-    force_model_config = {
-        '120x120gravity': True, '3BP': True, 'solid_tides': True,
-        'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True
-    }
+#     df_list = json.loads(df_json)
+#     force_model_config = {
+#         '120x120gravity': True, '3BP': True, 'solid_tides': True,
+#         'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True
+#     }
 
-    for df in df_list:
-        if not df.empty:
-            density_inversion_df = ephemeris_to_density(satellite, df, force_model_config)
-            datenow = datetime.now().strftime("%Y%m%d%H%M%S")
-            output_path = f"{output_folder}/{satellite}_storm_density_{period_index}_{datenow}.csv"
-            density_inversion_df.to_csv(output_path)
+#     for df in df_list:
+#         if not df.empty:
+#             density_inversion_df = ephemeris_to_density(satellite, df, force_model_config)
+#             datenow = datetime.now().strftime("%Y%m%d%H%M%S")
+#             output_path = f"{output_folder}/{satellite}_storm_density_{period_index}_{datenow}.csv"
+#             density_inversion_df.to_csv(output_path)
 
-if __name__ == "__main__":
-    create_and_submit_density_jobs()
+# if __name__ == "__main__":
+#     create_and_submit_density_jobs()
