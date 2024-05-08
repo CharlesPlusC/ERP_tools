@@ -195,30 +195,27 @@ def avg_win_length_rms(merged_df):
         plt.close()
 
 if __name__ == '__main__':
-    from scipy.signal import savgol_filter
     acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
     quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
 
     inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
     inertial_gfo_data['utc_time'] = pd.to_datetime(inertial_gfo_data['utc_time'])
     intertial_t0 = inertial_gfo_data['utc_time'].iloc[0]
-    inertial_gfo_data = inertial_gfo_data[(inertial_gfo_data['utc_time'] >= intertial_t0) & (inertial_gfo_data['utc_time'] <= intertial_t0 + pd.Timedelta(hours=2))]
+    inertial_gfo_data = inertial_gfo_data[(inertial_gfo_data['utc_time'] >= intertial_t0) & (inertial_gfo_data['utc_time'] <= intertial_t0 + pd.Timedelta(minutes=180))]
 
     ephemeris_df = sp3_ephem_to_df(satellite="GRACE-FO-A", date="2023-05-05")
     print(f"start date: {ephemeris_df['UTC'].iloc[0]}, end date: {ephemeris_df['UTC'].iloc[-1]}")
     
     ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= intertial_t0) & (ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(minutes=90))]
+    ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= intertial_t0) & (ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(minutes=25))]
     print(f"new start date: {ephemeris_df['UTC'].iloc[0]}, new end date: {ephemeris_df['UTC'].iloc[-1]}")
     
     velocity_based_accelerations = ephemeris_to_density(sat_name="GRACE-FO-A", ephemeris_df = ephemeris_df, 
                                                         force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True},
-                                                        savgol_poly=7, savgol_window=21)
+                                                        savgol_poly=10, savgol_window=35)
     
-    #now apply savgol filter to the velocity based accelerations
-    for component in ['x', 'y', 'z']:
-        velocity_based_accelerations[f'savgol_acc{component}'] = savgol_filter(velocity_based_accelerations[f'acc{component}'], window_length=21, polyorder=7)
-
+    print(f"columns in velocity_based_accelerations: {velocity_based_accelerations.columns}")
+    
     velocity_based_accelerations['utc_time'] = pd.to_datetime(velocity_based_accelerations['UTC'])
 
     inertial_gfo_data['utc_time'] = pd.to_datetime(inertial_gfo_data['utc_time'])
@@ -228,9 +225,6 @@ if __name__ == '__main__':
     inverted_x_acc = merged_df['accx']
     inverted_y_acc = merged_df['accy']
     inverted_z_acc = merged_df['accz']
-    savgol_x_acc = merged_df['savgol_accx']
-    savgol_y_acc = merged_df['savgol_accy']
-    savgol_z_acc = merged_df['savgol_accz']
     inertial_x_acc = merged_df['inertial_x_acc']
     inertial_y_acc = merged_df['inertial_y_acc']
     inertial_z_acc = merged_df['inertial_z_acc']
@@ -241,39 +235,53 @@ if __name__ == '__main__':
     merged_df['inertial_h_acc'] = 0
     merged_df['inertial_c_acc'] = 0
     merged_df['inertial_l_acc'] = 0
-    merged_df['savgol_h_acc'] = 0
-    merged_df['savgol_c_acc'] = 0
-    merged_df['savgol_l_acc'] = 0
+    merged_df["ACT_rho"] = 0
     for i in range(1, len(merged_df)):
-        h_acc_inv, c_diff_inv, l_diff_inv = project_acc_into_HCL(inverted_x_acc[i], inverted_y_acc[i], inverted_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
-        h_acc_meas, c_diff_meas, l_diff_meas = project_acc_into_HCL(inertial_x_acc[i], inertial_y_acc[i], inertial_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
-        h_acc_savgol, c_diff_savgol, l_diff_savgol = project_acc_into_HCL(savgol_x_acc[i], savgol_y_acc[i], savgol_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
-        merged_df.at[i, 'inverted_h_acc'] = h_acc_inv
-        merged_df.at[i, 'inverted_c_acc'] = c_diff_inv
-        merged_df.at[i, 'inverted_l_acc'] = l_diff_inv
-        merged_df.at[i, 'inertial_h_acc'] = h_acc_meas
-        merged_df.at[i, 'inertial_c_acc'] = c_diff_meas
-        merged_df.at[i, 'inertial_l_acc'] = l_diff_meas
-        merged_df.at[i, 'savgol_h_acc'] = h_acc_savgol
-        merged_df.at[i, 'savgol_c_acc'] = c_diff_savgol
-        merged_df.at[i, 'savgol_l_acc'] = l_diff_savgol
+        h_acc_inv, c_acc_inv, l_acc_inv = project_acc_into_HCL(inverted_x_acc[i], inverted_y_acc[i], inverted_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
+        h_acc_meas, c_acc_meas, l_acc_meas = project_acc_into_HCL(inertial_x_acc[i], inertial_y_acc[i], inertial_z_acc[i], merged_df['x'][i], merged_df['y'][i], merged_df['z'][i], merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i])
+        merged_df.at[i, 'inverted_l_acc'] = l_acc_inv
+        merged_df.at[i, 'inertial_l_acc'] = l_acc_meas
+        atm_rot = np.array([0, 0, 72.9211e-6])
+        r = np.array([merged_df['x'][i], merged_df['y'][i], merged_df['z'][i]])
+        v = np.array([merged_df['xv'][i], merged_df['yv'][i], merged_df['zv'][i]])
+        v_rel = v - np.cross(atm_rot, r)        
+        merged_df.at[i, 'ACT_rho'] = -2 * (-l_acc_meas / (2.2 * 1.004)) * (600.2 / np.abs(np.linalg.norm(v_rel))**2)
 
-    #plot inverted and measured accelerations
-    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(15, 8), sharex=True)
-    for i, component in enumerate(['h', 'c', 'l']):
-        axes[i].plot(merged_df['utc_time'], merged_df[f'inverted_{component}_acc'], label=f'Inverted {component} Acceleration')
-        axes[i].plot(merged_df['utc_time'], merged_df[f'inertial_{component}_acc'], label=f'Measured {component} Acceleration')
-        axes[i].plot(merged_df['utc_time'], merged_df[f'savgol_{component}_acc'], label=f'Savgol {component} Acceleration')
-        axes[i].set_ylabel(f'{component} Acceleration (m/s^2)')
-        axes[i].legend()
-    axes[2].set_xlabel('Time')
+        
+    #calculte the 45-point rolling average of the inverted and measured accelerations and add them to a new column called 'rolling_inverted_acc' and 'rolling_savgol_acc'
+    merged_df[f'rolling_inverted_l_acc'] = merged_df[f'inverted_l_acc'].rolling(window=45, center=True).mean()
+
+    #drop the frist and last 90 points
+    # merged_df = merged_df[90:-90] 
+    plt.figure(figsize=(15, 6))
+    plt.plot(merged_df['utc_time'], merged_df['inverted_l_acc'], label='Inverted L Acceleration')
+    plt.plot(merged_df['utc_time'], merged_df['rolling_inverted_l_acc'], label='Rolling Inverted-for L Acceleration')
+    plt.plot(merged_df['utc_time'], merged_df['inertial_l_acc'], label='Measured L Acceleration')
+    plt.ylabel('along track Acceleration (m/s^2)')
+    plt.xlabel('Time')
+    plt.legend()
     plt.tight_layout()
-    plt.show()
     timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/compare_{timenow}.png")
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/compare_alongtrackacc{timenow}.png")
+    # plt.show()
     plt.close()
+    #calculate the rolling_Computed_Density
+    merged_df['rolling_Computed_Density'] = merged_df['Computed Density'].rolling(window=45, center=True).mean()
+    #now plot the ACT_rho and the Computed Density and rolling_Computed Density, and the JB08 Density
 
-    # avg_win_length_rms(merged_df)
+    plt.figure(figsize=(15, 6))
+    plt.plot(merged_df['utc_time'], merged_df['ACT_rho'], label='ACT_rho')
+    plt.plot(merged_df['utc_time'], merged_df['Computed Density'], label='Computed Density')
+    plt.plot(merged_df['utc_time'], merged_df['rolling_Computed_Density'], label='Rolling Computed Density')
+    plt.plot(merged_df['utc_time'], merged_df['JB08 Density'], label='JB08 Density')
+    plt.ylabel('Density (kg/m^3)')
+    plt.xlabel('Time')
+    plt.legend()
+    plt.tight_layout()
+    timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/compare_density{timenow}.png")
+    # plt.show()
+    plt.close()
 
     # components = ['h', 'c', 'l']
     # window_lengths = range(5, 256, 5)
