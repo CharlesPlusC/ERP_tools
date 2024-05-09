@@ -121,57 +121,57 @@ def avg_win_length_rms(merged_df):
         plt.close()
 
 if __name__ == '__main__':
-    sat_name = "GRACE-FO-A"
-    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    max_time = 12
-    acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
-    quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
-    inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
-    inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['utc_time'])
-    inertial_gfo_data.drop(columns=['utc_time'], inplace=True)
+    # sat_name = "GRACE-FO-A"
+    # force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    # max_time = 12
+    # acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-05_C_04.txt"
+    # quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-05_C_04.txt"
+    # inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
+    # inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['utc_time'])
+    # inertial_gfo_data.drop(columns=['utc_time'], inplace=True)
 
-    intertial_t0 = inertial_gfo_data['UTC'].iloc[0]
-    inertial_act_gfo_data = inertial_gfo_data[(inertial_gfo_data['UTC'] >= intertial_t0) & (inertial_gfo_data['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
-    sp3_ephemeris_df = sp3_ephem_to_df(satellite="GRACE-FO-A", date="2023-05-05")
-    sp3_ephemeris_df['UTC'] = pd.to_datetime(sp3_ephemeris_df['UTC'])
-    sp3_ephemeris_df = sp3_ephemeris_df[(sp3_ephemeris_df['UTC'] >= intertial_t0) & (sp3_ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
+    # intertial_t0 = inertial_gfo_data['UTC'].iloc[0]
+    # inertial_act_gfo_data = inertial_gfo_data[(inertial_gfo_data['UTC'] >= intertial_t0) & (inertial_gfo_data['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
+    # sp3_ephemeris_df = sp3_ephem_to_df(satellite="GRACE-FO-A", date="2023-05-05")
+    # sp3_ephemeris_df['UTC'] = pd.to_datetime(sp3_ephemeris_df['UTC'])
+    # sp3_ephemeris_df = sp3_ephemeris_df[(sp3_ephemeris_df['UTC'] >= intertial_t0) & (sp3_ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
 
-    inertial_act_gfo_ephem = pd.merge(inertial_act_gfo_data, sp3_ephemeris_df, on='UTC', how='inner')
-    print(f"head of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.head()}")
-    print(f"columns of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.columns}")
+    # inertial_act_gfo_ephem = pd.merge(inertial_act_gfo_data, sp3_ephemeris_df, on='UTC', how='inner')
+    # print(f"head of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.head()}")
+    # print(f"columns of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.columns}")
 
-    act_x_acc_col, act_y_acc_col, act_z_acc_col = 'inertial_x_acc', 'inertial_y_acc', 'inertial_z_acc'
-    rho_from_ACT = density_inversion(sat_name, inertial_act_gfo_ephem, 
-                                     act_x_acc_col, act_y_acc_col, act_z_acc_col, 
-                                     force_model_config, nc_accs=True, 
-                                     models_to_query=['JB08'], density_freq='15S')
-    rho_from_ACT.rename(columns={'Computed Density': 'ACT_Computed Density'}, inplace=True)
+    # act_x_acc_col, act_y_acc_col, act_z_acc_col = 'inertial_x_acc', 'inertial_y_acc', 'inertial_z_acc'
+    # rho_from_ACT = density_inversion(sat_name, inertial_act_gfo_ephem, 
+    #                                  act_x_acc_col, act_y_acc_col, act_z_acc_col, 
+    #                                  force_model_config, nc_accs=True, 
+    #                                  models_to_query=['JB08'], density_freq='15S')
+    # rho_from_ACT.rename(columns={'Computed Density': 'ACT_Computed Density'}, inplace=True)
 
-    print(f"head of rho_from_ACT: {rho_from_ACT.head()}")
+    # print(f"head of rho_from_ACT: {rho_from_ACT.head()}")
 
-    interp_ephemeris_df = interpolate_positions(sp3_ephemeris_df, '0.01S')
-    sp3_velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
-    sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
-    rho_from_vel = density_inversion(sat_name, sp3_velacc_ephem, 
-                                    sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z, 
-                                    force_model_config=force_model_config, nc_accs=False, 
-                                    models_to_query=[None], density_freq='15S')
-    rho_from_vel.rename(columns={'Computed Density': 'Velocity_Computed Density'}, inplace=True)
+    # interp_ephemeris_df = interpolate_positions(sp3_ephemeris_df, '0.01S')
+    # sp3_velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+    # sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
+    # rho_from_vel = density_inversion(sat_name, sp3_velacc_ephem, 
+    #                                 sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z, 
+    #                                 force_model_config=force_model_config, nc_accs=False, 
+    #                                 models_to_query=[None], density_freq='15S')
+    # rho_from_vel.rename(columns={'Computed Density': 'Velocity_Computed Density'}, inplace=True)
 
-    print(f"head of rho_from_vel: {rho_from_vel.head()}")
+    # print(f"head of rho_from_vel: {rho_from_vel.head()}")
 
-    merged_df = pd.merge(rho_from_ACT[['UTC', 'ACT_Computed Density', 'JB08']], rho_from_vel[['UTC', 'Velocity_Computed Density']], on='UTC', how='inner')
+    # merged_df = pd.merge(rho_from_ACT[['UTC', 'ACT_Computed Density', 'JB08']], rho_from_vel[['UTC', 'Velocity_Computed Density']], on='UTC', how='inner')
 
     timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    merged_df.dropna(inplace=True)
+    # merged_df.dropna(inplace=True)
 
-    print(f"head of merged_df: {merged_df.head()}")
-    print(f"columns of merged_df: {merged_df.columns}")
-    merged_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_bench.csv", index=False)
+    # print(f"head of merged_df: {merged_df.head()}")
+    # print(f"columns of merged_df: {merged_df.columns}")
+    # merged_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_bench.csv", index=False)
 
     #load the data from path 
-    # path = "output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/2024-05-09_10-06-48_bench.csv"
-    # merged_df = pd.read_csv(path)
+    path = "output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/2024-05-09_10-47-36_bench.csv"
+    merged_df = pd.read_csv(path)
     merged_df = merged_df.iloc[10:-10]
     median_ACT = merged_df['ACT_Computed Density'].median()
     flipped_ACT = 2 * median_ACT - merged_df['ACT_Computed Density'] #TODO: figure out why the accelerometer density is inverted? Is the X/along track sign different in the ACT file?
@@ -188,17 +188,110 @@ if __name__ == '__main__':
     plt.yscale('log')
     plt.legend()
     plt.tight_layout()
+    plt.grid(which='both', linestyle='--')
     plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_bench.png")
-    plt.show()
+    # plt.show()
     plt.close()
 
-    # components = ['h', 'c', 'l']
-    # window_lengths = range(5, 256, 5)
-    # psd_data = compute_and_plot_psd_coherence(merged_df, components, window_lengths)
+    valid_start = 45  # half the window size - 1
+    valid_end = -45   # negative to drop the tail end
 
+    # Compute rolling average again to ensure consistency
+    rolling_av45 = merged_df['Velocity_Computed Density'].rolling(window=90, center=True).mean()
 
-    #TODO: # Most useful plot to get here is going to tell us how much of the singal we recover. 
-            # What kind of bias and what we lose from the detail in the along track.
-                # first we plot just the two along track accelerations -> use RMS as a metric for average length?
-                # second we plot the PSD of the two along track accelerations
-           # Make it so that we can come back with other accelerations and compare those as well.
+    # Use valid data avoiding NaNs from rolling mean
+    valid_data = merged_df.iloc[valid_start:valid_end]
+    valid_rolling_av45 = rolling_av45.iloc[valid_start:valid_end]
+
+    # Baselines based on the first valid value after removing NaNs from rolling average
+    baseline_ACT = valid_data['ACT_Computed Density'].iloc[0]
+    print(f"baseline ACT: {baseline_ACT}")
+    baseline_Velocity = valid_rolling_av45.iloc[0]
+    print(f"baseline Velocity: {baseline_Velocity}")
+    baseline_JB08 = valid_data['JB08'].iloc[0]
+    print(f"baseline JB08: {baseline_JB08}")
+
+    # Compute relative values against their respective baselines
+    relative_flipped_ACT = 2 * baseline_ACT - valid_data['ACT_Computed Density'] - baseline_ACT
+    relative_rolling_av45 = valid_rolling_av45 - baseline_Velocity
+    relative_JB08 = valid_data['JB08'] - baseline_JB08
+
+    # Display the first few values to verify
+    print(f"first five relative flipped ACT: {relative_flipped_ACT.head()}")
+    print(f"first five relative rolling av45: {relative_rolling_av45.head()}")
+    print(f"first five relative JB08: {relative_JB08.head()}")
+
+    # Plotting
+    plt.plot(valid_data['UTC'], relative_flipped_ACT, label='Relative ACT Computed Density')
+    plt.plot(valid_data['UTC'], relative_rolling_av45, label='Relative Velocity Computed (MA)', linewidth=2)
+    plt.plot(valid_data['UTC'], relative_JB08, label='Relative JB08 Density', linestyle='--')
+
+    plt.xlabel('Time')
+    plt.ylabel('Relative Density Change (kg/m^3)')
+    plt.xticks(valid_data['UTC'][::120], rotation=45)
+    plt.yscale('linear')
+    plt.legend()
+    plt.tight_layout()
+    plt.grid(which='both', linestyle='--')
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_rel_self_bench.png")
+    # plt.show()
+    plt.close()
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.signal import welch
+
+    # Given sampling rate from your setup
+    sampling_rate = 1 / 30  # seconds^-1
+
+    # Compute the power spectral densities for each signal
+    # Frequency and power spectral density for flipped ACT
+    f_ACT, Pxx_ACT = welch(flipped_ACT, fs=sampling_rate, nperseg=1024)
+
+    # Frequency and power spectral density for velocity computed (rolling average)
+    rolling_av45 = rolling_av45[~np.isnan(rolling_av45)]  # Removing NaN values from rolling_av45
+    f_Velocity, Pxx_Velocity = welch(rolling_av45, fs=sampling_rate, nperseg=1024)
+
+    # Frequency and power spectral density for JB08
+    f_JB08, Pxx_JB08 = welch(merged_df['JB08'], fs=sampling_rate, nperseg=1024)
+
+    # Convert frequency from Hz to cycles per minute (cpm)
+    f_ACT_minutes = f_ACT * 60
+    f_Velocity_minutes = f_Velocity * 60
+    f_JB08_minutes = f_JB08 * 60
+
+    # 90 minutes mark in cycles per minute
+    one_orbit = 1 / 97
+    one_half_orbit = 1 / 48.5
+    one_third_orbit = 1/32.33
+
+    # Plotting the PSDs on a log-log scale
+    plt.figure(figsize=(8, 4))
+
+    # ACT Computed Density
+    plt.loglog(f_ACT_minutes, Pxx_ACT, label='ACT Computed Density', linewidth=1, color='xkcd:jade')
+
+    # Velocity Computed Density
+    plt.loglog(f_Velocity_minutes, Pxx_Velocity, label='Velocity Computed Density', linewidth=1, color='xkcd:azure')
+
+    # JB08 Density
+    plt.loglog(f_JB08_minutes, Pxx_JB08, label='JB08 Density', linestyle='--', linewidth=1, color='xkcd:coral')
+
+    # Convert x-axis label to cycles per minute
+    plt.xlabel('Frequency')
+    plt.ylabel('PSD (kg^2/m^6 Hz)')
+
+    # Add a vertical line at the 90-minute mark
+    plt.axvline(x=one_orbit, color='xkcd:mustard', linewidth=4, label='~1 orbit', alpha=0.5)
+    plt.axvline(x=one_half_orbit, color='xkcd:purple', linewidth=4, label='~1/2 orbit', alpha=0.5)
+    plt.axvline(x=one_third_orbit, color='xkcd:cyan', linewidth=4, label='~1/3 orbit', alpha=0.5)
+
+    plt.title('Power Spectral Density of the Density Signals')
+    plt.legend()
+    plt.grid(True, which='both', ls='-', linewidth=0.5)
+    plt.tight_layout()
+
+    # Save the figure
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_PSD_minutes.png")
+    plt.show()
+    plt.close()
