@@ -91,7 +91,6 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
 
     return density_inversion_df
 
-
 if __name__ == "__main__":
     # main()
     # daily_indices, kp3hrly, dst_hrly = get_sw_indices()

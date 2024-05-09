@@ -62,23 +62,62 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
 
     return -V_dev
 
-def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
+# def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
+#     time_diffs = np.diff(MJDs) * 86400
+#     rho_eff = np.zeros(len(velocity))
+#     for i in range(1, len(time_diffs) + 1):
+#         if i < len(velocity):
+#             function_value = CD * A_ref * mass * np.power(velocity[i-1:i+1], 3)
+#             integral_value = trapz(function_value, dx=time_diffs[i-1])
+#             rho_eff[i] = EDR.iloc[i] / integral_value
+#             print(f"rho_eff: {rho_eff[i]}")
+#     return rho_eff
+
+def compute_rho_eff(EDR, velocity, position, CD, A_ref, mass, MJDs):
+    # Calculate time differences in seconds
     time_diffs = np.diff(MJDs) * 86400
-    rho_eff = np.zeros(len(velocity))
-    for i in range(1, len(time_diffs) + 1):
-        if i < len(velocity):
-            function_value = CD * A_ref * np.power(velocity[i-1:i+1], 3)
-            integral_value = trapz(function_value, dx=time_diffs[i-1])
-            rho_eff[i] = - EDR.iloc[i] / integral_value
+    
+    # Initialize rho_eff with zeros
+    rho_eff = np.zeros(len(velocity) - 1)
+    
+    # Earth's rotational rate vector (rad/s)
+    atm_rot = np.array([0, 0, 72.9211e-6])
+    
+    for i in range(len(time_diffs)):
+        # Calculate the relative velocity: v_rel = velocity[i] - cross(atm_rot, position[i])
+        if i < len(velocity) - 1:
+            v_rel_start = velocity[i] - np.cross(atm_rot, position[i])
+            v_rel_end = velocity[i + 1] - np.cross(atm_rot, position[i + 1])
+            
+            # Use the average velocity for the relative velocity magnitude
+            v_rel_mag_start = np.linalg.norm(v_rel_start)
+            v_rel_mag_end = np.linalg.norm(v_rel_end)
+            
+            # Calculate the trapezoidal integral component for this interval
+            integral_component_start = CD * A_ref * v_rel_mag_start**3
+            integral_component_end = CD * A_ref * v_rel_mag_end**3
+            
+            # Compute the integral using the trapezoidal rule
+            integral_value = 0.5 * (integral_component_start + integral_component_end) * time_diffs[i]
+            
+            # Compute rho_eff using the integrated value
+            if integral_value != 0:
+                rho_eff[i] = -2 * mass * EDR[i] / integral_value
+        
+        print(f"rho_eff[{i}]: {rho_eff[i]}")
+    
     return rho_eff
     
-def calculate_orbital_energy(sat_name, force_model_config, gravity_degree=90, gravity_order=90, other_accs=False):
+def calculate_orbital_energy(sat_name, force_model_config,date=None, gravity_degree=90, gravity_order=90, other_accs=False):
     folder_save = "output/DensityInversion/EDR/Data"
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
 
     sat_info = get_satellite_info(sat_name)
     settings = {'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass']}   
-    ephemeris_df = sp3_ephem_to_df(sat_name)
+    if date is None:
+        ephemeris_df = sp3_ephem_to_df(sat_name)
+    else:
+        ephemeris_df = sp3_ephem_to_df(sat_name, date=date)
     first_day = ephemeris_df['UTC'].iloc[0]
     three_days_later = first_day + datetime.timedelta(days=3)
     ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= first_day) & (ephemeris_df['UTC'] <= three_days_later)]
@@ -179,6 +218,10 @@ def calculate_orbital_energy(sat_name, force_model_config, gravity_degree=90, gr
     return energy_df
 
 def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
+    sat_info = get_satellite_info(sat_name)
+    cd=sat_info['cd']
+    cross_section=sat_info['cross_section']
+    mass=sat_info['mass']
 
     MJD_EPOCH = datetime.datetime(1858, 11, 17)
     EDR_df = pd.DataFrame(columns=['MJD', 'EDR', 'EDR60', 'EDR180', 'rho_eff', 'rho_eff_60', 'rho_eff_180'])
@@ -204,15 +247,13 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     EDR60 = EDR.rolling(window=60, min_periods=1).mean()
     EDR_180 = EDR.rolling(window=180, min_periods=1).mean()
     EDR_360 = EDR.rolling(window=360, min_periods=1).mean()
-    velocity = np.linalg.norm([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']], axis=0)
-    time_steps = energy_ephemeris_df['MJD']
-    CD = 2.2
-    A_ref = 1.004
-    mass = 600.0
-    rho_eff = compute_rho_eff(EDR, velocity, CD, A_ref, mass, time_steps)
-    rho_eff_60 = compute_rho_eff(EDR60, velocity, CD, A_ref, mass, time_steps)
-    rho_eff_180 = compute_rho_eff(EDR_180, velocity, CD, A_ref, mass, time_steps)
-    rho_eff_360 = compute_rho_eff(EDR_360, velocity, CD, A_ref, mass, time_steps)
+    velocity = np.array([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']]).T
+    position = np.array([energy_ephemeris_df['x'], energy_ephemeris_df['y'], energy_ephemeris_df['z']]).T
+
+    rho_eff = compute_rho_eff(EDR, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
+    rho_eff_60 = compute_rho_eff(EDR60, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
+    rho_eff_180 = compute_rho_eff(EDR_180, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
+    rho_eff_360 = compute_rho_eff(EDR_360, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
 
     if query_models:
         jb08_rhos = []
@@ -234,14 +275,14 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
         pos = np.array([x.iloc[i], y.iloc[i], z.iloc[i]])
         jb08_rho = query_jb08(pos, t.iloc[i])
         # dtm2000_rho = query_dtm2000(pos, t[i])
-        nrlmsise00_rho = query_nrlmsise00(pos, t[i])
+        # nrlmsise00_rho = query_nrlmsise00(pos, t[i])
         energy_ephemeris_df.at[i, 'jb08_rho'] = jb08_rho
         # energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
-        energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
+        # energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
         jb08_rhos.append(jb08_rho)
         # dtm2000_rhos.append(dtm2000_rho)
-        nrlmsise00_rhos.append(nrlmsise00_rho)
-    EDR_df['MJD'] = time_steps
+        # nrlmsise00_rhos.append(nrlmsise00_rho)
+    EDR_df['MJD'] = energy_ephemeris_df['MJD']
     EDR_df['EDR'] = EDR
     EDR_df['EDR60'] = EDR60
     EDR_df['EDR180'] = EDR_180
@@ -259,20 +300,27 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
 
 def main():
     force_model_config = {'3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    sat_names_to_test = ["GRACE-FO-A", "CHAMP", "TanDEM-X"]
+    # sat_names_to_test = ["GRACE-FO-A", "CHAMP", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-A"]
+    date = datetime.datetime(2023, 5, 5)
+
     for sat_name in sat_names_to_test:
-        orbital_energy_df_degord20 = calculate_orbital_energy(sat_name, force_model_config=force_model_config, gravity_degree=80, gravity_order=80, other_accs=False)
-        plt.figure(figsize=(10, 5))
-        plt.plot(orbital_energy_df_degord20['MJD'], orbital_energy_df_degord20['HOT_total_diff'], label='HOT_total_diff_degree_30')
-        plt.xlabel('Modified Julian Date')
-        plt.ylabel('Δ Specific Energy (J/kg)')
-        plt.title(f"{sat_name}: HOT_total_diff")
-        plt.legend()
-        plt.grid(True)
+        # orbital_energy_df_degord20 = calculate_orbital_energy(sat_name, force_model_config=force_model_config,
+        #                                                       date=date, gravity_degree=80, gravity_order=80, 
+        #                                                       other_accs=False)
+        #load from csv
+        orbital_energy_df_degord20 = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-03.csv")
+        # plt.figure(figsize=(10, 5))
+        # plt.plot(orbital_energy_df_degord20['MJD'], orbital_energy_df_degord20['HOT_total_diff'], label='HOT_total_diff_degree_30')
+        # plt.xlabel('Modified Julian Date')
+        # plt.ylabel('Δ Specific Energy (J/kg)')
+        # plt.title(f"{sat_name}: HOT_total_diff")
+        # plt.legend()
+        # plt.grid(True)
         #log the y-axis
-        plt.savefig(f"output/DensityInversion/EDR/Plots/EDR_tseries/{sat_name}_OrbitalEnergy_{orbital_energy_df_degord20['MJD'].iloc[0]}_{orbital_energy_df_degord20['MJD'].iloc[-1]}.png")
+        # plt.savefig(f"output/DensityInversion/EDR/Plots/EDR_tseries/{sat_name}_OrbitalEnergy_{orbital_energy_df_degord20['MJD'].iloc[0]}_{orbital_energy_df_degord20['MJD'].iloc[-1]}.png")
         # plt.show()
-        plt.close()
+        # plt.close()
 
         # tdx_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/TanDEM-X_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-03.csv")
         # orbital_energy_df_degord20 = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-02.csv")
