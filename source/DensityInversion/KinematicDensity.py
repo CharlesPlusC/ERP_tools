@@ -18,107 +18,78 @@ from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 from ..tools.SWIndices import get_sw_indices
 from .Plotting.PODDerivedDensityPlotting import plot_density_arglat_diff, plot_density_data, plot_relative_density_change
 
-def density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None):
+def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, force_model_config, nc_accs=False, models_to_query=['JB08'], density_freq='15S'):
     sat_info = get_satellite_info(sat_name)
     settings = {
         'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass'],
-        'density_freq': '15S'
+        'density_freq': density_freq
     }
 
-    # Convert UTC column to datetime and set it as index
-    interp_ephemeris_df['UTC'] = pd.to_datetime(interp_ephemeris_df['UTC'])
-    interp_ephemeris_df.set_index('UTC', inplace=True)
-    interp_ephemeris_df = interp_ephemeris_df.asfreq(settings['density_freq'])
+    available_models = ['JB08', 'DTM2000', 'NRLMSISE00', None]
+    for model in models_to_query:
+        assert model in available_models
 
-    # Handle accelerometer data
-    if accelerometer_data is not None:
-        accelerometer_data['UTC'] = pd.to_datetime(accelerometer_data['UTC'])
-        accelerometer_data.set_index('UTC', inplace=True)
-        accelerometer_data = accelerometer_data.asfreq(settings['density_freq'])
-        interp_ephemeris_df = pd.merge(interp_ephemeris_df, accelerometer_data, how='left', left_index=True, right_index=True, suffixes=('', '_drop'))
+    assert 'UTC' in ephemeris_df.columns
 
-        # Drop the duplicate columns from the accelerometer data
-        columns_to_drop = [col for col in interp_ephemeris_df.columns if '_drop' in col]
-        interp_ephemeris_df.drop(columns=columns_to_drop, inplace=True)
+    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+    ephemeris_df.set_index('UTC', inplace=True)
+    ephemeris_df = ephemeris_df.asfreq(settings['density_freq'])
 
     columns = [
         'UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz',
-        *(['JB08 Density'])
-        # *(['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density'])
+        'nc_accx', 'nc_accy', 'nc_accz', 'Computed Density', *(models_to_query)
     ]
-    if accelerometer_data is not None:
-        columns.append('Accelerometer Density')
 
+    # Initialize the DataFrame with the specified columns and correct dtypes
     density_inversion_df = pd.DataFrame(columns=columns)
+    rows_list = []
 
-    for i in tqdm(range(1, len(interp_ephemeris_df)), desc='Processing Density Inversion'):
-        epoch = interp_ephemeris_df.index[i]
-        vel = np.array([interp_ephemeris_df['xv'].iloc[i], interp_ephemeris_df['yv'].iloc[i], interp_ephemeris_df['zv'].iloc[i]])
-        state_vector = np.array([interp_ephemeris_df['x'].iloc[i], interp_ephemeris_df['y'].iloc[i], interp_ephemeris_df['z'].iloc[i], vel[0], vel[1], vel[2]])
-        if accelerometer_data is not None:
-            force_model_config = {'3BP': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}, #TODO: check what the right force model config is here
-        conservative_accelerations = state2acceleration(state_vector, epoch, settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], **force_model_config)
+    for i in tqdm(range(1, len(ephemeris_df)), desc='Processing Density Inversion'):
+        time = ephemeris_df.index[i]
+        vel = np.array([ephemeris_df['xv'].iloc[i], ephemeris_df['yv'].iloc[i], ephemeris_df['zv'].iloc[i]])
+        state_vector = np.array([ephemeris_df['x'].iloc[i], ephemeris_df['y'].iloc[i], ephemeris_df['z'].iloc[i], vel[0], vel[1], vel[2]])
 
-        computed_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
-        if accelerometer_data is not None:
-            observed_acc = np.array([interp_ephemeris_df['inertial_x_acc'].iloc[i], interp_ephemeris_df['inertial_y_acc'].iloc[i], interp_ephemeris_df['inertial_z_acc'].iloc[i]])
+        if not nc_accs:
+            conservative_accelerations = state2acceleration(state_vector, time, 
+                                                            settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], 
+                                                            **force_model_config)
+            conservative_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
+            observed_acc = np.array([ephemeris_df['accx'].iloc[i], ephemeris_df['accy'].iloc[i], ephemeris_df['accz'].iloc[i]])
+
+            nc_accelerations = conservative_accelerations_sum - observed_acc
+
+            nc_accx, nc_accy, nc_accz = nc_accelerations[0], nc_accelerations[1], nc_accelerations[2]
         else:
-            observed_acc = np.array([interp_ephemeris_df['accx'].iloc[i], interp_ephemeris_df['accy'].iloc[i], interp_ephemeris_df['accz'].iloc[i]])
+            nc_accx, nc_accy, nc_accz = ephemeris_df[x_acc_col].iloc[i], ephemeris_df[y_acc_col].iloc[i], ephemeris_df[z_acc_col].iloc[i]
 
-        diff = computed_accelerations_sum - observed_acc
-        diff_x, diff_y, diff_z = diff[0], diff[1], diff[2]
-        _, _, diff_l = project_acc_into_HCL(diff_x, diff_y, diff_z, interp_ephemeris_df['x'].iloc[i], interp_ephemeris_df['y'].iloc[i], interp_ephemeris_df['z'].iloc[i], interp_ephemeris_df['xv'].iloc[i], interp_ephemeris_df['yv'].iloc[i], interp_ephemeris_df['zv'].iloc[i])
+        nc_acc_h, nc_acc_c, nc_acc_l = project_acc_into_HCL(nc_accx, nc_accy, nc_accz, 
+                                            ephemeris_df['x'].iloc[i], ephemeris_df['y'].iloc[i], ephemeris_df['z'].iloc[i],
+                                             ephemeris_df['xv'].iloc[i], ephemeris_df['yv'].iloc[i], ephemeris_df['zv'].iloc[i])
 
-        r = np.array([interp_ephemeris_df['x'].iloc[i], interp_ephemeris_df['y'].iloc[i], interp_ephemeris_df['z'].iloc[i]])
-        v = np.array([interp_ephemeris_df['xv'].iloc[i], interp_ephemeris_df['yv'].iloc[i], interp_ephemeris_df['zv'].iloc[i]])
+        r = np.array([ephemeris_df['x'].iloc[i], ephemeris_df['y'].iloc[i], ephemeris_df['z'].iloc[i]])
+        v = np.array([ephemeris_df['xv'].iloc[i], ephemeris_df['yv'].iloc[i], ephemeris_df['zv'].iloc[i]])
         atm_rot = np.array([0, 0, 72.9211e-6])
         v_rel = v - np.cross(atm_rot, r)
-        rho = -2 * (diff_l / (settings['cd'] * settings['cross_section'])) * (settings['mass'] / np.abs(np.linalg.norm(v_rel))**2)
-        time = epoch
 
-        if accelerometer_data is None:
-            row_data = {
-                'UTC': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
-                'accx': diff_x, 'accy': diff_y, 'accz': diff_z, 'Computed Density': rho,
-                **({key: value for key, value in zip(['JB08 Density'], 
-                                                     [query_jb08(r, time)])})
-                # **({key: value for key, value in zip(['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density'], 
-                                                        # [query_jb08(r, time), query_dtm2000(r, time), query_nrlmsise00(r, time)])})
+        rho = -2 * (nc_acc_l / (settings['cd'] * settings['cross_section'])) * (settings['mass'] /  np.abs(np.linalg.norm(v_rel))**2)
 
-                        }
-            
-        if accelerometer_data is not None:
-            row_data = {
-                'UTC': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
-                'accx': diff_x, 'accy': diff_y, 'accz': diff_z, 'Accelerometer Density': rho, 'Computed Density': interp_ephemeris_df['Computed Density'][i],
-                #TODO: somehow the accelerometer density is inverted... 
-                #take the exisitng jb08, dtm2000, and nrlmsise00 densities from the interp_ephemeris_df 
-                **({key: interp_ephemeris_df[key][i] for key in ['JB08 Density']})
-                # **({key: interp_ephemeris_df[key][i] for key in ['JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']})
-            }
+        row_data = {
+            'UTC': time, 'x': r[0], 'y': r[1], 'z': r[2], 'xv': v[0], 'yv': v[1], 'zv': v[2],
+            'nc_accx': nc_accx, 'nc_accy': nc_accy, 'nc_accz': nc_accz, 'Computed Density': rho
+        }
 
-        new_row = pd.DataFrame(row_data, index=[0])
-        density_inversion_df = pd.concat([density_inversion_df, new_row], ignore_index=True)
+        for model in models_to_query:
+            if model is not None and globals().get(f"query_{model.lower()}"):
+                model_func = globals()[f"query_{model.lower()}"]
+                row_data[model] = model_func(position=r, datetime=time)
+
+        rows_list.append(row_data)
+
+    if rows_list:
+        new_rows_df = pd.DataFrame(rows_list)
+        density_inversion_df = pd.concat([density_inversion_df, new_rows_df], ignore_index=True)
 
     return density_inversion_df
-
-def main():
-    sat_names_to_test = ["GRACE-FO-A"]
-    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    for sat_name in sat_names_to_test:
-        ephemeris_df = sp3_ephem_to_df(sat_name)
-        ephemeris_df = ephemeris_df.head(180*35)
-        ephemeris_to_density(sat_name, ephemeris_df, force_model_config)
-
-def ephemeris_to_density(sat_name, ephemeris_df, force_model_config,savgol_window=21, savgol_poly=7, path_output_folder="output/DensityInversion/PODBasedAccelerometry/Data/"):
-    interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-    interp_ephemeris_df = calculate_acceleration(interp_ephemeris_df, '0.01S', savgol_window, savgol_poly)
-    density_inversion_dfs = density_inversion(sat_name, interp_ephemeris_df, force_model_config, accelerometer_data=None)
-
-    if path_output_folder is None:
-        file_out = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{sat_name}_density_inversion.csv"
-        pd.DataFrame(density_inversion_dfs).to_csv(f"{path_output_folder}/{sat_name}/{file_out}")
-    return pd.DataFrame(density_inversion_dfs)
 
 
 if __name__ == "__main__":
@@ -138,4 +109,4 @@ if __name__ == "__main__":
         print(f"sat_name: {sat_name}")
         # plot_density_arglat_diff(density_dfs, 45, sat_name)
         # plot_density_data(density_dfs, 45, sat_name)
-        plot_relative_density_change(density_dfs, 45, sat_name)
+        # plot_relative_density_change(density_dfs, 45, sat_name)
