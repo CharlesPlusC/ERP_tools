@@ -10,7 +10,7 @@ from org.orekit.forces.gravity.potential import GravityFieldFactory
 from org.orekit.utils import Constants
 
 import os
-from ..tools.utilities import utc_to_mjd, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
+from ..tools.utilities import utc_to_mjd, get_satellite_info, get_satellite_info, pos_vel_from_orekit_ephem, EME2000_to_ITRF, ecef_to_lla, posvel_to_sma
 from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
 from ..tools.orekit_tools import query_jb08, query_dtm2000, query_nrlmsise00, state2acceleration
 import numpy as np
@@ -28,7 +28,8 @@ R_earth = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
 J2 =Constants.EGM96_EARTH_C20
 
 def U_J2(r, phi, lambda_):
-    theta = np.pi / 2 - phi
+    theta = np.pi / 2 - phi  # Convert latitude to colatitude
+    # J2 potential term calculation, excluding the monopole term
     V_j2 = -mu / r * J2 * (R_earth / r)**2 * (3 * np.cos(theta)**2 - 1) / 2
     return V_j2
 
@@ -45,12 +46,23 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
     provider = GravityFieldFactory.getUnnormalizedProvider(degree, order)
     harmonics = provider.onDate(date)
     V_dev = np.zeros_like(phi)
+    
     mu_over_r = mu / r
     r_ratio = R_earth / r
     sin_phi = np.sin(phi)
+
+    # Initialize coefficient arrays with zeros
     max_order = max(order, degree) + 1
     C_nm = np.zeros((degree + 1, max_order))
     S_nm = np.zeros((degree + 1, max_order))
+
+    # Fill in the coefficient arrays
+    for n in range(degree + 1):
+        for m in range(min(n, order) + 1):
+            C_nm[n, m] = harmonics.getUnnormalizedCnm(n, m)
+            S_nm[n, m] = harmonics.getUnnormalizedSnm(n, m)
+
+    # Compute all necessary Legendre polynomials once
     P = associated_legendre_polynomials(degree, order, sin_phi)
 
     for n in range(1, degree + 1):
@@ -61,66 +73,23 @@ def compute_gravitational_potential(r, phi, lambda_, degree, order, date):
             V_dev += mu_over_r * r_ratio_n * sectorial_term
 
     return -V_dev
-
-# def compute_rho_eff(EDR, velocity, CD, A_ref, mass, MJDs):
-#     time_diffs = np.diff(MJDs) * 86400
-#     rho_eff = np.zeros(len(velocity))
-#     for i in range(1, len(time_diffs) + 1):
-#         if i < len(velocity):
-#             function_value = CD * A_ref * mass * np.power(velocity[i-1:i+1], 3)
-#             integral_value = trapz(function_value, dx=time_diffs[i-1])
-#             rho_eff[i] = EDR.iloc[i] / integral_value
-#             print(f"rho_eff: {rho_eff[i]}")
-#     return rho_eff
-
-def compute_rho_eff(EDR, velocity, position, CD, A_ref, mass, MJDs):
-    # Calculate time differences in seconds
-    time_diffs = np.diff(MJDs) * 86400
     
-    # Initialize rho_eff with zeros
-    rho_eff = np.zeros(len(velocity) - 1)
-    
-    # Earth's rotational rate vector (rad/s)
-    atm_rot = np.array([0, 0, 72.9211e-6])
-    
-    for i in range(len(time_diffs)):
-        # Calculate the relative velocity: v_rel = velocity[i] - cross(atm_rot, position[i])
-        if i < len(velocity) - 1:
-            v_rel_start = velocity[i] - np.cross(atm_rot, position[i])
-            v_rel_end = velocity[i + 1] - np.cross(atm_rot, position[i + 1])
-            
-            # Use the average velocity for the relative velocity magnitude
-            v_rel_mag_start = np.linalg.norm(v_rel_start)
-            v_rel_mag_end = np.linalg.norm(v_rel_end)
-            
-            # Calculate the trapezoidal integral component for this interval
-            integral_component_start = CD * A_ref * v_rel_mag_start**3
-            integral_component_end = CD * A_ref * v_rel_mag_end**3
-            
-            # Compute the integral using the trapezoidal rule
-            integral_value = 0.5 * (integral_component_start + integral_component_end) * time_diffs[i]
-            
-            # Compute rho_eff using the integrated value
-            if integral_value != 0:
-                rho_eff[i] = -2 * mass * EDR[i] / integral_value
-        
-        print(f"rho_eff[{i}]: {rho_eff[i]}")
-    
-    return rho_eff
-    
-def calculate_orbital_energy(sat_name, force_model_config,date=None, gravity_degree=90, gravity_order=90, other_accs=False):
+def calculate_orbital_energy(sat_name, force_model_config, gravity_degree=90, gravity_order=90, other_accs=False):
     folder_save = "output/DensityInversion/EDR/Data"
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
 
     sat_info = get_satellite_info(sat_name)
     settings = {'cr': sat_info['cr'], 'cd': sat_info['cd'], 'cross_section': sat_info['cross_section'], 'mass': sat_info['mass']}   
-    if date is None:
-        ephemeris_df = sp3_ephem_to_df(sat_name)
-    else:
-        ephemeris_df = sp3_ephem_to_df(sat_name, date=date)
+    ephemeris_df = sp3_ephem_to_df(sat_name, date = '2023-05-04')
+    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+    #slice ephemeris to start on the 2023-05-05 at 18:00:00
+    ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-05 18:00:00']
     first_day = ephemeris_df['UTC'].iloc[0]
-    three_days_later = first_day + datetime.timedelta(days=3)
+    print(f'first time: {first_day}')
+    three_days_later = first_day + datetime.timedelta(hours=24)
     ephemeris_df = ephemeris_df[(ephemeris_df['UTC'] >= first_day) & (ephemeris_df['UTC'] <= three_days_later)]
+    print(f"length of ephemeris_df after filtering: {len(ephemeris_df)}")
+    print(f"last time: {ephemeris_df['UTC'].iloc[-1]}")
     # take the UTC column and convert to mjd
     ephemeris_df['MJD'] = [utc_to_mjd(dt) for dt in ephemeris_df['UTC']]
     start_date_utc = ephemeris_df['UTC'].iloc[0]
@@ -163,7 +132,7 @@ def calculate_orbital_energy(sat_name, force_model_config,date=None, gravity_deg
     U_j2s = []
     work_done_by_other_accs = []
 
-    for _, row in tqdm(energy_ephemeris_df.iterrows(), total=energy_ephemeris_df.shape[0], desc='Calculating Orbital Energy'):
+    for _, row in tqdm(energy_ephemeris_df.iterrows(), total=energy_ephemeris_df.shape[0]):
         phi_rad = np.radians(row['lat'])
         lambda_rad = np.radians(row['lon'])
         #make r the norm of the x,y,z coordinates
@@ -186,8 +155,8 @@ def calculate_orbital_energy(sat_name, force_model_config,date=None, gravity_deg
 
             # Compute dot product of acceleration vector with the velocity vector
             velocity_vector = state_vector[3:]  # Extract velocity components
-            work = np.dot(other_acceleration, velocity_vector) * delta_t  # Multiply by delta_t to get work over that timestep
-            work_done_by_other_accs.append(work) #change back to "work" when uncommenting the above lines
+            work = np.dot(other_acceleration, velocity_vector) * delta_t
+            work_done_by_other_accs.append(work)
         else:
             work_done_by_other_accs.append(0)
 
@@ -217,127 +186,123 @@ def calculate_orbital_energy(sat_name, force_model_config,date=None, gravity_deg
     energy_df.to_csv(os.path.join(folder_save, f"{sat_name}_energy_components_{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
     return energy_df
 
-def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
-    sat_info = get_satellite_info(sat_name)
-    cd=sat_info['cd']
-    cross_section=sat_info['cross_section']
-    mass=sat_info['mass']
+def compute_rho_eff(EDR, velocity, positions, CD, A_ref, mass, dt):
+    # Convert inputs to numpy arrays if they aren't already
+    positions = np.array(positions)
+    velocity = np.array(velocity)
+    atm_rot = np.array([0, 0, 72.9211e-6])
+    
+    # Initialize the output array for rho_eff
+    rho_effs = []
+    
+    # Iterate through each position vector in the positions array
+    for i, position in enumerate(positions):
+        # Calculate the cross product r x atm_rot
+        r_cross_atm_rot = np.cross(position, atm_rot)
+        
+        # Calculate v_rel for this position
+        v_rel = velocity - r_cross_atm_rot
+        
+        # Calculate the magnitude of v_rel
+        v_rel_mag = np.linalg.norm(v_rel)
+        
+        # Calculate the integral part (since we're given dt and v_rel is constant over dt)
+        integral_v_rel3 = dt * v_rel_mag**3
+        
+        # Solve for rho_eff for this position
+        rho_eff = (2 * mass * -EDR) / (CD * A_ref * integral_v_rel3)
+        rho_effs.append(rho_eff)
+    
+    return np.array(rho_eff)
 
+def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     MJD_EPOCH = datetime.datetime(1858, 11, 17)
-    EDR_df = pd.DataFrame(columns=['MJD', 'EDR', 'EDR60', 'EDR180', 'rho_eff', 'rho_eff_60', 'rho_eff_180'])
+    EDR_df = pd.DataFrame()
 
     start_date_mjd = energy_ephemeris_df['MJD'].iloc[0]
     start_date_utc = MJD_EPOCH + datetime.timedelta(days=start_date_mjd)
-    print(f"start_date_utc: {start_date_utc}")
 
     end_date_mjd = energy_ephemeris_df['MJD'].iloc[-1]
     end_date_utc = MJD_EPOCH + datetime.timedelta(days=end_date_mjd)
-    print(f"end_date_utc: {end_date_utc}")
 
     if query_models:
-        EDR_df['jb08_rho'] = None
-        # EDR_df['dtm2000_rho'] = None
-        EDR_df['nrlmsise00_rho'] = None
+        energy_ephemeris_df['jb08_rho'] = None
 
     if 'UTC' not in energy_ephemeris_df.columns:
         energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
-        #TODO: the above will only work if the ephemeris is 30s time steps
 
     EDR = -energy_ephemeris_df['HOT_total_diff']
-    EDR60 = EDR.rolling(window=60, min_periods=1).mean()
-    EDR_180 = EDR.rolling(window=180, min_periods=1).mean()
-    EDR_360 = EDR.rolling(window=360, min_periods=1).mean()
-    velocity = np.array([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']]).T
-    position = np.array([energy_ephemeris_df['x'], energy_ephemeris_df['y'], energy_ephemeris_df['z']]).T
+    velocity = np.vstack([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']]).T
+    position = np.vstack([energy_ephemeris_df['x'], energy_ephemeris_df['y'], energy_ephemeris_df['z']]).T
+    CD = 2.2
+    A_ref = 1.004
+    mass = 600.0
+    dt = 30
+    print(f"velocity: {velocity}")
+    print(f"position: {position}")
+    rho_eff = compute_rho_eff(EDR, velocity, position, CD, A_ref, mass, dt)
 
-    rho_eff = compute_rho_eff(EDR, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
-    rho_eff_60 = compute_rho_eff(EDR60, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
-    rho_eff_180 = compute_rho_eff(EDR_180, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
-    rho_eff_360 = compute_rho_eff(EDR_360, velocity,position, CD=cd, A_ref=cross_section, mass=mass, MJDs=energy_ephemeris_df['MJD'])
-
-    if query_models:
-        jb08_rhos = []
-        # dtm2000_rhos = []
-        nrlmsise00_rhos = []
-        x = energy_ephemeris_df['x']
-        y = energy_ephemeris_df['y']
-        z = energy_ephemeris_df['z']
-        u = energy_ephemeris_df['xv']
-        v = energy_ephemeris_df['yv']
-        w = energy_ephemeris_df['zv']
-        t = pd.to_datetime(energy_ephemeris_df['UTC'])
-        
-        #use posvel_to_sma to get the semi-major axis for each point
-        print(f"iterating over num of points: {len(x)}")
-    for i in tqdm(range(len(x)), desc='Querying Density Models'):
-        sma = posvel_to_sma(x.iloc[i], y.iloc[i], z.iloc[i], u.iloc[i], v.iloc[i], w.iloc[i])
-        energy_ephemeris_df.at[i, 'sma'] = sma
-        pos = np.array([x.iloc[i], y.iloc[i], z.iloc[i]])
-        jb08_rho = query_jb08(pos, t.iloc[i])
-        # dtm2000_rho = query_dtm2000(pos, t[i])
-        # nrlmsise00_rho = query_nrlmsise00(pos, t[i])
-        energy_ephemeris_df.at[i, 'jb08_rho'] = jb08_rho
-        # energy_ephemeris_df.at[i, 'dtm2000_rho'] = dtm2000_rho
-        # energy_ephemeris_df.at[i, 'nrlmsise00_rho'] = nrlmsise00_rho
-        jb08_rhos.append(jb08_rho)
-        # dtm2000_rhos.append(dtm2000_rho)
-        # nrlmsise00_rhos.append(nrlmsise00_rho)
     EDR_df['MJD'] = energy_ephemeris_df['MJD']
+    EDR_df['UTC'] = energy_ephemeris_df['UTC']
     EDR_df['EDR'] = EDR
-    EDR_df['EDR60'] = EDR60
-    EDR_df['EDR180'] = EDR_180
     EDR_df['rho_eff'] = rho_eff
-    EDR_df['rho_eff_60'] = rho_eff_60
-    EDR_df['rho_eff_180'] = rho_eff_180
-    EDR_df['rho_eff_360'] = rho_eff_360
+
+    #plot EDR over UTC and the rolling 180 point centred mean of EDR
+    # plt.figure(figsize=(10, 5))
+    # plt.plot(EDR_df['UTC'], EDR_df['EDR'], label='EDR', linewidth=1)
+    # plt.plot(EDR_df['UTC'], EDR_df['EDR'].rolling(window=90, center=False).mean(), label='Rolling Average 90', linewidth=1)
+    # plt.plot(EDR_df['UTC'], EDR_df['EDR'].rolling(window=180, center=False).mean(), label='Rolling Average 180', linewidth=1)
+    # plt.plot(EDR_df['UTC'], EDR_df['EDR'].rolling(window=360, center=False).mean(), label='Rolling Average 360', linewidth=1)
+    # plt.xlabel('Modified Julian Date')
+    # plt.ylabel('EDR')
+    # plt.title(f"{sat_name}: EDR")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
+    
+
     if query_models:
-        EDR_df['jb08_rho'] = jb08_rhos
-        # EDR_df['dtm2000_rho'] = dtm2000_rhos
-        EDR_df['nrlmsise00_rho'] = nrlmsise00_rhos
+        for i in range(len(energy_ephemeris_df)):
+            pos = position[i]
+            t = energy_ephemeris_df['UTC'].iloc[i]
+            # EDR_df.at[i, 'jb08_rho'] = query_jb08(pos, t)
+            EDR_df.at[i, 'jb08_rho'] = 1e-12
+
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
-    EDR_df.to_csv(os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv"), index=False)
+    output_path = os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv")
+    EDR_df.to_csv(output_path, index=False)
+    
     return EDR_df
 
 def main():
     force_model_config = {'3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    # sat_names_to_test = ["GRACE-FO-A", "CHAMP", "TanDEM-X"]
+    # sat_names_to_test = ["GRACE-FO-A", "TerraSAR-X", "CHAMP", "GRACE-FO-B", "TanDEM-X"]
     sat_names_to_test = ["GRACE-FO-A"]
-    date = datetime.datetime(2023, 5, 5)
 
     for sat_name in sat_names_to_test:
-        # orbital_energy_df_degord20 = calculate_orbital_energy(sat_name, force_model_config=force_model_config,
-        #                                                       date=date, gravity_degree=80, gravity_order=80, 
-        #                                                       other_accs=False)
-        #load from csv
-        orbital_energy_df_degord20 = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-03.csv")
-        # plt.figure(figsize=(10, 5))
+        # orbital_energy_df_degord20 = calculate_orbital_energy(sat_name, force_model_config=force_model_config, gravity_degree=20, gravity_order=20, other_accs=False)
         # plt.plot(orbital_energy_df_degord20['MJD'], orbital_energy_df_degord20['HOT_total_diff'], label='HOT_total_diff_degree_30')
         # plt.xlabel('Modified Julian Date')
         # plt.ylabel('Δ Specific Energy (J/kg)')
         # plt.title(f"{sat_name}: HOT_total_diff")
         # plt.legend()
         # plt.grid(True)
-        #log the y-axis
+        # #log the y-axis
         # plt.savefig(f"output/DensityInversion/EDR/Plots/EDR_tseries/{sat_name}_OrbitalEnergy_{orbital_energy_df_degord20['MJD'].iloc[0]}_{orbital_energy_df_degord20['MJD'].iloc[-1]}.png")
         # plt.show()
-        # plt.close()
 
         # tdx_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/TanDEM-X_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-03.csv")
-        # orbital_energy_df_degord20 = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-02.csv")
-
+        # gfoa_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-02.csv")
+        orbital_energy_df_degord20 = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-10.csv")
         density_df = Density_from_EDR(sat_name, orbital_energy_df_degord20, query_models=True)
-        # density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-04 21:59:42_2023-05-05 09:59:42_2024-05-03.csv")
+        # density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-03-22 21:59:42_2023-03-23 03:59:42_2024-05-10.csv")
         
         plt.figure(figsize=(10, 5))
-        # Plotting various density metrics
-        # plt.plot(density_df['MJD'], density_df['rho_eff'], label='EDR Density', linewidth=0.5)
-        # plt.plot(density_df['MJD'], density_df['rho_eff_60'], label='60-point MA', linewidth=1)
-        plt.plot(density_df['MJD'], density_df['rho_eff_180'], label='180-point MA', linewidth=1)
-        plt.plot(density_df['MJD'], density_df['rho_eff_360'], label='360-point MA', linewidth=1)
-        plt.plot(density_df['MJD'], density_df['jb08_rho'], label='JB08 Density', linestyle='dashed')
-        # Plotting DTM2000 and NRLMSISE00 densities
-        # plt.plot(density_df['MJD'], density_df['dtm2000_rho'], label='DTM2000 Density', linestyle='dashed')
-        plt.plot(density_df['MJD'], density_df['nrlmsise00_rho'], label='NRLMSISE00 Density', linestyle='dashed')
+        # plt.plot(density_df['UTC'], density_df['rho_eff'], label='EDR Density', linewidth=1)
+        plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=90, center=False).mean(), label='Rolling Average 90', linewidth=1)
+        plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=180, center=False).mean(), label='Rolling Average 180', linewidth=1)
+        plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=360, center=False).mean(), label='Rolling Average 360', linewidth=1)
+        plt.plot(density_df['UTC'], density_df['jb08_rho'], label='JB08 Density', linestyle='dashed')
 
         # Plot settings
         plt.legend()
@@ -352,8 +317,7 @@ def main():
         start_date = density_df['MJD'].iloc[0]
         end_date = density_df['MJD'].iloc[-1]
         plt.savefig(f"output/DensityInversion/EDR/Plots/Density/{sat_name}_EDR_{start_date}_{end_date}_tstamp{datenow}.png")
-        plt.close()
-        # plt.show()
+        plt.show()
 
 if __name__ == "__main__":
     main()
