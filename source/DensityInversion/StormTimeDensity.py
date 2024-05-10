@@ -39,14 +39,15 @@ def download_storm_time_ephems(selected_storms_file='output/DensityInversion/POD
     lines = data.splitlines()
     satellite_name = None
     for line in lines:
-        if 'Satellite:' in line:
+        line = line.strip()
+        if line.endswith("Satellite:"):
             # Correctly parse the satellite name from the line
-            satellite_name = line.split('Satellite:')[0].strip()
+            satellite_name = line.split()[0].strip()
             satellite_data[satellite_name] = []  # Initialize a list for this satellite
         elif 'G' in line and '[' in line and satellite_name:  # Looking for lines that contain dates
-            storm_level = line.strip().split(':')[0].strip()
+            storm_level = line.split(':')[0].strip()
             date_list_str = line[line.find('[') + 1:line.find(']')]
-            # Parsing date strings formatted as tuples
+            # Parsing date strings formatted as datetime.date
             date_strs = date_list_str.split('datetime.date')
             dates = []
             for date_str in date_strs:
@@ -57,14 +58,13 @@ def download_storm_time_ephems(selected_storms_file='output/DensityInversion/POD
                         date = datetime(year, month, day).date()
                         dates.append(date)
 
+            # Adjust the date to create the start_date and end_date
             for date in dates:
                 start_date = date - timedelta(days=1)
                 end_date = date + timedelta(days=2)
                 satellite_data[satellite_name].append((storm_level, start_date, end_date))
-                # download_sp3(start_date, end_date, satellite_name)
 
     return satellite_data
-
 def load_storm_sp3(storm_data):
     all_data = {}
     print(f"storm_data: {storm_data}")
