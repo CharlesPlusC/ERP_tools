@@ -96,16 +96,29 @@ if __name__ == "__main__":
     # daily_indices, kp3hrly, dst_hrly = get_sw_indices()
 
     #TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
-    densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
-    densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
-    densitydf_champ = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
+    # densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
+    # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
+    # densitydf_champ = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
     # # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
-    sat_names = ["GRACE-FO-A", "TerraSAR-X", "CHAMP"]
-    for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx, densitydf_champ]):
-        density_dfs = [density_df]
-        #SELECT THE SAT NAME IN USING THE NU
-        sat_name = sat_names[df_num]
-        print(f"sat_name: {sat_name}")
-        # plot_density_arglat_diff(density_dfs, 45, sat_name)
-        # plot_density_data(density_dfs, 45, sat_name)
-        # plot_relative_density_change(density_dfs, 45, sat_name)
+    # sat_names = ["GRACE-FO-A", "TerraSAR-X", "CHAMP"]
+# for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx, densitydf_champ]):
+    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-04')
+    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+    ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-05 18:00:00']
+    #make the ephemeris stop 24hrs after the start time
+    print(f"ephemeris_df: {ephemeris_df.head()}")
+    ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2023-05-06 18:00:00']
+    print(f"ephemeris_df: {ephemeris_df.head()}")
+    interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
+    velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+    print(f"velacc_ephem: {velacc_ephem.head()}")
+    vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
+    density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
+                                    models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
+    density_dfs = [density_df]
+    #SELECT THE SAT NAME IN USING THE NU
+    plot_relative_density_change(density_dfs, 45, "GRACE-FO-A")
+    # plot_density_arglat_diff(density_dfs, 45, sat_name)
+    # plot_density_data(density_dfs, 45, sat_name)
+    

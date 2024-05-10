@@ -143,7 +143,7 @@ if __name__ == '__main__':
     rho_from_ACT = density_inversion(sat_name, inertial_act_gfo_ephem, 
                                      act_x_acc_col, act_y_acc_col, act_z_acc_col, 
                                      force_model_config, nc_accs=True, 
-                                     models_to_query=['JB08'], density_freq='15S')
+                                     models_to_query=['JB08', "DTM2000", "NRLMSISE00"], density_freq='15S')
     rho_from_ACT.rename(columns={'Computed Density': 'ACT_Computed Density'}, inplace=True)
 
     print(f"head of rho_from_ACT: {rho_from_ACT.head()}")
@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
     print(f"head of rho_from_vel: {rho_from_vel.head()}")
 
-    merged_df = pd.merge(rho_from_ACT[['UTC', 'ACT_Computed Density', 'JB08']], rho_from_vel[['UTC', 'Velocity_Computed Density']], on='UTC', how='inner')
+    merged_df = pd.merge(rho_from_ACT[['UTC', 'ACT_Computed Density', 'JB08', 'DTM2000', 'NRLMSISE00']], rho_from_vel[['UTC', 'Velocity_Computed Density']], on='UTC', how='inner')
 
     timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     merged_df.dropna(inplace=True)
@@ -175,10 +175,12 @@ if __name__ == '__main__':
     median_ACT = merged_df['ACT_Computed Density'].median()
     flipped_ACT = 2 * median_ACT - merged_df['ACT_Computed Density'] #TODO: figure out why the accelerometer density is inverted? Is the X/along track sign different in the ACT file?
     rolling_av45 = merged_df['Velocity_Computed Density'].rolling(window=90, center=True).mean()
-    plt.plot(merged_df['UTC'], flipped_ACT, label='ACT Computed Density')
+    plt.plot(merged_df['UTC'], flipped_ACT, label='ACT Density')
     # plt.plot(merged_df['UTC'], merged_df['Velocity_Computed Density'], label='Velocity Computed Density')
-    plt.plot(merged_df['UTC'], rolling_av45, label='Velocity Computed  (MA)', linewidth=2)
+    plt.plot(merged_df['UTC'], rolling_av45, label='POD Density', linewidth=2)
     plt.plot(merged_df['UTC'], merged_df['JB08'], label='JB08 Density', linestyle='--')
+    plt.plot(merged_df['UTC'], merged_df['DTM2000'], label='DTM2000 Density', linestyle='--')
+    plt.plot(merged_df['UTC'], merged_df['NRLMSISE00'], label='MSISE00 Density', linestyle='--')
     plt.xlabel('Time')
     plt.ylabel('Density (kg/m^3)')
     #log scale
@@ -204,26 +206,24 @@ if __name__ == '__main__':
 
     # Baselines based on the first valid value after removing NaNs from rolling average
     baseline_ACT = valid_data['ACT_Computed Density'].iloc[0]
-    print(f"baseline ACT: {baseline_ACT}")
     baseline_Velocity = valid_rolling_av45.iloc[0]
-    print(f"baseline Velocity: {baseline_Velocity}")
     baseline_JB08 = valid_data['JB08'].iloc[0]
-    print(f"baseline JB08: {baseline_JB08}")
+    baseline_DTM2000 = valid_data['DTM2000'].iloc[0]
+    baseline_MSISE00 = valid_data['NRLMSISE00'].iloc[0]
 
     # Compute relative values against their respective baselines
     relative_flipped_ACT = 2 * baseline_ACT - valid_data['ACT_Computed Density'] - baseline_ACT
     relative_rolling_av45 = valid_rolling_av45 - baseline_Velocity
     relative_JB08 = valid_data['JB08'] - baseline_JB08
-
-    # Display the first few values to verify
-    print(f"first five relative flipped ACT: {relative_flipped_ACT.head()}")
-    print(f"first five relative rolling av45: {relative_rolling_av45.head()}")
-    print(f"first five relative JB08: {relative_JB08.head()}")
+    relative_DTM2000 = valid_data['DTM2000'] - baseline_DTM2000
+    relative_MSISE00 = valid_data['NRLMSISE00'] - baseline_MSISE00
 
     # Plotting
     plt.plot(valid_data['UTC'], relative_flipped_ACT, label='Relative ACT Computed Density')
     plt.plot(valid_data['UTC'], relative_rolling_av45, label='Relative Velocity Computed (MA)', linewidth=2)
     plt.plot(valid_data['UTC'], relative_JB08, label='Relative JB08 Density', linestyle='--')
+    plt.plot(valid_data['UTC'], relative_DTM2000, label='Relative DTM2000 Density', linestyle='--')
+    plt.plot(valid_data['UTC'], relative_MSISE00, label='Relative MSISE00 Density', linestyle='--')
 
     plt.xlabel('Time')
     plt.ylabel('Relative Density Change (kg/m^3)')
@@ -236,61 +236,67 @@ if __name__ == '__main__':
     # plt.show()
     plt.close()
 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.signal import welch
+    # import numpy as np
+    # import matplotlib.pyplot as plt
+    # from scipy.signal import welch
 
-    # Given sampling rate from your setup
-    sampling_rate = 1 / 30  # seconds^-1
+    # # Given sampling rate from your setup
+    # sampling_rate = 1 / 30  # seconds^-1
 
-    # Compute the power spectral densities for each signal
-    # Frequency and power spectral density for flipped ACT
-    f_ACT, Pxx_ACT = welch(flipped_ACT, fs=sampling_rate, nperseg=1024)
+    # # Compute the power spectral densities for each signal
+    # # Frequency and power spectral density for flipped ACT
+    # f_ACT, Pxx_ACT = welch(flipped_ACT, fs=sampling_rate, nperseg=1024)
 
-    # Frequency and power spectral density for velocity computed (rolling average)
-    rolling_av45 = rolling_av45[~np.isnan(rolling_av45)]  # Removing NaN values from rolling_av45
-    f_Velocity, Pxx_Velocity = welch(rolling_av45, fs=sampling_rate, nperseg=1024)
+    # # Frequency and power spectral density for velocity computed (rolling average)
+    # rolling_av45 = rolling_av45[~np.isnan(rolling_av45)]  # Removing NaN values from rolling_av45
+    # f_Velocity, Pxx_Velocity = welch(rolling_av45, fs=sampling_rate, nperseg=1024)
 
-    # Frequency and power spectral density for JB08
-    f_JB08, Pxx_JB08 = welch(merged_df['JB08'], fs=sampling_rate, nperseg=1024)
+    # # Frequency and power spectral density for JB08
+    # f_JB08, Pxx_JB08 = welch(merged_df['JB08'], fs=sampling_rate, nperseg=1024)
+    # f_dtm2000, Pxx_dtm2000 = welch(merged_df['DTM2000'], fs=sampling_rate, nperseg=1024)
+    # f_msise00, Pxx_msise00 = welch(merged_df['NRLMSISE00'], fs=sampling_rate, nperseg=1024)
 
-    # Convert frequency from Hz to cycles per minute (cpm)
-    f_ACT_minutes = f_ACT * 60
-    f_Velocity_minutes = f_Velocity * 60
-    f_JB08_minutes = f_JB08 * 60
+    # # Convert frequency from Hz to cycles per minute (cpm)
+    # f_ACT_minutes = f_ACT * 60
+    # f_Velocity_minutes = f_Velocity * 60
+    # f_JB08_minutes = f_JB08 * 60
+    # f_dtm2000_minutes = f_dtm2000 * 60
+    # f_msise00_minutes = f_msise00 * 60
 
-    # 90 minutes mark in cycles per minute
-    one_orbit = 1 / 97
-    one_half_orbit = 1 / 48.5
-    one_third_orbit = 1/32.33
+    # # 90 minutes mark in cycles per minute
+    # one_orbit = 1 / 97
+    # one_half_orbit = 1 / 48.5
+    # one_third_orbit = 1/32.33
 
-    # Plotting the PSDs on a log-log scale
-    plt.figure(figsize=(8, 4))
+    # # Plotting the PSDs on a log-log scale
+    # plt.figure(figsize=(8, 4))
 
-    # ACT Computed Density
-    plt.loglog(f_ACT_minutes, Pxx_ACT, label='ACT Computed Density', linewidth=1, color='xkcd:jade')
+    # # ACT Computed Density
+    # plt.loglog(f_ACT_minutes, Pxx_ACT, label='ACT Computed Density', linewidth=1, color='xkcd:jade')
 
-    # Velocity Computed Density
-    plt.loglog(f_Velocity_minutes, Pxx_Velocity, label='Velocity Computed Density', linewidth=1, color='xkcd:azure')
+    # # Velocity Computed Density
+    # plt.loglog(f_Velocity_minutes, Pxx_Velocity, label='Velocity Computed Density', linewidth=1, color='xkcd:azure')
 
-    # JB08 Density
-    plt.loglog(f_JB08_minutes, Pxx_JB08, label='JB08 Density', linestyle='--', linewidth=1, color='xkcd:coral')
+    # # JB08 Density
+    # plt.loglog(f_JB08_minutes, Pxx_JB08, label='JB08 Density', linestyle='--', linewidth=1, color='xkcd:coral')
+    # plt.loglog(f_dtm2000_minutes, Pxx_dtm2000, label='DTM2000 Density', linestyle='--', linewidth=1, color='xkcd:teal')
+    # plt.loglog(f_msise00_minutes, Pxx_msise00, label='MSISE00 Density', linestyle='--', linewidth=1, color='xkcd:purple')
 
-    # Convert x-axis label to cycles per minute
-    plt.xlabel('Frequency')
-    plt.ylabel('PSD (kg^2/m^6 Hz)')
+    # # Convert x-axis label to cycles per minute
+    # plt.xlabel('Frequency')
+    # plt.ylabel('PSD (kg^2/m^6 Hz)')
 
-    # Add a vertical line at the 90-minute mark
-    plt.axvline(x=one_orbit, color='xkcd:mustard', linewidth=4, label='~1 orbit', alpha=0.5)
-    plt.axvline(x=one_half_orbit, color='xkcd:purple', linewidth=4, label='~1/2 orbit', alpha=0.5)
-    plt.axvline(x=one_third_orbit, color='xkcd:cyan', linewidth=4, label='~1/3 orbit', alpha=0.5)
+    # # Add a vertical line at the 90-minute mark
+    # plt.axvline(x=one_orbit, color='xkcd:mustard', linewidth=4, label='~1 orbit', alpha=0.5)
+    # plt.axvline(x=one_half_orbit, color='xkcd:purple', linewidth=4, label='~1/2 orbit', alpha=0.5)
+    # plt.axvline(x=one_third_orbit, color='xkcd:cyan', linewidth=4, label='~1/3 orbit', alpha=0.5)
 
-    plt.title('Power Spectral Density of the Density Signals')
-    plt.legend()
-    plt.grid(True, which='both', ls='-', linewidth=0.5)
-    plt.tight_layout()
+    # plt.title('Power Spectral Density of the Density Signals')
+    # plt.legend()
+    # plt.grid(True, which='both', ls='-', linewidth=0.5)
+    # plt.tight_layout()
 
-    # Save the figure
-    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_PSD_minutes.png")
-    plt.show()
-    plt.close()
+    # # Save the figure
+    # plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_PSD_minutes.png")
+    # # plt.show()
+    # plt.close()

@@ -262,8 +262,9 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
         for i in tqdm(range(len(position)), desc='Querying Density Models'):
             pos = position[i]
             t = energy_ephemeris_df['UTC'].iloc[i]
-            # EDR_df.at[i, 'jb08_rho'] = query_jb08(pos, t)
-            EDR_df.at[i, 'jb08_rho'] = query_dtm2000(pos, t)
+            EDR_df.at[i, 'jb08_rho'] = query_jb08(pos, t)
+            EDR_df.at[i, 'dtm2000_rho'] = query_dtm2000(pos, t)
+            EDR_df.at[i, 'nrlmsise00_rho'] = query_nrlmsise00(pos, t)
 
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
     output_path = os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv")
@@ -300,6 +301,8 @@ def main():
         plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=180, center=False).mean(), label='Rolling Average 180', linewidth=1)
         plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=360, center=False).mean(), label='Rolling Average 360', linewidth=1)
         plt.plot(density_df['UTC'], density_df['jb08_rho'], label='JB08 Density', linestyle='dashed')
+        plt.plot(density_df['UTC'], density_df['dtm2000_rho'], label='DTM2000 Density', linestyle='dashed')
+        plt.plot(density_df['UTC'], density_df['nrlmsise00_rho'], label='NRLMSISE00 Density', linestyle='dashed')
 
         # Plot settings
         plt.legend()

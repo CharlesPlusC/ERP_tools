@@ -24,10 +24,9 @@ from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
-from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, CssiSpaceWeatherDataLoader, CssiSpaceWeatherData
-from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00, DTM2000InputParameters, NRLMSISE00InputParameters
+from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, CssiSpaceWeatherData
+from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00
 from org.orekit.data import DataSource
-from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
 from ..tools.utilities import extract_acceleration, download_file_url, pos_vel_from_orekit_ephem
 

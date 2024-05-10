@@ -1,12 +1,15 @@
 from ..tools.Get_SP3_from_GFZ_FTP import download_sp3
 from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
-from ..DensityInversion.KinematicDensity import density_inversion, ephemeris_to_density
+from ..DensityInversion.KinematicDensity import density_inversion
+from ..tools.utilities import project_acc_into_HCL, get_satellite_info, interpolate_positions, calculate_acceleration
 
 import os
 import json
 import ftplib
 from datetime import datetime, timedelta
 import pandas as pd
+from tqdm import tqdm
+
 def load_sp3_codes(json_path):
     with open(json_path, 'r') as file:
         return json.load(file)
@@ -25,7 +28,7 @@ def download_files(ftp_server, path, local_directory):
     except ftplib.all_errors as e:
         print(f"FTP error: {e}")
 
-def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selected_storms_test.txt'):
+def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selected_storms_short.txt'):
     with open(selected_storms_file, 'r') as file:
         data = file.read()
 
@@ -98,28 +101,39 @@ def main():
                 new_df_list.append(filtered_group)
         storm_ephem_data[satellite] = new_df_list
 
-    for satellite, df_list in storm_ephem_data.items():
+    # for satellite, df_list in storm_ephem_data.items():
+    #same line as above but using tqdm to show progress
+    for satellite, df_list in tqdm(storm_ephem_data.items(), desc="Density Inversion"):
         print(f"Processing {satellite}")
         for storm_period_index, df_period in enumerate(df_list):
             print(f"Processing storm period {storm_period_index} for {satellite}")
-            for df_index, df in enumerate(df_period):
-                if not df.empty:
-                    identifier = tuple(df['UTC'].tolist())
+            for storm_df_index, storm_df in enumerate(df_period):
+                if not storm_df.empty:
+                    identifier = tuple(storm_df['UTC'].tolist())
                     if identifier in seen_identifiers:
-                        print(f"Duplicate detected: Skipping storm {df_index} for {satellite}")
+                        print(f"Duplicate detected: Skipping storm {storm_df} for {satellite}")
                         continue
                     seen_identifiers.add(identifier)
+                    print(f"Processing storm {storm_df_index} for {satellite}")
+                    print(f"storm start: {storm_df['UTC'].iloc[0]}")
+                    print(f"storm end: {storm_df['UTC'].iloc[-1]}")
+                    interp_ephemeris_df = interpolate_positions(storm_df, '0.01S')
+                    velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+                
+                    density_inversion_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
+                                models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
 
-                    density_inversion_df = ephemeris_to_density(satellite, df, force_model_config)
                     datenow = datetime.now().strftime("%Y%m%d%H%M%S")
-                    output_path = f"output/DensityInversion/PODBasedAccelerometry/Data/{satellite}/storm_density_{storm_period_index}_{datenow}.csv"
+                    savepath = f"output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/{satellite}"
+                    os.makedirs(savepath, exist_ok=True)
+                    output_path = savepath + f"/{satellite}_storm_density_{storm_period_index}_{datenow}.csv"
                     density_inversion_df.to_csv(output_path)
                     print(f"Data saved to {output_path}")
                 else:
-                    print(f"Skipping processing for {satellite} storm {df_index} due to empty DataFrame.")
+                    print(f"Skipping processing for {satellite} storm {storm_df_index} due to empty DataFrame.")
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
 
     #then load each of the downloaded sp3 files using the datetimes in the selected_storms.txt file and the sp3_epheme_to_df function
     # Use ephemeris_to_density to:
