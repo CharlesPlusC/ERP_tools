@@ -24,8 +24,8 @@ from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
-from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData
-from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00
+from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, CssiSpaceWeatherDataLoader, CssiSpaceWeatherData
+from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00, DTM2000InputParameters, NRLMSISE00InputParameters
 from org.orekit.data import DataSource
 from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
@@ -73,11 +73,9 @@ def query_jb08(position, datetime):
 def query_dtm2000(position, datetime):
     frame = FramesFactory.getEME2000()
     wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-    msafe = MarshallSolarActivityFutureEstimation(
-        MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-        MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+    cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
     sun = CelestialBodyFactory.getSun()
-    atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+    atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
     absolute_date = datetime_to_absolutedate(datetime)
     #make vector3d object
     position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
@@ -87,11 +85,9 @@ def query_dtm2000(position, datetime):
 def query_nrlmsise00(position, datetime):
     frame = FramesFactory.getEME2000()
     wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-    msafe = MarshallSolarActivityFutureEstimation(
-        MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-        MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+    cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
     sun = CelestialBodyFactory.getSun()
-    atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+    atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
     absolute_date = datetime_to_absolutedate(datetime)
     #make vector3d object
     position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
@@ -193,22 +189,18 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
 
     elif config_flags.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
     elif config_flags.get('nrlmsise00drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
@@ -429,11 +421,9 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
 
     elif force_model_config.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
@@ -443,11 +433,9 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
 
     elif force_model_config.get('nrlmsise00drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
@@ -477,16 +465,12 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
                 atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
             elif force_model_config.get('dtm2000drag', False):
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-                msafe = MarshallSolarActivityFutureEstimation(
-                    MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-                    MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-                atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+                cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
+                atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
             elif force_model_config.get('nrlmsise00drag', False):
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-                msafe = MarshallSolarActivityFutureEstimation(
-                    MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-                    MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-                atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+                cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
+                atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
             # if boxwing:
             #     drag_sensitive = boxwing
             # else:
@@ -661,11 +645,9 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
 
     elif force_model_config.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)
@@ -674,11 +656,9 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
 
     elif force_model_config.get('nrlmsise00drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)

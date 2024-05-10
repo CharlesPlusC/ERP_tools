@@ -238,8 +238,6 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     A_ref = 1.004
     mass = 600.0
     dt = 30
-    print(f"velocity: {velocity}")
-    print(f"position: {position}")
     rho_eff = compute_rho_eff(EDR, velocity, position, CD, A_ref, mass, dt)
 
     EDR_df['MJD'] = energy_ephemeris_df['MJD']
@@ -259,14 +257,13 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     # plt.legend()
     # plt.grid(True)
     # plt.show()
-    
 
     if query_models:
-        for i in range(len(energy_ephemeris_df)):
+        for i in tqdm(range(len(position)), desc='Querying Density Models'):
             pos = position[i]
             t = energy_ephemeris_df['UTC'].iloc[i]
             # EDR_df.at[i, 'jb08_rho'] = query_jb08(pos, t)
-            EDR_df.at[i, 'jb08_rho'] = 1e-12
+            EDR_df.at[i, 'jb08_rho'] = query_dtm2000(pos, t)
 
     datenow = datetime.datetime.now().strftime("%Y-%m-%d")
     output_path = os.path.join("output/DensityInversion/EDR/Data", f"EDR_{sat_name}__{start_date_utc}_{end_date_utc}_{datenow}.csv")
