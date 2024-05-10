@@ -63,8 +63,10 @@ def download_storm_time_ephems(selected_storms_file='output/DensityInversion/POD
                 start_date = date - timedelta(days=1)
                 end_date = date + timedelta(days=2)
                 satellite_data[satellite_name].append((storm_level, start_date, end_date))
-
+                download_sp3(start_date, end_date, satellite_name)
+                
     return satellite_data
+
 def load_storm_sp3(storm_data):
     all_data = {}
     print(f"storm_data: {storm_data}")
@@ -74,7 +76,7 @@ def load_storm_sp3(storm_data):
         
         for storm_index, (storm_level, start_date, end_date) in enumerate(storm_periods):
             df_list = []
-            df = sp3_ephem_to_df(satellite, date=str(start_date))
+            df = sp3_ephem_to_df(satellite, date=str(end_date))
             df_list.append(df)
             all_data[satellite].append(df_list)
 
@@ -132,9 +134,17 @@ def main():
                 else:
                     print(f"Skipping processing for {satellite} storm {storm_df_index} due to empty DataFrame.")
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
     # main()
-
+    storm_data = download_storm_time_ephems()
+    storm_ephem_data = load_storm_sp3(storm_data)
+    print(f"storm_ephem_data: {storm_ephem_data}")
+    index = 0
+    for satellite, periods in storm_ephem_data.items():
+        for period_index, df_group in enumerate(periods):
+            if df_group:
+                print(f"Processing {satellite} period {period_index}")
+                print(f"head of df_group: {df_group[0].head()}")
     #then load each of the downloaded sp3 files using the datetimes in the selected_storms.txt file and the sp3_epheme_to_df function
     # Use ephemeris_to_density to:
         #1. ingest the ephemeris
@@ -147,93 +157,93 @@ def main():
     # Calculate the delta drho/dt between the inverted-for density and the JB08 density
 
 
-def create_and_submit_density_jobs():
-    import os
-    import json
+# def create_and_submit_density_jobs():
+#     import os
+#     import json
 
-    user_home_dir = os.getenv("HOME")
-    project_root_dir = f"{user_home_dir}/Rhoin/ERP_tools/"
-    folder_for_jobs = f"{user_home_dir}/Scratch/Rhoin/sge_jobs"
-    work_dir = f"{user_home_dir}/Scratch/Rhoin/working"
-    logs_folder = f"{user_home_dir}/Scratch/Rhoin/logs"
-    output_folder = f"{user_home_dir}/Scratch/Rhoin/output"
+#     user_home_dir = os.getenv("HOME")
+#     project_root_dir = f"{user_home_dir}/Rhoin/ERP_tools/"
+#     folder_for_jobs = f"{user_home_dir}/Scratch/Rhoin/sge_jobs"
+#     work_dir = f"{user_home_dir}/Scratch/Rhoin/working"
+#     logs_folder = f"{user_home_dir}/Scratch/Rhoin/logs"
+#     output_folder = f"{user_home_dir}/Scratch/Rhoin/output"
 
-    os.makedirs(folder_for_jobs, exist_ok=True)
-    os.makedirs(work_dir, exist_ok=True)
-    os.makedirs(logs_folder, exist_ok=True)
-    os.makedirs(output_folder, exist_ok=True)
+#     os.makedirs(folder_for_jobs, exist_ok=True)
+#     os.makedirs(work_dir, exist_ok=True)
+#     os.makedirs(logs_folder, exist_ok=True)
+#     os.makedirs(output_folder, exist_ok=True)
 
-    storm_data = download_storm_time_ephems()
-    storm_ephem_data = load_storm_sp3(storm_data)
+#     storm_data = download_storm_time_ephems()
+#     storm_ephem_data = load_storm_sp3(storm_data)
 
-    index = 0
-    for satellite, periods in storm_ephem_data.items():
-        for period_index, df_group in enumerate(periods):
-            if df_group:
-                script_filename = f"{folder_for_jobs}/{satellite}_period{period_index}.sh"
-                script_content = f"""#!/bin/bash -l
-#$ -l h_rt=24:0:0
-#$ -l mem=8G
-#$ -l tmpfs=15G
-#$ -N {satellite}_period{period_index}
-#$ -t 1-{len(df_group)}
-#$ -wd {work_dir}
-#$ -o {logs_folder}/out_{satellite}_period{period_index}_$TASK_ID.txt
-#$ -e {logs_folder}/err_{satellite}_period{period_index}_$TASK_ID.txt
+#     index = 0
+#     for satellite, periods in storm_ephem_data.items():
+#         for period_index, df_group in enumerate(periods):
+#             if df_group:
+#                 script_filename = f"{folder_for_jobs}/{satellite}_period{period_index}.sh"
+#                 script_content = f"""#!/bin/bash -l
+# #$ -l h_rt=24:0:0
+# #$ -l mem=8G
+# #$ -l tmpfs=15G
+# #$ -N {satellite}_period{period_index}
+# #$ -t 1-{len(df_group)}
+# #$ -wd {work_dir}
+# #$ -o {logs_folder}/out_{satellite}_period{period_index}_$TASK_ID.txt
+# #$ -e {logs_folder}/err_{satellite}_period{period_index}_$TASK_ID.txt
 
-module load python/miniconda3/4.10.3
-source $UCL_CONDA_PATH/etc/profile.d/conda.sh
-conda activate erp_tools_env
-export PYTHONPATH="{project_root_dir}:$PYTHONPATH"
+# module load python/miniconda3/4.10.3
+# source $UCL_CONDA_PATH/etc/profile.d/conda.sh
+# conda activate erp_tools_env
+# export PYTHONPATH="{project_root_dir}:$PYTHONPATH"
 
-cp -r {user_home_dir}/Rhoin/ERP_tools $TMPDIR
+# cp -r {user_home_dir}/Rhoin/ERP_tools $TMPDIR
 
-cd $TMPDIR/ERP_tools
+# cd $TMPDIR/ERP_tools
 
-/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m source.DensityInversion.StormTimeDensity {satellite} {period_index} $SGE_TASK_ID {output_folder}
-"""
-                with open(script_filename, 'w') as file:
-                    file.write(script_content)
+# /home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m source.DensityInversion.StormTimeDensity {satellite} {period_index} $SGE_TASK_ID {output_folder}
+# """
+#                 with open(script_filename, 'w') as file:
+#                     file.write(script_content)
 
-                os.system(f"qsub {script_filename}")
-                index += 1
+#                 os.system(f"qsub {script_filename}")
+#                 index += 1
 
-def main_script(satellite, period_index, df_index, output_folder):
-    import pandas as pd
-    from datetime import datetime
-    from tqdm import tqdm
-    import json
+# def main_script(satellite, period_index, df_index, output_folder):
+#     import pandas as pd
+#     from datetime import datetime
+#     from tqdm import tqdm
+#     import json
 
-    storm_data = download_storm_time_ephems()
-    storm_ephem_data = load_storm_sp3(storm_data)
+#     storm_data = download_storm_time_ephems()
+#     storm_ephem_data = load_storm_sp3(storm_data)
 
-    df_list = storm_ephem_data[satellite][int(period_index)]
-    if 0 <= int(df_index) - 1 < len(df_list):
-        df = df_list[int(df_index) - 1]
-        if not df.empty:
-            force_model_config = {
-                '120x120gravity': True, '3BP': True, 'solid_tides': True,
-                'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True
-            }
+#     df_list = storm_ephem_data[satellite][int(period_index)]
+#     if 0 <= int(df_index) - 1 < len(df_list):
+#         df = df_list[int(df_index) - 1]
+#         if not df.empty:
+#             force_model_config = {
+#                 '120x120gravity': True, '3BP': True, 'solid_tides': True,
+#                 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True
+#             }
 
-            interp_ephemeris_df = interpolate_positions(df, '0.01S')
-            velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+#             interp_ephemeris_df = interpolate_positions(df, '0.01S')
+#             velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
             
-            density_inversion_df = density_inversion(satellite, velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
-                        models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
+#             density_inversion_df = density_inversion(satellite, velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
+#                         models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
 
-            datenow = datetime.now().strftime("%Y%m%d%H%M%S")
-            savepath = f"{output_folder}/StormAnalysis/{satellite}"
-            os.makedirs(savepath, exist_ok=True)
-            output_path = savepath + f"/{satellite}_storm_density_{period_index}_{df_index}_{datenow}.csv"
-            density_inversion_df.to_csv(output_path)
-            print(f"Data saved to {output_path}")
-        else:
-            print(f"Skipping processing for {satellite} storm {df_index} due to empty DataFrame.")
+#             datenow = datetime.now().strftime("%Y%m%d%H%M%S")
+#             savepath = f"{output_folder}/StormAnalysis/{satellite}"
+#             os.makedirs(savepath, exist_ok=True)
+#             output_path = savepath + f"/{satellite}_storm_density_{period_index}_{df_index}_{datenow}.csv"
+#             density_inversion_df.to_csv(output_path)
+#             print(f"Data saved to {output_path}")
+#         else:
+#             print(f"Skipping processing for {satellite} storm {df_index} due to empty DataFrame.")
 
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) == 5:
-        main_script(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
-    else:
-        create_and_submit_density_jobs()
+# if __name__ == "__main__":
+#     import sys
+#     if len(sys.argv) == 5:
+#         main_script(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+#     else:
+#         create_and_submit_density_jobs()
