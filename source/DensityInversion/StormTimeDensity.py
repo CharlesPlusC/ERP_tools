@@ -180,11 +180,11 @@ def create_and_submit_density_jobs():
 #$ -o {logs_folder}/out_{satellite}_period{period_index}_$TASK_ID.txt
 #$ -e {logs_folder}/err_{satellite}_period{period_index}_$TASK_ID.txt
 
-module load python/miniconda3/latest
-source $CONDA_PREFIX/etc/profile.d/conda.sh
+module load python/miniconda3/4.10.3
+source $UCL_CONDA_PATH/etc/profile.d/conda.sh
+conda activate erp_tools_env
 
-conda activate myenv
-python {user_home_dir}/path/to/main_script.py {satellite} {period_index} $SGE_TASK_ID {output_folder}
+/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m {user_home_dir}/Rhoin/ERP_tools/source/DensityInversion/StormTimeDensity.py {satellite} {period_index} $SGE_TASK_ID {output_folder}
 """
                 with open(script_filename, 'w') as file:
                     file.write(script_content)
