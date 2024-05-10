@@ -190,7 +190,7 @@ cp -r {user_home_dir}/Rhoin/ERP_tools $TMPDIR
 
 cd $TMPDIR/ERP_tools
 
-/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m source.DensityInversion.StormTimeDensity.py {satellite} {period_index} $SGE_TASK_ID {output_folder}
+/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m source.DensityInversion.StormTimeDensity {satellite} {period_index} $SGE_TASK_ID {output_folder}
 """
                 with open(script_filename, 'w') as file:
                     file.write(script_content)
