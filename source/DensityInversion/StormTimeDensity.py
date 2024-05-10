@@ -152,6 +152,7 @@ def create_and_submit_density_jobs():
     import json
 
     user_home_dir = os.getenv("HOME")
+    project_root_dir = f"{user_home_dir}/Rhoin/ERP_tools/"
     folder_for_jobs = f"{user_home_dir}/Scratch/Rhoin/sge_jobs"
     work_dir = f"{user_home_dir}/Scratch/Rhoin/working"
     logs_folder = f"{user_home_dir}/Scratch/Rhoin/logs"
@@ -183,8 +184,9 @@ def create_and_submit_density_jobs():
 module load python/miniconda3/4.10.3
 source $UCL_CONDA_PATH/etc/profile.d/conda.sh
 conda activate erp_tools_env
+export PYTHONPATH="{project_root_dir}:$PYTHONPATH"
 
-/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m {user_home_dir}/Rhoin/ERP_tools/source/DensityInversion/StormTimeDensity.py {satellite} {period_index} $SGE_TASK_ID {output_folder}
+/home/{os.getenv('USER')}/.conda/envs/erp_tools_env/bin/python -m source.DensityInversion.StormTimeDensity.py {satellite} {period_index} $SGE_TASK_ID {output_folder}
 """
                 with open(script_filename, 'w') as file:
                     file.write(script_content)
