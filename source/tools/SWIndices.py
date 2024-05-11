@@ -319,42 +319,55 @@ def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst
     plt.show()
 
 
+def filter_by_date_range(df, start, end):
+    start_date = pd.to_datetime(start)
+    end_date = pd.to_datetime(end)
+    return df[(df['DateTime'] >= start_date) & (df['DateTime'] <= end_date)]
+
+def distribute_selection(storm_dates, min_days_apart, max_count, already_selected):
+    selected_dates = []
+    for date in storm_dates:
+        if not any((date - sel_date).days < min_days_apart and (date - sel_date).days >= 0 for sel_date in already_selected):
+            if not selected_dates or (date - selected_dates[-1]).days >= min_days_apart:
+                selected_dates.append(date)
+                if len(selected_dates) >= max_count:
+                    break
+    return selected_dates
+
+def select_storms(kp_3hrly):
+    satellite_periods = {
+        'CHAMP': ('2001-01-01', '2010-12-31'),
+        'GRACE-FO-A': ('2019-01-01', '2024-05-06'),
+        'TerraSAR-X': ('2010-01-01', '2024-05-06')
+    }
+
+    storm_levels = ['G5', 'G4', 'G3', 'G2']  # Process from highest to lowest
+    storm_selections = {sat: {level: [] for level in storm_levels} for sat in satellite_periods}
+
+    # Collect storm dates per satellite and storm level
+    for satellite, (start, end) in satellite_periods.items():
+        filtered_storms = filter_by_date_range(kp_3hrly, start, end)
+        already_selected = []
+
+        for level in storm_levels:
+            storm_dates = filtered_storms[filtered_storms['storm_scale'] == level]['DateTime'].dt.date.unique()
+            storm_dates.sort()
+
+            selected_dates = distribute_selection(storm_dates, 5, 10, already_selected)
+            storm_selections[satellite][level] = selected_dates
+            already_selected.extend(selected_dates)
+            already_selected.sort()  # Keep the list sorted to maintain the order
+
+    # Write selected storm periods to a file and print in the specified format
+    with open("output/DensityInversion/PODBasedAccelerometry/selected_storms.txt", "w") as file:
+        for satellite, levels in storm_selections.items():
+            file.write(f"{satellite} Satellite:\n")
+            for level, dates in levels.items():
+                formatted_dates = ' '.join(f"datetime.date({d.year}, {d.month}, {d.day})" for d in dates)
+                file.write(f"  {level}: [{formatted_dates}]\n")
+            file.write("\n")
+
 if __name__ == "__main__":
-    import numpy as np  
-    def distribute_selection(dates, num_selections):
-        if len(dates) <= num_selections:
-            return dates
-        # Choose indices to distribute selections evenly
-        indices = np.round(np.linspace(0, len(dates) - 1, num_selections)).astype(int)
-        return dates[indices]
-    def filter_by_date_range(df, start_date, end_date, date_column='DateTime'):
-        return df[(df[date_column] >= start_date) & (df[date_column] <= end_date)]
-
-    def select_storms(kp_3hrly):
-        satellite_periods = {
-            'CHAMP': ('2001-01-01', '2010-12-31'),
-            'GRACE-FO/A/B': ('2019-01-01', '2024-05-06'),
-            'TerraSAR-X/TanDEM-X': ('2010-01-01', '2024-05-06')
-        }
-
-        storm_levels = ['G2', 'G3', 'G4', 'G5']
-        storm_selections = {sat: {level: [] for level in storm_levels} for sat in satellite_periods}
-
-        # Collect storm dates per satellite and storm level
-        for satellite, (start, end) in satellite_periods.items():
-            filtered_storms = filter_by_date_range(kp_3hrly, start, end)
-            for level in storm_levels:
-                storm_dates = filtered_storms[filtered_storms['storm_scale'] == level]['DateTime'].dt.date.unique()
-                storm_dates.sort()
-                storm_selections[satellite][level] = distribute_selection(storm_dates, 5)
-
-        # Write selected storm periods to a file
-        with open("output/DensityInversion/PODBasedAccelerometry/selected_storms.txt", "w") as file:
-            for satellite, levels in storm_selections.items():
-                file.write(f"{satellite} Satellite:\n")
-                for level, dates in levels.items():
-                    file.write(f"  {level}: {dates}\n")
-                file.write("\n")
 
     daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
 
