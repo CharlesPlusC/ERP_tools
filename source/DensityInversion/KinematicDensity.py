@@ -49,7 +49,7 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
         vel = np.array([ephemeris_df['xv'].iloc[i], ephemeris_df['yv'].iloc[i], ephemeris_df['zv'].iloc[i]])
         state_vector = np.array([ephemeris_df['x'].iloc[i], ephemeris_df['y'].iloc[i], ephemeris_df['z'].iloc[i], vel[0], vel[1], vel[2]])
 
-        if not nc_accs:
+        if not nc_accs: 
             conservative_accelerations = state2acceleration(state_vector, time, 
                                                             settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], 
                                                             **force_model_config)
@@ -94,31 +94,50 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
 if __name__ == "__main__":
     # main()
     # daily_indices, kp3hrly, dst_hrly = get_sw_indices()
-
+    # for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx, densitydf_champ]):
+    # force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    # ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-04')
+    # ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-05 18:00:00']
+    # #make the ephemeris stop 24hrs after the start time
+    # print(f"ephemeris_df: {ephemeris_df.head()}")
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2023-05-06 18:00:00']
+    # print(f"ephemeris_df: {ephemeris_df.head()}")
+    # interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
+    # velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+    # print(f"velacc_ephem: {velacc_ephem.head()}")
+    # vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
+    # density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
+    #                                 models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
     #TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
     # densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
     # densitydf_champ = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
-    # # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
-    # sat_names = ["GRACE-FO-A", "TerraSAR-X", "CHAMP"]
-# for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx, densitydf_champ]):
-    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-04')
-    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-    ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-05 18:00:00']
-    #make the ephemeris stop 24hrs after the start time
-    print(f"ephemeris_df: {ephemeris_df.head()}")
-    ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2023-05-06 18:00:00']
-    print(f"ephemeris_df: {ephemeris_df.head()}")
-    interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-    velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
-    print(f"velacc_ephem: {velacc_ephem.head()}")
-    vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
-    density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
-                                    models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
-    density_dfs = [density_df]
-    #SELECT THE SAT NAME IN USING THE NU
-    plot_relative_density_change(density_dfs, 45, "GRACE-FO-A")
-    # plot_density_arglat_diff(density_dfs, 45, sat_name)
-    # plot_density_data(density_dfs, 45, sat_name)
+
+    champ_storm_1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/CHAMP/CHAMP_storm_density_1_1_20240511081018.csv")
+    champ_storm_2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/CHAMP/CHAMP_storm_density_2_1_20240511080720.csv")
+    champ_storm_3 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/CHAMP/CHAMP_storm_density_3_1_20240511053655.csv")
+    gfoa_storm_1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_0_1_20240511080802.csv")
+    gfoa_storm_2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_1_1_20240511065446.csv")
+    gfoa_storm_3 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_1_1_20240511080634.csv")
+    tsx_storm_1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/TerraSAR-X/TerraSAR-X_storm_density_0_1_20240511071745.csv")
+    tsx_storm_2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/TerraSAR-X/TerraSAR-X_storm_density_1_1_20240511080052.csv")
+    tsx_storm_3 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/TerraSAR-X/TerraSAR-X_storm_density_2_1_20240511073231.csv")
+    # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
+    sat_names = ["GRACE-FO-A", "TerraSAR-X", "CHAMP"]
+    for champ_storms in [champ_storm_1, champ_storm_2, champ_storm_3]:
+        print(f"columns: {champ_storms.columns}")
+        plot_relative_density_change([champ_storms], 45, "CHAMP")
+        plot_density_arglat_diff([champ_storms], 45, "CHAMP")
+        plot_density_data([champ_storms], 45, "CHAMP")
+
+    for gfoa_storms in [gfoa_storm_1, gfoa_storm_2, gfoa_storm_3]:
+        plot_relative_density_change([gfoa_storms], 45, "GRACE-FO-A")
+        plot_density_arglat_diff([gfoa_storms], 45, "GRACE-FO-A")
+        plot_density_data([gfoa_storms], 45, "GRACE-FO-A")
+
+    for tsx_storms in [tsx_storm_1, tsx_storm_2, tsx_storm_3]:
+        plot_relative_density_change([tsx_storms], 45, "TerraSAR-X")
+        plot_density_arglat_diff([tsx_storms], 45, "TerraSAR-X")
+        plot_density_data([tsx_storms], 45, "TerraSAR-X")
     
