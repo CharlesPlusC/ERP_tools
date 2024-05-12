@@ -4,11 +4,11 @@ import seaborn as sns
 import pandas as pd
 from matplotlib.colors import LogNorm
 from pandas.tseries import offsets
-from source.tools.SWIndices import get_sw_indices
 from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates
 from orekit.pyhelpers import datetime_to_absolutedate
 from source.tools.utilities import project_acc_into_HCL, pv_to_kep, interpolate_positions, calculate_acceleration
+from source.tools.SWIndices import get_sw_indices
 from org.orekit.frames import FramesFactory
 import os
 
@@ -139,8 +139,8 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     import pandas as pd
     import seaborn as sns
     from matplotlib.colors import LogNorm
-    from datetime import datetime
-    print(f'')
+    from datetime import datetime, timedelta
+
     sns.set_style("darkgrid", {
         'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white', 
         'axes.labelcolor': 'white', 'xtick.color': 'white', 
@@ -152,15 +152,46 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     density_diff_titles = ['|Computed - JB08|', '|Computed - DTM2000|', '|Computed - NRLMSISE00|']
 
     nrows = len(density_types)
-    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(10, 5 * nrows), dpi=200)
+    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(9, 2 * nrows), dpi=600)
+
+    # Get space weather indices
+    _, kp_3hrly, hourly_dst = get_sw_indices()
+    
+    # Ensure DateTime is timezone-aware in UTC
+    kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
+    hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
+
+    # Ensure all DataFrame indices in data_frames are timezone-aware
+    for i in range(len(data_frames)):
+        if data_frames[i].index.tz is None:
+            data_frames[i].index = data_frames[i].index.tz_localize('UTC')
+        else:
+            data_frames[i].index = data_frames[i].index.tz_convert('UTC')
+
+    # Determine the overall time frame of data_frames
+    start_time = pd.to_datetime(min(df.index.min() for df in data_frames))
+    end_time = pd.to_datetime(max(df.index.max() for df in data_frames))
+
+    # Filter kp_3hrly based on this overall time frame
+    kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
+
+    # Sort by DateTime to avoid odd line connections
+    kp_3hrly = kp_3hrly.sort_values(by='DateTime')
+    hourly_dst = hourly_dst.sort_values(by='DateTime')
+
+    # Find the time of maximum Kp within this frame
+    max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
+
+    # Define analysis period from 12 hours before to 24 hours after this max Kp time
+    analysis_start_time = max_kp_time - timedelta(hours=12)
+    analysis_end_time = max_kp_time + timedelta(hours=32)
+
+    # Filter all data based on this analysis period
+    kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
+    hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
 
     for i, density_df in enumerate(data_frames):
-        #check if the index is a datetime object
-        # if density_df.index.dtype != 'datetime64[ns]':
-        #     density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
-        #     density_df.set_index('UTC', inplace=True)
-
-        density_df = get_arglat_from_df(density_df)
+        density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)].copy()
 
         window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 1
         shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 0
@@ -169,61 +200,92 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
         diff_vmin, diff_vmax = float('inf'), float('-inf')
         for density_type in density_types:
             if density_type in density_df.columns:
-                density_df[f'{density_type}'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
-                median_density = density_df['Computed Density'].median()
-                IQR = density_df['Computed Density'].quantile(0.75) - density_df['Computed Density'].quantile(0.25)
-                lower_bound = median_density - 10 * IQR
-                upper_bound = median_density + 10 * IQR
-                density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
+                smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+                density_df.loc[:, f'{density_type}'] = smoothed_values
+
+                if density_type == 'Computed Density':
+                    median_density = density_df[density_type].median()
+                    IQR = density_df[density_type].quantile(0.75) - density_df[density_type].quantile(0.25)
+                    lower_bound = median_density - 10 * IQR
+                    upper_bound = median_density + 10 * IQR
+                    density_df.loc[:, density_type] = density_df[density_type].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
+
                 if density_type != 'Computed Density':
-                    density_df[f'{density_type} Difference'] = (density_df['Computed Density'] - density_df[f'{density_type}'])
-                    new_diff_vmax = max(diff_vmax, density_df[f'{density_type} Difference'].max())
-                    new_diff_vmin = min(diff_vmin, density_df[f'{density_type} Difference'].min())
-                    newvmin = max(1e-20, density_df[f'{density_type}'].min())
-                    newvmax = max(newvmin + 1e-20, density_df[f'{density_type}'].max())
-                    if new_diff_vmax > diff_vmax:
-                        diff_vmax = new_diff_vmax
-                    if new_diff_vmin < diff_vmin:
-                        diff_vmin = new_diff_vmin
-                    if newvmax > vmax:
-                        vmax = newvmax
-                    if newvmin < vmin:
-                        vmin = newvmin
-
-        # vmin = max(1e-20, density_df['Computed Density'].min())
-        # vmax = max(vmin + 1e-20, density_df['Computed Density'].max())
-        # diff_vmin = min(diff_vmin, -1e-20)
-        # diff_vmax = max(diff_vmax, 1e-20)
-
-        print(f'vmin: {vmin}, vmax: {vmax}, diff_vmin: {diff_vmin}, diff_vmax: {diff_vmax}')
+                    density_df.loc[:, f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
+                    diff_vmax = max(diff_vmax, density_df[f'{density_type} Difference'].max())
+                    diff_vmin = min(diff_vmin, density_df[f'{density_type} Difference'].min())
+                    vmax = max(vmax, density_df[density_type].max())
+                    vmin = min(vmin, density_df[density_type].min())
 
         for j, density_type in enumerate(density_types):
             if f'{density_type}' in density_df.columns:
-                sc = axes[j, 0].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type}'], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
+                sc = axes[j, 0].scatter(density_df.index, density_df['arglat'], c=density_df[density_type], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
                 axes[j, 0].set_title(titles[j], fontsize=12)
                 axes[j, 0].set_xlabel('Time (UTC)')
-                #rotate the x-axis labels
                 for label in axes[j, 0].get_xticklabels():
                     label.set_rotation(45)
                     label.set_horizontalalignment('right')
                 axes[j, 0].set_ylabel('Argument of Latitude')
                 cbar = fig.colorbar(sc, ax=axes[j, 0])
                 cbar.set_label('Density (kg/m³)', rotation=270, labelpad=15)
-            
+
             if density_type != 'Computed Density' and f'{density_type} Difference' in density_df.columns:
                 sc_diff = axes[j, 1].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} Difference'], cmap='coolwarm', alpha=0.6, edgecolor='none', vmin=diff_vmin, vmax=diff_vmax)
                 axes[j, 1].set_title(density_diff_titles[j - 1], fontsize=12)
                 axes[j, 1].set_xlabel('Time (UTC)')
-                for label in axes[j, 0].get_xticklabels():
+                for label in axes[j, 1].get_xticklabels():
                     label.set_rotation(45)
                     label.set_horizontalalignment('right')
                 axes[j, 1].set_ylabel('Argument of Latitude')
                 cbar_diff = fig.colorbar(sc_diff, ax=axes[j, 1])
                 cbar_diff.set_label('Density Difference (kg/m³)', rotation=270, labelpad=15)
 
-    plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name}')
+    ax_right_top = axes[0, 1]
+    ax_kp = ax_right_top.twinx()
+
+    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], 'b-', label='Dst (nT)', linewidth=2)
+    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], 'r-', label='Kp', linewidth=2)
+
+    ax_right_top.set_xlabel('Time (UTC)')
+    ax_right_top.set_ylabel('Dst (nT)', color='b')
+    ax_right_top.yaxis.label.set_color('blue')  # Ensures the y-axis label is blue
+    ax_right_top.set_ylim(-300, 50)  # Fix the y-axis range for Dst
+
+    ax_kp.set_ylabel('Kp', color='r')
+    ax_kp.yaxis.label.set_color('red')  # Ensures the y-axis label is red
+    ax_kp.set_ylim(0, 9)  # Fix the y-axis range for Kp
+
+    for label in ax_right_top.get_xticklabels() + ax_kp.get_xticklabels():
+        label.set_rotation(45)
+        label.set_horizontalalignment('right')
+
+    lines, labels = ax_right_top.get_legend_handles_labels()
+    lines2, labels2 = ax_kp.get_legend_handles_labels()
+    ax_kp.legend(lines + lines2, labels + labels2, loc='upper right')
+
+    # Determine the storm category based on the highest Kp value
+    max_kp_value = kp_3hrly_analysis['Kp'].max()
+    if max_kp_value < 5:
+        storm_category = "Below G1"
+    elif max_kp_value < 6:
+        storm_category = "G1"
+    elif max_kp_value < 7:
+        storm_category = "G2"
+    elif max_kp_value < 8:
+        storm_category = "G3"
+    elif max_kp_value < 9:
+        storm_category = "G4"
+    else:
+        storm_category = "G5"
+
+    # Include the storm category in the title
+    #get the day, month and year of the analysis_start_time
+    day = analysis_start_time.day
+    month = analysis_start_time.month
+    year = analysis_start_time.year
+    plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name} - {storm_category} Storm\n{day}/{month}/{year}', color='white')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     sns.set_style(style="whitegrid")
