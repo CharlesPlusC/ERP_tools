@@ -114,30 +114,27 @@ if __name__ == "__main__":
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
     # densitydf_champ = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
 
-    champ_storm_1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/CHAMP/CHAMP_storm_density_1_1_20240511081018.csv")
-    champ_storm_2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/CHAMP/CHAMP_storm_density_2_1_20240511080720.csv")
-    champ_storm_3 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/CHAMP/CHAMP_storm_density_3_1_20240511053655.csv")
-    gfoa_storm_1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_0_1_20240511080802.csv")
-    gfoa_storm_2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_1_1_20240511065446.csv")
-    gfoa_storm_3 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_1_1_20240511080634.csv")
-    tsx_storm_1 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/TerraSAR-X/TerraSAR-X_storm_density_0_1_20240511071745.csv")
-    tsx_storm_2 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/TerraSAR-X/TerraSAR-X_storm_density_1_1_20240511080052.csv")
-    tsx_storm_3 = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/TerraSAR-X/TerraSAR-X_storm_density_2_1_20240511073231.csv")
-    # #read in the x,y,z,xv,yv,zv, and UTC from the densitydf_df
-    sat_names = ["GRACE-FO-A", "TerraSAR-X", "CHAMP"]
-    for champ_storms in [champ_storm_1, champ_storm_2, champ_storm_3]:
-        print(f"columns: {champ_storms.columns}")
-        plot_relative_density_change([champ_storms], 45, "CHAMP")
-        plot_density_arglat_diff([champ_storms], 45, "CHAMP")
-        plot_density_data([champ_storms], 45, "CHAMP")
+    # instead of continuing to manually list the paths just iterate over the list of satellite names in "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    # Base directory for storm analysis
+    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
-    for gfoa_storms in [gfoa_storm_1, gfoa_storm_2, gfoa_storm_3]:
-        plot_relative_density_change([gfoa_storms], 45, "GRACE-FO-A")
-        plot_density_arglat_diff([gfoa_storms], 45, "GRACE-FO-A")
-        plot_density_data([gfoa_storms], 45, "GRACE-FO-A")
+    # List of satellite names
+    sat_names = ["TerraSAR-X", "CHAMP"] #"GRACE-FO-A"
 
-    for tsx_storms in [tsx_storm_1, tsx_storm_2, tsx_storm_3]:
-        plot_relative_density_change([tsx_storms], 45, "TerraSAR-X")
-        plot_density_arglat_diff([tsx_storms], 45, "TerraSAR-X")
-        plot_density_data([tsx_storms], 45, "TerraSAR-X")
-    
+    for sat_name in sat_names:
+        # Correctly set the path for the current satellite
+        storm_analysis_dir = os.path.join(base_dir, sat_name)
+        
+        # Check if the directory exists before listing files
+        if os.path.exists(storm_analysis_dir):
+            for storm_file in os.listdir(storm_analysis_dir):
+                # Form the full path to the storm file
+                storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+                
+                # Check if it's actually a file
+                if os.path.isfile(storm_file_path):
+                    storm_df = pd.read_csv(storm_file_path)
+                    plot_relative_density_change([storm_df], 45, sat_name)
+                    plot_density_arglat_diff([storm_df], 45, sat_name)
+                    plot_density_data([storm_df], 45, sat_name)
+        
