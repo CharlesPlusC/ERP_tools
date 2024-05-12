@@ -16,7 +16,7 @@ import pandas as pd
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 from ..tools.SWIndices import get_sw_indices
-from .Plotting.PODDerivedDensityPlotting import plot_density_arglat_diff, plot_density_data, plot_relative_density_change, density_compare_scatter
+from .Plotting.PODDerivedDensityPlotting import get_arglat_from_df, plot_density_arglat_diff, plot_density_data, plot_relative_density_change, density_compare_scatter
 
 def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, force_model_config, nc_accs=False, models_to_query=['JB08'], density_freq='15S'):
     sat_info = get_satellite_info(sat_name)
@@ -116,27 +116,153 @@ if __name__ == "__main__":
 
     # instead of continuing to manually list the paths just iterate over the list of satellite names in "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # Base directory for storm analysis
-    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
-    # List of satellite names
-    sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
+    # # List of satellite names
+    # sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
 
-    for sat_name in sat_names:
-        # Correctly set the path for the current satellite
-        storm_analysis_dir = os.path.join(base_dir, sat_name)
+    # for sat_name in sat_names:
+    #     # Correctly set the path for the current satellite
+    #     storm_analysis_dir = os.path.join(base_dir, sat_name)
         
-        # Check if the directory exists before listing files
-        if os.path.exists(storm_analysis_dir):
-            for storm_file in os.listdir(storm_analysis_dir):
-                # Form the full path to the storm file
-                storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+    #     # Check if the directory exists before listing files
+    #     if os.path.exists(storm_analysis_dir):
+    #         for storm_file in os.listdir(storm_analysis_dir):
+    #             # Form the full path to the storm file
+    #             storm_file_path = os.path.join(storm_analysis_dir, storm_file)
                 
-                # Check if it's actually a file
-                if os.path.isfile(storm_file_path):
-                    storm_df = pd.read_csv(storm_file_path) 
-                    plot_relative_density_change([storm_df], 45, sat_name)
-                    plot_density_arglat_diff([storm_df], 45, sat_name)
-                    plot_density_data([storm_df], 45, sat_name)
+    #             # Check if it's actually a file
+    #             if os.path.isfile(storm_file_path):
+    #                 storm_df = pd.read_csv(storm_file_path) 
+    #                 plot_relative_density_change([storm_df], 45, sat_name)
+    #                 plot_density_arglat_diff([storm_df], 45, sat_name)
+    #                 plot_density_data([storm_df], 45, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name)
 
 #TODO: make megaplot with all 
+    import os
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    import seaborn as sns
+    from datetime import datetime, timedelta
+
+    def determine_storm_category(kp_max):
+        if kp_max < 5:
+            return "Below G1"
+        elif kp_max < 6:
+            return "G1"
+        elif kp_max < 7:
+            return "G2"
+        elif kp_max < 8:
+            return "G3"
+        elif kp_max < 9:
+            return "G4"
+        else:
+            return "G5"
+    import os
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    import seaborn as sns
+    from datetime import datetime, timedelta
+    from matplotlib.dates import DateFormatter
+
+    def plot_computed_density_for_satellite(base_dir, sat_name, moving_avg_minutes=45):
+        storm_analysis_dir = os.path.join(base_dir, sat_name)
+        if not os.path.exists(storm_analysis_dir):
+            print(f"No data directory found for {sat_name}")
+            return
+        
+        _, kp_3hrly, hourly_dst = get_sw_indices()
+        kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
+        hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
+
+        storm_data = []
+
+        for storm_file in sorted(os.listdir(storm_analysis_dir)):
+            storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+            if os.path.isfile(storm_file_path):
+                df = pd.read_csv(storm_file_path)
+                df['UTC'] = pd.to_datetime(df['UTC'], utc=True)
+                df.set_index('UTC', inplace=True)
+                df.index = df.index.tz_convert('UTC')
+
+                df = get_arglat_from_df(df)
+
+                # Calculate the moving average for density
+                window_size = (moving_avg_minutes * 60) // 30
+                density_types = ['Computed Density']  # Add other density types if needed
+                for density_type in density_types:
+                    if density_type in df.columns:
+                        df[density_type] = df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
+
+                start_time = df.index.min()
+                end_time = df.index.max()
+
+                kp_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
+                max_kp_value = kp_filtered['Kp'].max() if not kp_filtered.empty else 0
+
+                storm_category = determine_storm_category(max_kp_value)
+                storm_number = -int(storm_category[1:]) if storm_category != "Below G1" else 0
+
+                storm_data.append((df, start_time, storm_category, storm_number))
+
+        storm_data.sort(key=lambda x: x[3], reverse=True)
+
+        num_storms = len(storm_data)
+        nrows = int(np.ceil(num_storms / 3))
+        ncols = 3 if num_storms > 2 else num_storms
+        
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5 * ncols, 3 * nrows), dpi=100)
+        axes = axes.flatten()
+
+        cmap = 'cubehelix'
+
+        all_densities = np.concatenate([df['Computed Density'] for df, _, _, _ in storm_data if 'Computed Density' in df])
+        positive_densities = all_densities[all_densities > 0]
+
+        if positive_densities.size == 0:
+            raise ValueError("No positive densities found. Check your data.")
+
+        # density_vmin = positive_densities.min()
+        # density_vmax = positive_densities.max()
+        density_vmin = 5e-13
+        density_vmax = 5e-11
+        norm = LogNorm(vmin=density_vmin, vmax=density_vmax)
+
+        for i, (df, start_time, storm_category, storm_number) in enumerate(storm_data):
+            # Set plot range to 5 days from start_time
+            plot_end_time = start_time + timedelta(days=3)
+            plot_df = df[(df.index >= start_time) & (df.index <= plot_end_time)]
+            
+            densities = np.clip(plot_df['Computed Density'], density_vmin, density_vmax)
+            sc = axes[i].scatter(plot_df.index, plot_df['arglat'], c=densities, cmap=cmap, alpha=0.6, edgecolor='none', norm=norm)
+            axes[i].set_title(f'{start_time.strftime("%Y-%m")}, {storm_category}', fontsize=10)
+            axes[i].set_ylabel('')
+            axes[i].set_xlabel('')
+            
+            axes[i].set_xlim([start_time, plot_end_time])
+            # axes[i].xaxis.set_major_locator(plt.MaxNLocator(3))
+            # axes[i].xaxis.set_major_formatter(DateFormatter('%m-%d %H:%M'))
+            #remove the x-axis labels
+            axes[i].set_xticklabels([])
+            #remove the y-axis labels
+            axes[i].set_yticklabels([])
+            plt.setp(axes[i].get_xticklabels(), rotation=45, ha="right")
+
+        plt.tight_layout()
+
+        cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+        cbar = plt.colorbar(sc, cax=cbar_ax)
+        cbar.set_label('Computed Density (kg/m³)', rotation=270, labelpad=15)
+
+        plt.savefig(f'{sat_name}_computed_density_plots.png', dpi=300, bbox_inches='tight')
+        plt.show()
+
+    # Example Usage
+    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    sat_name = "CHAMP"
+    plot_computed_density_for_satellite(base_dir, sat_name)

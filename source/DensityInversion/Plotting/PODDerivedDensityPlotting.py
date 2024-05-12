@@ -152,7 +152,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     density_diff_titles = ['Computed - JB08', 'Computed - DTM2000', 'Computed - NRLMSISE00']
 
     nrows = len(density_types)
-    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(10, 2 * nrows), dpi=600)
+    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(9, 2 * nrows), dpi=600)
 
     _, kp_3hrly, hourly_dst = get_sw_indices()
     
@@ -259,7 +259,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
 
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name} - {storm_category} Storm\n{day}/{month}/{year}', color='white')
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.tight_layout()
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def plot_density_data(data_frames, moving_avg_minutes, sat_name):
@@ -295,7 +295,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     plt.legend(loc='upper right', frameon=True)
     plt.yscale('log')
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
 
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
