@@ -16,7 +16,7 @@ import pandas as pd
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 from ..tools.SWIndices import get_sw_indices
-from .Plotting.PODDerivedDensityPlotting import plot_density_arglat_diff, plot_density_data, plot_relative_density_change
+from .Plotting.PODDerivedDensityPlotting import plot_density_arglat_diff, plot_density_data, plot_relative_density_change, density_compare_scatter
 
 def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, force_model_config, nc_accs=False, models_to_query=['JB08'], density_freq='15S'):
     sat_info = get_satellite_info(sat_name)
@@ -136,6 +136,7 @@ if __name__ == "__main__":
                     storm_df = pd.read_csv(storm_file_path) 
                     plot_relative_density_change([storm_df], 45, sat_name)
                     plot_density_arglat_diff([storm_df], 45, sat_name)
-                    # plot_density_data([storm_df], 45, sat_name)
+                    plot_density_data([storm_df], 45, sat_name)
+                    # density_compare_scatter([storm_df], 45, sat_name)
 
 #TODO: make megaplot with all 

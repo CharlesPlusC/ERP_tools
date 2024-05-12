@@ -149,44 +149,32 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     
     density_types = ['Computed Density', 'JB08', 'DTM2000', 'NRLMSISE00']
     titles = ['Computed Density', 'JB08 Density', 'DTM2000 Density', 'NRLMSISE00 Density']
-    density_diff_titles = ['|Computed - JB08|', '|Computed - DTM2000|', '|Computed - NRLMSISE00|']
+    density_diff_titles = ['Computed - JB08', 'Computed - DTM2000', 'Computed - NRLMSISE00']
 
     nrows = len(density_types)
-    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(9, 2 * nrows), dpi=600)
+    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(10, 2 * nrows), dpi=600)
 
-    # Get space weather indices
     _, kp_3hrly, hourly_dst = get_sw_indices()
     
-    # Ensure DateTime is timezone-aware in UTC
     kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
     hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
 
-    # Ensure all DataFrame indices in data_frames are timezone-aware
     for i in range(len(data_frames)):
-        if data_frames[i].index.tz is None:
-            data_frames[i].index = data_frames[i].index.tz_localize('UTC')
-        else:
-            data_frames[i].index = data_frames[i].index.tz_convert('UTC')
+        data_frames[i].index = data_frames[i].index.tz_localize('UTC') if data_frames[i].index.tz is None else data_frames[i].index.tz_convert('UTC')
 
-    # Determine the overall time frame of data_frames
     start_time = pd.to_datetime(min(df.index.min() for df in data_frames))
     end_time = pd.to_datetime(max(df.index.max() for df in data_frames))
 
-    # Filter kp_3hrly based on this overall time frame
     kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
 
-    # Sort by DateTime to avoid odd line connections
     kp_3hrly = kp_3hrly.sort_values(by='DateTime')
     hourly_dst = hourly_dst.sort_values(by='DateTime')
 
-    # Find the time of maximum Kp within this frame
     max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
 
-    # Define analysis period from 12 hours before to 24 hours after this max Kp time
-    analysis_start_time = max_kp_time - timedelta(hours=12)
-    analysis_end_time = max_kp_time + timedelta(hours=32)
+    analysis_start_time = max_kp_time - timedelta(hours=24)
+    analysis_end_time = max_kp_time + timedelta(hours=36)
 
-    # Filter all data based on this analysis period
     kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
     hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
 
@@ -221,68 +209,55 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
             if f'{density_type}' in density_df.columns:
                 sc = axes[j, 0].scatter(density_df.index, density_df['arglat'], c=density_df[density_type], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
                 axes[j, 0].set_title(titles[j], fontsize=12)
-                axes[j, 0].set_xlabel('Time (UTC)')
+                axes[j, 0].set_ylabel('Arg. Lat.')
+                axes[j, 0].set_yticks([-180, 0, 180])
+                cbar = fig.colorbar(sc, ax=axes[j, 0])
+                cbar.set_label('Density (kg/m³)', rotation=270, labelpad=15)
+                if j != nrows - 1:
+                    axes[j, 0].set_xticklabels([])
+                else:
+                    axes[j, 0].set_xlabel('Time (UTC)')
                 for label in axes[j, 0].get_xticklabels():
                     label.set_rotation(45)
                     label.set_horizontalalignment('right')
-                axes[j, 0].set_ylabel('Argument of Latitude')
-                cbar = fig.colorbar(sc, ax=axes[j, 0])
-                cbar.set_label('Density (kg/m³)', rotation=270, labelpad=15)
 
             if density_type != 'Computed Density' and f'{density_type} Difference' in density_df.columns:
                 sc_diff = axes[j, 1].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} Difference'], cmap='coolwarm', alpha=0.6, edgecolor='none', vmin=diff_vmin, vmax=diff_vmax)
                 axes[j, 1].set_title(density_diff_titles[j - 1], fontsize=12)
-                axes[j, 1].set_xlabel('Time (UTC)')
+                axes[j, 1].set_ylabel('Arg. Lat.')
+                axes[j, 1].set_yticks([-180, 0, 180])
+                cbar_diff = fig.colorbar(sc_diff, ax=axes[j, 1])
+                cbar_diff.set_label('Δ Density (kg/m³)', rotation=270, labelpad=15)
+                if j != nrows - 1:
+                    axes[j, 1].set_xticklabels([])
+                else:
+                    axes[j, 1].set_xlabel('Time (UTC)')
                 for label in axes[j, 1].get_xticklabels():
                     label.set_rotation(45)
                     label.set_horizontalalignment('right')
-                axes[j, 1].set_ylabel('Argument of Latitude')
-                cbar_diff = fig.colorbar(sc_diff, ax=axes[j, 1])
-                cbar_diff.set_label('Density Difference (kg/m³)', rotation=270, labelpad=15)
 
     ax_right_top = axes[0, 1]
     ax_kp = ax_right_top.twinx()
 
-    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], 'b-', label='Dst (nT)', linewidth=2)
-    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], 'r-', label='Kp', linewidth=2)
+    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c = 'xkcd:violet')
+    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c = 'xkcd:hot pink')
+    plt.setp(ax_right_top.get_xticklabels(), visible=False)
+    ax_right_top.set_ylabel('Dst (nT)', color='xkcd:violet')
+    ax_right_top.yaxis.label.set_color('xkcd:violet')
+    ax_right_top.set_ylim(50, -300)
+    ax_right_top.tick_params(axis='y', colors='xkcd:violet')
 
-    ax_right_top.set_xlabel('Time (UTC)')
-    ax_right_top.set_ylabel('Dst (nT)', color='b')
-    ax_right_top.yaxis.label.set_color('blue')  # Ensures the y-axis label is blue
-    ax_right_top.set_ylim(-300, 50)  # Fix the y-axis range for Dst
+    ax_kp.set_ylabel('Kp', color='xkcd:hot pink')
+    ax_kp.yaxis.label.set_color('xkcd:hot pink')
+    ax_kp.set_ylim(0, 9)
+    ax_kp.tick_params(axis='y', colors='xkcd:hot pink')
+    #set the ticks to be every 1
+    ax_kp.set_yticks(np.arange(0, 10, 3))
 
-    ax_kp.set_ylabel('Kp', color='r')
-    ax_kp.yaxis.label.set_color('red')  # Ensures the y-axis label is red
-    ax_kp.set_ylim(0, 9)  # Fix the y-axis range for Kp
-
-    for label in ax_right_top.get_xticklabels() + ax_kp.get_xticklabels():
-        label.set_rotation(45)
-        label.set_horizontalalignment('right')
-
-    lines, labels = ax_right_top.get_legend_handles_labels()
-    lines2, labels2 = ax_kp.get_legend_handles_labels()
-    ax_kp.legend(lines + lines2, labels + labels2, loc='upper right')
-
-    # Determine the storm category based on the highest Kp value
     max_kp_value = kp_3hrly_analysis['Kp'].max()
-    if max_kp_value < 5:
-        storm_category = "Below G1"
-    elif max_kp_value < 6:
-        storm_category = "G1"
-    elif max_kp_value < 7:
-        storm_category = "G2"
-    elif max_kp_value < 8:
-        storm_category = "G3"
-    elif max_kp_value < 9:
-        storm_category = "G4"
-    else:
-        storm_category = "G5"
+    storm_category = "Below G1" if max_kp_value < 5 else "G1" if max_kp_value < 6 else "G2" if max_kp_value < 7 else "G3" if max_kp_value < 8 else "G4" if max_kp_value < 9 else "G5"
 
-    # Include the storm category in the title
-    #get the day, month and year of the analysis_start_time
-    day = analysis_start_time.day
-    month = analysis_start_time.month
-    year = analysis_start_time.year
+    day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name} - {storm_category} Storm\n{day}/{month}/{year}', color='white')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
@@ -296,14 +271,6 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     # First plot for the computed densities MAs
     plt.figure(figsize=(8, 4))
     for i, density_df in enumerate(data_frames):
-        print(f'Processing density_df {i+1}')
-        print(f'columns: {density_df.columns}')
-        # if density_df['UTC'].dtype != 'datetime64[ns]':
-        #     density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
-        # if not isinstance(density_df.index, pd.DatetimeIndex):
-        #     density_df.set_index('UTC', inplace=True)
-        # if pd.infer_freq(density_df.index) is None:
-        #     density_df = density_df.asfreq('infer')
         seconds_per_point = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
         window_size = (moving_avg_minutes * 60) // seconds_per_point
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
@@ -312,36 +279,23 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
         mean_density = density_df['Computed Density'].mean()
         density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: mean_density if x > 100 * mean_density or x < mean_density / 100 else x)
 
-        sns.lineplot(data=density_df, x=density_df.index, y='Computed Density', label=f'Computed Density', linestyle='--')
-        sns.lineplot(data=density_df, x=density_df.index, y='JB08', label=f'JB08 Density')
-        sns.lineplot(data=density_df, x=density_df.index, y='DTM2000', label=f'DTM2000 Density')
-        sns.lineplot(data=density_df, x=density_df.index, y='NRLMSISE00', label=f'NRLMSISE00 Density')
-
-    plt.title(f'Computed and Modelled Atmospheric Density for {sat_name}', fontsize=14)
-    plt.xlabel('Time (UTC)', fontsize=14)
-    plt.ylabel('Density (log scale)', fontsize=14)
-    plt.legend(loc='upper right', frameon=True)
-    plt.yscale('log')
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    datenow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/computed_density_moving_averages_{datenow}.png', dpi=600)
-
     # Second plot for the first data frame with model densities along with computed densities
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[-3])
-    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[-2])
-    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[-1])
+    plt.figure(figsize=(6, 4))
+    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color="xkcd:forest green")
+    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color="xkcd:orange")
+    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color="xkcd:turquoise")
 
     # Include computed densities from all data frames again on the same plot
     for i, density_df in enumerate(data_frames):
-        sns.lineplot(data=density_df, x=density_df.index, y='Computed Density', label=f'Computed Density {i+1}', linestyle='--', palette=[custom_palette[i]])
+        sns.lineplot(data=density_df, x=density_df.index, y='Computed Density', label=f'Computed Density', linestyle='--', color="xkcd:hot pink")
 
-    plt.title('Model Densities vs. Computed Density Moving Averages', fontsize=14)
-    plt.xlabel('Time (UTC)', fontsize=14)
-    plt.ylabel('Density (log scale)', fontsize=14)
+    plt.title('Model Densities vs. Computed Densities', fontsize=12)
+    plt.xlabel('Time (UTC)', fontsize=12)
+    plt.ylabel('Density (log scale)', fontsize=12)
     plt.legend(loc='upper right', frameon=True)
     plt.yscale('log')
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
 
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
@@ -352,8 +306,8 @@ def density_compare_scatter(density_df, moving_avg_window, sat_name):
 
     # Convert moving average minutes to the number of points based on data frequency
     if not isinstance(density_df.index, pd.DatetimeIndex):
-        density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True)
-        density_df.set_index('Epoch', inplace=True)
+        density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
+        density_df.set_index('UTC', inplace=True)
     
     # Calculate moving average for the Computed Density
     freq_in_seconds = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
