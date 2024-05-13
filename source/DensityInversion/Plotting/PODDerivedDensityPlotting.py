@@ -11,6 +11,9 @@ from source.tools.utilities import project_acc_into_HCL, pv_to_kep, interpolate_
 from source.tools.SWIndices import get_sw_indices
 from org.orekit.frames import FramesFactory
 import os
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime
 
 def get_arglat_from_df(densitydf_df):
     frame = FramesFactory.getEME2000()
@@ -364,3 +367,110 @@ def density_compare_scatter(density_df, moving_avg_window, sat_name):
         plot_filename = f'comparison_{model.replace(" ", "_")}_time.png'
         plt.savefig(os.path.join(save_path, plot_filename))
         plt.close()
+
+
+
+def determine_storm_category(kp_max):
+    if kp_max < 5:
+        return "Below G1"
+    elif kp_max < 6:
+        return "G1"
+    elif kp_max < 7:
+        return "G2"
+    elif kp_max < 8:
+        return "G3"
+    elif kp_max < 9:
+        return "G4"
+    else:
+        return "G5"
+
+def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
+    storm_analysis_dir = os.path.join(base_dir, sat_name)
+    if not os.path.exists(storm_analysis_dir):
+        print(f"No data directory found for {sat_name}")
+        return
+    
+    _, kp_3hrly, hourly_dst = get_sw_indices()
+    kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
+    hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
+
+    storm_data = []
+    unique_dates = set()
+
+    for storm_file in sorted(os.listdir(storm_analysis_dir)):
+        storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+        if os.path.isfile(storm_file_path):
+            df = pd.read_csv(storm_file_path)
+            df['UTC'] = pd.to_datetime(df['UTC'], utc=True)
+            df.set_index('UTC', inplace=True)
+            df.index = df.index.tz_convert('UTC')
+
+            start_time = df.index.min()
+            if start_time.strftime("%Y-%m-%d") in unique_dates:
+                continue
+            unique_dates.add(start_time.strftime("%Y-%m-%d"))
+
+            df = get_arglat_from_df(df)
+
+            density_types = ['Computed Density']
+            for density_type in density_types:
+                if density_type in df.columns:
+                    df[density_type] = df[density_type].rolling(window=moving_avg_minutes, min_periods=1, center=True).mean()
+
+            kp_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= start_time + datetime.timedelta(days=3))]
+            max_kp_time = kp_filtered.loc[kp_filtered['Kp'].idxmax()]['DateTime'] if not kp_filtered.empty else start_time
+
+            storm_category = determine_storm_category(kp_filtered['Kp'].max())
+            storm_number = -int(storm_category[1:]) if storm_category != "Below G1" else 0
+
+            # Adjust the plotting times based on the max Kp time
+            adjusted_start_time = max_kp_time - datetime.timedelta(hours=12)
+            adjusted_end_time = max_kp_time + datetime.timedelta(hours=32)
+
+            storm_data.append((df, adjusted_start_time, adjusted_end_time, storm_category, storm_number))
+
+    storm_data.sort(key=lambda x: x[4], reverse=True)
+
+    num_storms = len(storm_data)
+    ncols = 4
+    nrows = (num_storms + ncols - 1) // ncols  # This ensures we don't have any extra blank rows
+    
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(2.2 * ncols, 1 * nrows), dpi=600)
+    axes = axes.flatten()
+
+    # Hide unused axes if the number of plots isn't a perfect multiple of nrows * ncols
+    for i in range(len(storm_data), len(axes)):
+        axes[i].set_visible(False)
+
+    cmap = 'nipy_spectral'
+
+    for i, (df, adjusted_start_time, adjusted_end_time, storm_category, storm_number) in enumerate(storm_data):
+        if 'x' in df.columns and 'y' in df.columns and 'z' in df.columns:
+            first_x, first_y, first_z = df.iloc[0][['x', 'y', 'z']]
+            altitude = ((first_x**2 + first_y**2 + first_z**2)**0.5 - 6378137) / 1000
+        else:
+            altitude = 0  # Default to 0 if x, y, z are not available
+
+        plot_df = df[(df.index >= adjusted_start_time) & (df.index <= adjusted_end_time)]
+        
+        local_min_density = plot_df['Computed Density'].min()
+        local_max_density = plot_df['Computed Density'].max()
+
+        relative_densities = (plot_df['Computed Density'] - local_min_density) / (local_max_density - local_min_density)
+        
+        sc = axes[i].scatter(plot_df.index, plot_df['arglat'], c=relative_densities, cmap=cmap, alpha=0.7, edgecolor='none', s=5)
+        axes[i].set_title(f'{adjusted_start_time.strftime("%Y-%m-%d")}, {storm_category}, {altitude:.0f}km', fontsize=10)
+        axes[i].set_ylabel(' ')
+        axes[i].set_xlabel(' ')
+        axes[i].set_xticks([])
+        axes[i].set_yticks([])
+
+    plt.subplots_adjust(left=0.055, bottom=0.012, right=0.905, top=0.967, wspace=0.2, hspace=0.288)
+
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    sm = plt.cm.ScalarMappable(cmap=cmap)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, cax=cbar_ax)
+    cbar.set_label('Normalized Computed Density', rotation=270, labelpad=15)
+
+    plt.savefig(f'{sat_name}_computed_density_plots.png', dpi=300, bbox_inches='tight')
