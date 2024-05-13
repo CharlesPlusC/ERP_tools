@@ -39,7 +39,7 @@ def get_arglat_from_df(densitydf_df):
 
     return densitydf_df
 
-def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name, start_date=None, stop_date=None):
+def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name):
     sns.set_style("darkgrid", {
         'axes.facecolor': '#2d2d2d', 'axes.edgecolor': 'white',
         'axes.labelcolor': 'white', 'xtick.color': 'white',
@@ -169,8 +169,6 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     end_time = pd.to_datetime(max(df.index.max() for df in data_frames))
 
     kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
-
-    kp_3hrly = kp_3hrly.sort_values(by='DateTime')
     hourly_dst = hourly_dst.sort_values(by='DateTime')
 
     max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
@@ -187,29 +185,19 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
         window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 1
         shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 0
 
-        vmin, vmax = float('inf'), float('-inf')
-        diff_vmin, diff_vmax = float('inf'), float('-inf')
         for density_type in density_types:
-            if density_type in density_df.columns:
-                smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
-                density_df.loc[:, f'{density_type}'] = smoothed_values
-
-                if density_type == 'Computed Density':
-                    median_density = density_df[density_type].median()
-                    IQR = density_df[density_type].quantile(0.75) - density_df[density_type].quantile(0.25)
-                    lower_bound = median_density - 10 * IQR
-                    upper_bound = median_density + 10 * IQR
-                    density_df.loc[:, density_type] = density_df[density_type].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
-
-                if density_type != 'Computed Density':
-                    density_df.loc[:, f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
-                    diff_vmax = max(diff_vmax, density_df[f'{density_type} Difference'].max())
-                    diff_vmin = min(diff_vmin, density_df[f'{density_type} Difference'].min())
-                    vmax = max(vmax, density_df[density_type].max())
-                    vmin = min(vmin, density_df[density_type].min())
+            if density_type == 'Computed Density':
+                density_df[density_type] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+                median_density = density_df[density_type].median()
+                IQR = density_df[density_type].quantile(0.75) - density_df[density_type].quantile(0.25)
+                lower_bound = median_density - 10 * IQR
+                upper_bound = median_density + 10 * IQR
+                density_df[density_type] = density_df[density_type].clip(lower_bound, upper_bound)
 
         for j, density_type in enumerate(density_types):
-            if f'{density_type}' in density_df.columns:
+            vmin = density_df[density_type].min() if density_type in density_df.columns else float('inf')
+            vmax = density_df[density_type].max() if density_type in density_df.columns else float('-inf')
+            if density_type in density_df.columns:
                 sc = axes[j, 0].scatter(density_df.index, density_df['arglat'], c=density_df[density_type], cmap='cubehelix', alpha=0.6, edgecolor='none', norm=LogNorm(vmin=vmin, vmax=vmax))
                 axes[j, 0].set_title(titles[j], fontsize=12)
                 axes[j, 0].set_ylabel('Arg. Lat.')
@@ -224,7 +212,10 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
                     label.set_rotation(45)
                     label.set_horizontalalignment('right')
 
-            if density_type != 'Computed Density' and f'{density_type} Difference' in density_df.columns:
+            if density_type != 'Computed Density' and density_type in density_df.columns:
+                diff_vmin = density_df['Computed Density'] - density_df[density_type].max()
+                diff_vmax = density_df['Computed Density'] - density_df[density_type].min()
+                density_df[f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
                 sc_diff = axes[j, 1].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} Difference'], cmap='coolwarm', alpha=0.6, edgecolor='none', vmin=diff_vmin, vmax=diff_vmax)
                 axes[j, 1].set_title(density_diff_titles[j - 1], fontsize=12)
                 axes[j, 1].set_ylabel('Arg. Lat.')
@@ -254,7 +245,6 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     ax_kp.yaxis.label.set_color('xkcd:hot pink')
     ax_kp.set_ylim(0, 9)
     ax_kp.tick_params(axis='y', colors='xkcd:hot pink')
-    #set the ticks to be every 1
     ax_kp.set_yticks(np.arange(0, 10, 3))
 
     max_kp_value = kp_3hrly_analysis['Kp'].max()
@@ -274,7 +264,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     # First plot for the computed densities MAs
     plt.figure(figsize=(8, 4))
     for i, density_df in enumerate(data_frames):
-        seconds_per_point = pd.to_timedelta(pd.infer_freq(density_df.index)).seconds
+        seconds_per_point = 30
         window_size = (moving_avg_minutes * 60) // seconds_per_point
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
         shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)
@@ -299,6 +289,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     plt.yscale('log')
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # plt.show()
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
 
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
@@ -473,9 +464,14 @@ def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_computed_density_plots.png', dpi=300, bbox_inches='tight')
 
 def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
+    import os
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from datetime import datetime, timedelta
+    
     storm_analysis_dir = os.path.join(base_dir, sat_name)
     if not os.path.exists(storm_analysis_dir):
-        print(f"No data directory found for {sat_name}")
         return
     
     _, kp_3hrly, hourly_dst = get_sw_indices()
@@ -485,7 +481,6 @@ def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
     storm_data = []
     unique_dates = set()
 
-    density_types = ['JB08', 'DTM2000', 'NRLMSISE00']
     density_diff_titles = ['Computed-JB08', 'Computed-DTM2000', 'Computed-NRLMSISE00']
 
     for storm_file in sorted(os.listdir(storm_analysis_dir)):
@@ -503,18 +498,21 @@ def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
 
             df = get_arglat_from_df(df)
 
-            # Compute the density differences
-            for density_type in density_types:
-                df[f'Computed-{density_type}'] = df['Computed Density'] - df[density_type]
+            window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(df.index)).seconds if moving_avg_minutes > 0 else 1
+            shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(df.index)).seconds if moving_avg_minutes > 0 else 0
 
-            kp_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= start_time + datetime.timedelta(days=3))]
+            df['Computed Density'] = df['Computed Density'].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+            for model in ['JB08', 'DTM2000', 'NRLMSISE00']:
+                df[f'Computed-{model}'] = df['Computed Density'] - df[model]
+
+            kp_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= start_time + timedelta(days=3))]
             max_kp_time = kp_filtered.loc[kp_filtered['Kp'].idxmax(), 'DateTime'] if not kp_filtered.empty else start_time
 
             storm_category = determine_storm_category(kp_filtered['Kp'].max() if not kp_filtered.empty else 0)
             storm_number = -int(storm_category[1:]) if storm_category != "Below G1" else 0
 
-            adjusted_start_time = max_kp_time - datetime.timedelta(hours=12)
-            adjusted_end_time = max_kp_time + datetime.timedelta(hours=32)
+            adjusted_start_time = max_kp_time - timedelta(hours=12)
+            adjusted_end_time = max_kp_time + timedelta(hours=32)
 
             storm_data.append((df, adjusted_start_time, adjusted_end_time, storm_category, storm_number))
 
@@ -522,12 +520,12 @@ def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
 
     num_storms = len(storm_data)
     ncols = 3
-    total_plots = 3 * num_storms
-    nrows = (total_plots + ncols - 1) // ncols
+    nrows = num_storms
 
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(2.2 * ncols, 2 * nrows), dpi=600)
-    axes = axes.flatten()
-
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(2.2 * ncols, 1 * nrows), dpi=600)
+    if nrows == 1:
+        axes = np.array([axes])
+    
     for i, (df, adjusted_start_time, adjusted_end_time, storm_category, storm_number) in enumerate(storm_data):
         if 'x' in df.columns and 'y' in df.columns and 'z' in df.columns:
             first_x, first_y, first_z = df.iloc[0][['x', 'y', 'z']]
@@ -535,39 +533,31 @@ def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
         else:
             altitude = 0
 
+        row_min = np.inf
+        row_max = -np.inf
+        
+        for density_diff_title in density_diff_titles:
+            plot_df = df[(df.index >= adjusted_start_time) & (df.index <= adjusted_end_time)]
+            row_min = min(row_min, plot_df[density_diff_title].min())
+            row_max = max(row_max, plot_df[density_diff_title].max())
+
+        absolute_max = max(abs(row_min), abs(row_max))
+
         for j, density_diff_title in enumerate(density_diff_titles):
             ax_idx = i * ncols + j
-            if ax_idx >= len(axes):  # Check if the index is within the range of created axes
-                print(f"Trying to access axes[{ax_idx}] but only have {len(axes)} axes.")
+            if ax_idx >= len(axes.flatten()):
                 continue
 
             plot_df = df[(df.index >= adjusted_start_time) & (df.index <= adjusted_end_time)]
-            
-            local_min_density = plot_df[density_diff_title].min()
-            local_max_density = plot_df[density_diff_title].max()
+            sc = axes[i][j].scatter(plot_df.index, plot_df['arglat'], c=plot_df[density_diff_title], cmap='coolwarm', vmin=-absolute_max, vmax=absolute_max, alpha=0.7, edgecolor='none', s=7)
+            axes[i][j].set_title(f'{adjusted_start_time.strftime("%Y-%m-%d")}, {storm_category}, {altitude:.0f}km', fontsize=10)
+            axes[i][j].set_ylabel('')
+            axes[i][j].set_xticks([])
+            axes[i][j].set_yticks([])
 
-            if local_max_density != local_min_density:
-                relative_densities = (plot_df[density_diff_title] - local_min_density) / (local_max_density - local_min_density)
-            else:
-                relative_densities = np.zeros_like(plot_df[density_diff_title])
+            if j == ncols - 1:
+                cbar = plt.colorbar(sc, ax=axes[i][j], fraction=0.046, pad=0.04)
+                cbar.set_label('Δρ', rotation=270, labelpad=10)
 
-            sc = axes[ax_idx].scatter(plot_df.index, plot_df['arglat'], c=relative_densities, cmap='nipy_spectral', alpha=0.7, edgecolor='none', s=5)
-            axes[ax_idx].set_title(f'{adjusted_start_time.strftime("%Y-%m-%d")}, {storm_category}, {altitude:.0f}km, {density_diff_title}', fontsize=10)
-            axes[ax_idx].set_ylabel(' ')
-            axes[ax_idx].set_xlabel(' ')
-            axes[ax_idx].set_xticks([])
-            axes[ax_idx].set_yticks([])
-
-    # Hide any unused axes
-    for k in range(i * ncols + j + 1, len(axes)):
-        axes[k].set_visible(False)
-
-    plt.subplots_adjust(left=0.055, bottom=0.012, right=0.905, top=0.967, wspace=0.2, hspace=0.288)
-
-    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    sm = plt.cm.ScalarMappable(cmap='nipy_spectral')
-    sm.set_array([])
-    cbar = plt.colorbar(sm, cax=cbar_ax)
-    cbar.set_label('Normalized Density Difference', rotation=270, labelpad=15)
+    plt.subplots_adjust(left=0.055, bottom=0.012, right=0.905, top=0.967, wspace=0.2, hspace=0.32)
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_megadensity_diff_plots.png', dpi=300, bbox_inches='tight')
-    # plt.show()

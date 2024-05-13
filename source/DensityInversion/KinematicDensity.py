@@ -109,40 +109,40 @@ if __name__ == "__main__":
     # vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
     # density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
     #                                 models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
-    #TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
+    # TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
     # densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
     # densitydf_champ = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/CHAMP/2024-04-24_CHAMP_fm0_density_inversion.csv")
 
     # instead of continuing to manually list the paths just iterate over the list of satellite names in "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # Base directory for storm analysis
-    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
-    # # List of satellite names
-    # sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
+    # List of satellite names
+    sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
 
-    # for sat_name in sat_names:
-    #     # Correctly set the path for the current satellite
-    #     storm_analysis_dir = os.path.join(base_dir, sat_name)
+    for sat_name in sat_names:
+        # Correctly set the path for the current satellite
+        storm_analysis_dir = os.path.join(base_dir, sat_name)
         
-    #     # Check if the directory exists before listing files
-    #     if os.path.exists(storm_analysis_dir):
-    #         for storm_file in os.listdir(storm_analysis_dir):
-    #             # Form the full path to the storm file
-    #             storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+        # Check if the directory exists before listing files
+        if os.path.exists(storm_analysis_dir):
+            for storm_file in os.listdir(storm_analysis_dir):
+                # Form the full path to the storm file
+                storm_file_path = os.path.join(storm_analysis_dir, storm_file)
                 
-    #             # Check if it's actually a file
-    #             if os.path.isfile(storm_file_path):
-    #                 storm_df = pd.read_csv(storm_file_path) 
-    #                 plot_relative_density_change([storm_df], 45, sat_name)
-    #                 plot_density_arglat_diff([storm_df], 45, sat_name)
-    #                 plot_density_data([storm_df], 45, sat_name)
+                # Check if it's actually a file
+                if os.path.isfile(storm_file_path):
+                    storm_df = pd.read_csv(storm_file_path) 
+                    # plot_relative_density_change([storm_df], 45, sat_name)
+                    # plot_density_arglat_diff([storm_df], 45, sat_name)
+                    plot_density_data([storm_df], 90, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name)
 
 
     # Example Usage
-    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
-    sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
-    for sat_name in sat_names:
-        # reldens_sat_megaplot(base_dir, sat_name)
-        model_reldens_sat_megaplot(base_dir, sat_name)
+    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    # sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
+    # for sat_name in sat_names:
+    #     # reldens_sat_megaplot(base_dir, sat_name)
+    #     model_reldens_sat_megaplot(base_dir, sat_name)

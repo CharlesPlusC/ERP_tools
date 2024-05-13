@@ -130,53 +130,52 @@ def ACT_vs_EDR_vs_POD():
     merged_data = pd.merge(POD_and_ACT_data, EDR_data, on='UTC')
     merged_data['UTC'] = pd.to_datetime(merged_data['UTC'])
     merged_data['EDR_rolling'] = (merged_data['rho_eff']*10).rolling(window=180).mean()
-    merged_data['POD_rolling'] = merged_data['Velocity_Computed Density'].rolling(window=94).mean()
+    POD_and_ACT_data['POD_rolling'] = POD_and_ACT_data['Velocity_Computed Density'].rolling(window=90, center=True).mean()
 
-    #drop the first and last 90 values
     merged_data = merged_data.iloc[100:]
 
-    #flip the ACT density about its median
     median_ACT = merged_data['ACT_Computed Density'].median()
     merged_data['ACT_Computed Density'] = 2 * median_ACT - merged_data['ACT_Computed Density']
     
     fig, ax = plt.subplots(2, 1, figsize=(8, 7))
 
-    ax[0].plot(merged_data['UTC'], merged_data['ACT_Computed Density'], label='ACT Density', color="xkcd:teal", linewidth=1)
-    ax[0].plot(merged_data['UTC'], merged_data['EDR_rolling'], label='EDR Density', color="xkcd:pink", linewidth=1)
-    ax[0].plot(merged_data['UTC'], merged_data['POD_rolling'], label='POD Density', color="xkcd:hot pink", linewidth=1)
-    ax[0].plot(merged_data['UTC'], merged_data['jb08_rho'], label='JB08', linestyle='--' , color="xkcd:royal blue", linewidth=1)
-    ax[0].plot(merged_data['UTC'], merged_data['dtm2000_rho'], label='DTM2000', linestyle='--', color="xkcd:dark green", linewidth=1)
-    ax[0].plot(merged_data['UTC'], merged_data['nrlmsise00_rho'], label='NRLMSISE-00', linestyle='--', color="xkcd:dark orange", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['ACT_Computed Density'], label='ACT Density', color="xkcd:teal", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['EDR_rolling'], label='EDR Density', color="xkcd:pink", linewidth=1)
+    ax[0].plot(mdates.date2num(POD_and_ACT_data['UTC']), POD_and_ACT_data['POD_rolling'], label='POD Density', color="xkcd:hot pink", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['jb08_rho'], label='JB08', linestyle='--' , color="xkcd:royal blue", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['dtm2000_rho'], label='DTM2000', linestyle='--', color="xkcd:dark green", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['nrlmsise00_rho'], label='NRLMSISE-00', linestyle='--', color="xkcd:dark orange", linewidth=1)
     ax[0].set_ylabel('Density (kg/m^3)')
-    #put legend bottom right
     ax[0].legend(loc='lower right')
-    #add thin gridlines
     ax[0].grid(which='both', linestyle='--')
-    #make x-ticks blank here
     ax[0].set_xticklabels([])
     ax[0].set_yscale('log')
     ax[0].set_title('Measured vs Modelled Density Values')
 
-    # Relative change subplot
     initial_ACT = merged_data['ACT_Computed Density'].iloc[0]
-    initial_EDR = merged_data['EDR_rolling'].iloc[179]  # first non-NaN after rolling
-    initial_POD = merged_data['POD_rolling'].iloc[94]  # first non-NaN after rolling
+    initial_EDR = merged_data['EDR_rolling'].iloc[179]
+    initial_POD = POD_and_ACT_data['POD_rolling'].iloc[94]
+    initial_JB08 = merged_data['jb08_rho'].iloc[179]
+    initial_DTM2000 = merged_data['dtm2000_rho'].iloc[179]
+    initial_MSISE00 = merged_data['nrlmsise00_rho'].iloc[179]
     
-    ax[1].plot(merged_data['UTC'], 100 * (merged_data['ACT_Computed Density'] - initial_ACT) / initial_ACT, label='ACT Density Change', color="xkcd:teal")
-    ax[1].plot(merged_data['UTC'], 100 * (merged_data['EDR_rolling'] - initial_EDR) / initial_EDR, label='EDR Density Change', color="xkcd:pink")
-    ax[1].plot(merged_data['UTC'], 100 * (merged_data['POD_rolling'] - initial_POD) / initial_POD, label='POD Density Change', color="xkcd:hot pink")
+    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['ACT_Computed Density'] - initial_ACT) / initial_ACT, label='ACT Density Change', color="xkcd:teal")
+    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['EDR_rolling'] - initial_EDR) / initial_EDR, label='EDR Density Change', color="xkcd:pink")
+    ax[1].plot(mdates.date2num(POD_and_ACT_data['UTC']), 100 * (POD_and_ACT_data['POD_rolling'] - initial_POD) / initial_POD, label='POD Density Change', color="xkcd:hot pink")
+    # ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['jb08_rho'] - initial_JB08) / initial_JB08, label='JB08 Density Change', linestyle='--', color="xkcd:royal blue")
+    # ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['dtm2000_rho'] - initial_DTM2000) / initial_DTM2000, label='DTM2000 Density Change', linestyle='--', color="xkcd:dark green")
+    # ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['nrlmsise00_rho'] - initial_MSISE00) / initial_MSISE00, label='NRLMSISE-00 Density Change', linestyle='--', color="xkcd:dark orange")
     ax[1].grid(which='both', linestyle='--')
     ax[1].set_ylabel('Relative Change (%)')
     ax[1].set_xlabel('UTC')
     ax[1].set_title('Relative Change in Density')
 
-    # Setting x-axis format for all subplots
     ax[1].xaxis.set_major_locator(mdates.HourLocator(interval=3))
     ax[1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     plt.setp(ax[1].get_xticklabels(), rotation=45, ha="right")
     
     plt.tight_layout()
-    plt.savefig("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_Comparison.png")
+    plt.savefig("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_Comparison.png", dpi=600)
 
 if __name__ == '__main__':
     ACT_vs_EDR_vs_POD()
