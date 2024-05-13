@@ -471,3 +471,103 @@ def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
     cbar = plt.colorbar(sm, cax=cbar_ax)
     cbar.set_label('Normalized Computed Density', rotation=270, labelpad=15)
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_computed_density_plots.png', dpi=300, bbox_inches='tight')
+
+def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
+    storm_analysis_dir = os.path.join(base_dir, sat_name)
+    if not os.path.exists(storm_analysis_dir):
+        print(f"No data directory found for {sat_name}")
+        return
+    
+    _, kp_3hrly, hourly_dst = get_sw_indices()
+    kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
+    hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
+
+    storm_data = []
+    unique_dates = set()
+
+    density_types = ['JB08', 'DTM2000', 'NRLMSISE00']
+    density_diff_titles = ['Computed-JB08', 'Computed-DTM2000', 'Computed-NRLMSISE00']
+
+    for storm_file in sorted(os.listdir(storm_analysis_dir)):
+        storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+        if os.path.isfile(storm_file_path):
+            df = pd.read_csv(storm_file_path)
+            df['UTC'] = pd.to_datetime(df['UTC'], utc=True)
+            df.set_index('UTC', inplace=True)
+            df.index = df.index.tz_convert('UTC')
+
+            start_time = df.index.min()
+            if start_time.strftime("%Y-%m-%d") in unique_dates:
+                continue
+            unique_dates.add(start_time.strftime("%Y-%m-%d"))
+
+            df = get_arglat_from_df(df)
+
+            # Compute the density differences
+            for density_type in density_types:
+                df[f'Computed-{density_type}'] = df['Computed Density'] - df[density_type]
+
+            kp_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= start_time + datetime.timedelta(days=3))]
+            max_kp_time = kp_filtered.loc[kp_filtered['Kp'].idxmax(), 'DateTime'] if not kp_filtered.empty else start_time
+
+            storm_category = determine_storm_category(kp_filtered['Kp'].max() if not kp_filtered.empty else 0)
+            storm_number = -int(storm_category[1:]) if storm_category != "Below G1" else 0
+
+            adjusted_start_time = max_kp_time - datetime.timedelta(hours=12)
+            adjusted_end_time = max_kp_time + datetime.timedelta(hours=32)
+
+            storm_data.append((df, adjusted_start_time, adjusted_end_time, storm_category, storm_number))
+
+    storm_data.sort(key=lambda x: x[4], reverse=True)
+
+    num_storms = len(storm_data)
+    ncols = 3
+    total_plots = 3 * num_storms
+    nrows = (total_plots + ncols - 1) // ncols
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(2.2 * ncols, 2 * nrows), dpi=600)
+    axes = axes.flatten()
+
+    for i, (df, adjusted_start_time, adjusted_end_time, storm_category, storm_number) in enumerate(storm_data):
+        if 'x' in df.columns and 'y' in df.columns and 'z' in df.columns:
+            first_x, first_y, first_z = df.iloc[0][['x', 'y', 'z']]
+            altitude = ((first_x**2 + first_y**2 + first_z**2)**0.5 - 6378137) / 1000
+        else:
+            altitude = 0
+
+        for j, density_diff_title in enumerate(density_diff_titles):
+            ax_idx = i * ncols + j
+            if ax_idx >= len(axes):  # Check if the index is within the range of created axes
+                print(f"Trying to access axes[{ax_idx}] but only have {len(axes)} axes.")
+                continue
+
+            plot_df = df[(df.index >= adjusted_start_time) & (df.index <= adjusted_end_time)]
+            
+            local_min_density = plot_df[density_diff_title].min()
+            local_max_density = plot_df[density_diff_title].max()
+
+            if local_max_density != local_min_density:
+                relative_densities = (plot_df[density_diff_title] - local_min_density) / (local_max_density - local_min_density)
+            else:
+                relative_densities = np.zeros_like(plot_df[density_diff_title])
+
+            sc = axes[ax_idx].scatter(plot_df.index, plot_df['arglat'], c=relative_densities, cmap='nipy_spectral', alpha=0.7, edgecolor='none', s=5)
+            axes[ax_idx].set_title(f'{adjusted_start_time.strftime("%Y-%m-%d")}, {storm_category}, {altitude:.0f}km, {density_diff_title}', fontsize=10)
+            axes[ax_idx].set_ylabel(' ')
+            axes[ax_idx].set_xlabel(' ')
+            axes[ax_idx].set_xticks([])
+            axes[ax_idx].set_yticks([])
+
+    # Hide any unused axes
+    for k in range(i * ncols + j + 1, len(axes)):
+        axes[k].set_visible(False)
+
+    plt.subplots_adjust(left=0.055, bottom=0.012, right=0.905, top=0.967, wspace=0.2, hspace=0.288)
+
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    sm = plt.cm.ScalarMappable(cmap='nipy_spectral')
+    sm.set_array([])
+    cbar = plt.colorbar(sm, cax=cbar_ax)
+    cbar.set_label('Normalized Density Difference', rotation=270, labelpad=15)
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_megadensity_diff_plots.png', dpi=300, bbox_inches='tight')
+    # plt.show()
