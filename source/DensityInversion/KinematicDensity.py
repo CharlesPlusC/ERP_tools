@@ -142,5 +142,6 @@ if __name__ == "__main__":
 
     # Example Usage
     base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
-    sat_name = "TerraSAR-X"
-    reldens_sat_megaplot(base_dir, sat_name)
+    sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
+    for sat_name in sat_names:
+        reldens_sat_megaplot(base_dir, sat_name)

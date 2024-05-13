@@ -19,6 +19,9 @@ from scipy.signal import savgol_filter
 # orekit.pyhelpers.download_orekit_data_curdir()
 vm = orekit.initVM()
 setup_orekit_curdir("misc/orekit-data.zip")
+#import MU from constants
+from org.orekit.utils import Constants
+MU = Constants.WGS84_EARTH_MU
 
 from org.orekit.frames import FramesFactory, ITRFVersion
 from org.orekit.utils import PVCoordinates
@@ -709,7 +712,7 @@ def posvel_to_sma(x, y, z, u, v, w):
     :return: Semi-major axis in meters
     """
     # Standard gravitational parameter for Earth in m^3/s^2 (converted from km^3/s^2)
-    mu = 398600.4418 * 1e9
+    mu = MU
 
     # Position and velocity vectors
     r_vector = np.array([x, y, z])

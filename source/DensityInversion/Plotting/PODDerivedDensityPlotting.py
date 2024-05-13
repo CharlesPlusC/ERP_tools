@@ -368,8 +368,6 @@ def density_compare_scatter(density_df, moving_avg_window, sat_name):
         plt.savefig(os.path.join(save_path, plot_filename))
         plt.close()
 
-
-
 def determine_storm_category(kp_max):
     if kp_max < 5:
         return "Below G1"
@@ -472,5 +470,4 @@ def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
     sm.set_array([])
     cbar = plt.colorbar(sm, cax=cbar_ax)
     cbar.set_label('Normalized Computed Density', rotation=270, labelpad=15)
-
-    plt.savefig(f'{sat_name}_computed_density_plots.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_computed_density_plots.png', dpi=300, bbox_inches='tight')

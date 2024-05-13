@@ -227,6 +227,8 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
 
     if query_models:
         energy_ephemeris_df['jb08_rho'] = None
+        energy_ephemeris_df['dtm2000_rho'] = None
+        energy_ephemeris_df['nrlmsise00_rho'] = None
 
     if 'UTC' not in energy_ephemeris_df.columns:
         energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
@@ -244,19 +246,6 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     EDR_df['UTC'] = energy_ephemeris_df['UTC']
     EDR_df['EDR'] = EDR
     EDR_df['rho_eff'] = rho_eff
-
-    #plot EDR over UTC and the rolling 180 point centred mean of EDR
-    # plt.figure(figsize=(10, 5))
-    # plt.plot(EDR_df['UTC'], EDR_df['EDR'], label='EDR', linewidth=1)
-    # plt.plot(EDR_df['UTC'], EDR_df['EDR'].rolling(window=90, center=False).mean(), label='Rolling Average 90', linewidth=1)
-    # plt.plot(EDR_df['UTC'], EDR_df['EDR'].rolling(window=180, center=False).mean(), label='Rolling Average 180', linewidth=1)
-    # plt.plot(EDR_df['UTC'], EDR_df['EDR'].rolling(window=360, center=False).mean(), label='Rolling Average 360', linewidth=1)
-    # plt.xlabel('Modified Julian Date')
-    # plt.ylabel('EDR')
-    # plt.title(f"{sat_name}: EDR")
-    # plt.legend()
-    # plt.grid(True)
-    # plt.show()
 
     if query_models:
         for i in tqdm(range(len(position)), desc='Querying Density Models'):
@@ -292,17 +281,14 @@ def main():
         # tdx_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/TanDEM-X_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-03.csv")
         # gfoa_orbital_energy_df = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-04 21:59:42_2023-05-07 21:59:42_2024-05-02.csv")
         orbital_energy_df_degord20 = pd.read_csv("output/DensityInversion/EDR/Data/GRACE-FO-A_energy_components_2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-10.csv")
-        density_df = Density_from_EDR(sat_name, orbital_energy_df_degord20, query_models=True)
-        # density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-03-22 21:59:42_2023-03-23 03:59:42_2024-05-10.csv")
+        # density_df = Density_from_EDR(sat_name, orbital_energy_df_degord20, query_models=True)
+        density_df = pd.read_csv("output/DensityInversion/EDR/Data/EDR_GRACE-FO-A__2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-13.csv")
         
-        plt.figure(figsize=(10, 5))
-        # plt.plot(density_df['UTC'], density_df['rho_eff'], label='EDR Density', linewidth=1)
-        plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=90, center=False).mean(), label='Rolling Average 90', linewidth=1)
-        plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=180, center=False).mean(), label='Rolling Average 180', linewidth=1)
-        plt.plot(density_df['UTC'], density_df['rho_eff'].rolling(window=360, center=False).mean(), label='Rolling Average 360', linewidth=1)
-        plt.plot(density_df['UTC'], density_df['jb08_rho'], label='JB08 Density', linestyle='dashed')
-        plt.plot(density_df['UTC'], density_df['dtm2000_rho'], label='DTM2000 Density', linestyle='dashed')
-        plt.plot(density_df['UTC'], density_df['nrlmsise00_rho'], label='NRLMSISE00 Density', linestyle='dashed')
+        plt.figure(figsize=(6, 3))
+        plt.plot(density_df['MJD'], (density_df['rho_eff']*10).rolling(window=180, center=False).mean(), label='Rolling Average 180', linewidth=1)
+        plt.plot(density_df['MJD'], density_df['jb08_rho'], label='JB08 Density')
+        plt.plot(density_df['MJD'], density_df['dtm2000_rho'], label='DTM2000 Density')
+        plt.plot(density_df['MJD'], density_df['nrlmsise00_rho'], label='NRLMSISE00 Density', linestyle='dashed')
 
         # Plot settings
         plt.legend()
