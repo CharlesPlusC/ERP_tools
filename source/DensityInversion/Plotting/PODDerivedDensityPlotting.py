@@ -271,41 +271,73 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{day}_{month}_{year}__{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def plot_density_data(data_frames, moving_avg_minutes, sat_name):
-    sns.set_style(style="whitegrid")
+    from scipy.signal import savgol_filter
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import pandas as pd
+    import numpy as np
+    import datetime
     
-    # Define color palette for all densities including model densities
-    custom_palette = sns.color_palette("Set2", len(data_frames) + 3)  # Adding 3 for model densities
+    sns.set_style(style="whitegrid")
 
-    # First plot for the computed densities MAs
-    plt.figure(figsize=(8, 4))
+    custom_palette = sns.color_palette("Set2", len(data_frames) + 3)
+
+    for density_df in data_frames:
+        density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
+        density_df.set_index('UTC', inplace=True)
+    analysis_start_time = data_frames[0].index[0]
+
     for i, density_df in enumerate(data_frames):
         seconds_per_point = 30
         window_size = (moving_avg_minutes * 60) // seconds_per_point
-        density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=False).mean()
+        density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
         shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)
-        density_df['Computed Density'] = density_df['Computed Density'].shift(-shift_periods)
-        mean_density = density_df['Computed Density'].mean()
-        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: mean_density if x > 100 * mean_density or x < mean_density / 100 else x)
+        median_density = density_df['Computed Density'].median()
+        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 100 * median_density or x < median_density / 100 else x)
 
-    # Second plot for the first data frame with model densities along with computed densities
-    plt.figure(figsize=(6, 4))
-    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color="xkcd:forest green")
-    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color="xkcd:orange")
-    sns.lineplot(data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color="xkcd:turquoise")
+    fig, axs = plt.subplots(4, 1, figsize=(12, 16), gridspec_kw={'height_ratios': [3, 1, 1, 1]})
 
-    # Include computed densities from all data frames again on the same plot
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color="xkcd:forest green")
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color="xkcd:orange")
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color="xkcd:turquoise")
+
     for i, density_df in enumerate(data_frames):
-        sns.lineplot(data=density_df, x=density_df.index, y='Computed Density', label=f'Computed Density', linestyle='--', color="xkcd:hot pink")
+        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label=f'Computed Density', linestyle='--', color="xkcd:hot pink")
 
-    plt.title('Model Densities vs. Computed Densities', fontsize=12)
-    plt.xlabel('Time (UTC)', fontsize=12)
-    plt.ylabel('Density (log scale)', fontsize=12)
-    plt.legend(loc='upper right', frameon=True)
-    plt.yscale('log')
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
+    axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
+    axs[0].set_xlabel('Time (UTC)', fontsize=12)
+    axs[0].set_ylabel('Density (log scale)', fontsize=12)
+    axs[0].legend(loc='upper right', frameon=True)
+    axs[0].set_yscale('log')
+    axs[0].grid(True, which='both', linestyle='--', linewidth=0.5)
+
+    residuals = []
+    model_names = ['JB08', 'DTM2000', 'NRLMSISE00']
+
+    for model_name in model_names:
+        residual = data_frames[0][model_name] - data_frames[0]['Computed Density']
+        residuals.append(residual)
+
+    min_residual = min([residual.dropna().min() for residual in residuals])
+    max_residual = max([residual.dropna().max() for residual in residuals])
+    bins = np.linspace(min_residual, max_residual, 50)
+    max_count = max([np.histogram(residual.dropna(), bins=bins)[0].max() for residual in residuals])
+
+    for i, model_name in enumerate(model_names):
+        axs[i+1].hist(residuals[i].dropna(), bins=bins, color=custom_palette[i], edgecolor='black', alpha=0.7)
+        axs[i+1].set_xlim(min_residual, max_residual)
+        axs[i+1].set_ylim(0, max_count)
+        axs[i+1].set_title(f'Residuals of {model_name} Density')
+        axs[i+1].set_xlabel('Residuals')
+        axs[i+1].set_ylabel('Frequency')
+        axs[i+1].grid(True, linestyle='--', linewidth=0.5)
+
+    plt.tight_layout()
     datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    # plt.show()
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
+    plt.show()
+    # plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
+    plt.close()
 
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
     
