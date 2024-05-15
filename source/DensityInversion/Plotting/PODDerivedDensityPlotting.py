@@ -208,7 +208,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
         shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 0
 
         vmin, vmax = float('inf'), float('-inf')
-        diff_vmin, diff_vmax = float('inf'), float('-inf')
+        diff_vmax_abs = 0
         for density_type in density_types:
             if density_type in density_df.columns:
                 density_df = get_arglat_from_df(density_df)
@@ -224,8 +224,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
 
                 if density_type != 'Computed Density':
                     density_df.loc[:, f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
-                    diff_vmax = max(diff_vmax, density_df[f'{density_type} Difference'].max())
-                    diff_vmin = min(diff_vmin, density_df[f'{density_type} Difference'].min())
+                    diff_vmax_abs = max(diff_vmax_abs, abs(density_df[f'{density_type} Difference'].max()), abs(density_df[f'{density_type} Difference'].min()))
                     vmax = max(vmax, density_df[density_type].max())
                     vmin = min(vmin, density_df[density_type].min())
 
@@ -246,7 +245,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
                     label.set_horizontalalignment('right')
 
             if density_type != 'Computed Density' and f'{density_type} Difference' in density_df.columns:
-                sc_diff = axes[j, 1].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} Difference'], cmap='coolwarm', alpha=0.6, edgecolor='none', vmin=diff_vmin, vmax=diff_vmax)
+                sc_diff = axes[j, 1].scatter(density_df.index, density_df['arglat'], c=density_df[f'{density_type} Difference'], cmap='seismic', alpha=0.6, edgecolor='none', vmin=-diff_vmax_abs, vmax=diff_vmax_abs)
                 axes[j, 1].set_title(density_diff_titles[j - 1], fontsize=12)
                 axes[j, 1].set_ylabel('Arg. Lat.')
                 axes[j, 1].set_yticks([-180, 0, 180])
@@ -275,7 +274,6 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     ax_kp.yaxis.label.set_color('xkcd:hot pink')
     ax_kp.set_ylim(0, 9)
     ax_kp.tick_params(axis='y', colors='xkcd:hot pink')
-    #set the ticks to be every 1
     ax_kp.set_yticks(np.arange(0, 10, 3))
 
     max_kp_value = kp_3hrly_analysis['Kp'].max()
@@ -285,7 +283,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name} - {storm_category} Storm\n{day}/{month}/{year}', color='white')
     plt.tight_layout()
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
-
+    plt.close()
     
 def plot_density_data(data_frames, moving_avg_minutes, sat_name):
 
@@ -294,7 +292,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     custom_palette = ["#FF6347", "#3CB371", "#1E90FF"]  # Tomato, MediumSeaGreen, DodgerBlue
 
     for density_df in data_frames:
-        #if UTC is not already the index, convert it to datetime and set it as the index
+        # if UTC is not already the index, convert it to datetime and set it as the index
         if 'UTC' in density_df.columns:
             density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
             density_df.set_index('UTC', inplace=True)
@@ -333,14 +331,13 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
         residual = data_frames[0][model_name] - data_frames[0]['Computed Density']
         residuals.append(residual)
 
-    min_residual = min([residual.dropna().min() for residual in residuals])
     max_residual = max([residual.dropna().max() for residual in residuals])
-    bins = np.linspace(min_residual, max_residual, 50)
+    bins = np.linspace(-max_residual, max_residual, 50)
 
     for residual, color, model_name in zip(residuals, custom_palette, model_names):
         sns.histplot(residual.dropna(), bins=bins, color=color, edgecolor='black', alpha=0.5, label=model_name, ax=axs[1])
 
-    axs[1].set_xlim(min_residual, max_residual)
+    axs[1].set_xlim(-max_residual, max_residual)
     axs[1].set_yscale('log')
     axs[1].set_title('Model Densities - Computed')
     axs[1].set_xlabel('Residuals (kg/m³)')
@@ -352,7 +349,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_hist_{day}_{month}_{year}.png')
     plt.close()
-
+    
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
     
     save_path = f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/'
