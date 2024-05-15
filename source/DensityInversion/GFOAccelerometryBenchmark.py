@@ -17,6 +17,7 @@ from tqdm import tqdm
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 
 # podaac-data-downloader -c GRACEFO_L1B_ASCII_GRAV_JPL_RL04 -d ./GRACE-FO_A_DATA -sd 2023-05-05T00:00:00Z -ed 2023-05-05T23:59:59Z -e ".*" --verbose
+# podaac-data-downloader -c GRACEFO_L1B_ASCII_GRAV_JPL_RL04 -d ./GRACE-FO_A_DATA -sd 2023-05-11T00:00:00Z -ed 2023-05-13T23:59:59Z -e ".*" --verbose
 
 import numpy as np
 import pandas as pd
