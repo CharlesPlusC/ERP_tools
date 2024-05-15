@@ -134,11 +134,10 @@ if __name__ == "__main__":
                 # Check if it's actually a file
                 if os.path.isfile(storm_file_path):
                     storm_df = pd.read_csv(storm_file_path) 
-                    # plot_relative_density_change([storm_df], 45, sat_name)
-                    # plot_density_arglat_diff([storm_df], 45, sat_name)
+                    plot_relative_density_change([storm_df], 90, sat_name)
+                    plot_density_arglat_diff([storm_df], 90, sat_name)
                     plot_density_data([storm_df], 90, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name)
-
 
     # Example Usage
     # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"

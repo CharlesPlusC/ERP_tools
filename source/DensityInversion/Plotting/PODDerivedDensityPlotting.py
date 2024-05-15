@@ -14,6 +14,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
+from scipy.signal import savgol_filter
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import datetime
+from scipy.stats import shapiro
 
 def get_arglat_from_df(densitydf_df):
     frame = FramesFactory.getEME2000()
@@ -72,7 +79,9 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name):
         if 'Computed Density' in density_df.columns:
             window_size = (moving_avg_minutes * 60) // 30
             density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, min_periods=1, center=True).mean()
-
+            median_density = density_df['Computed Density'].median()
+            density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
+            density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df.iloc[450:-450]
 
         for density_type in density_types:
@@ -150,6 +159,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     import pandas as pd
     import seaborn as sns
     from matplotlib.colors import LogNorm
+    from scipy.signal import savgol_filter
     from datetime import datetime, timedelta
 
     sns.set_style("darkgrid", {
@@ -197,16 +207,12 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
         diff_vmin, diff_vmax = float('inf'), float('-inf')
         for density_type in density_types:
             if density_type in density_df.columns:
-                smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
-                density_df.loc[:, f'{density_type}'] = smoothed_values
-
                 if density_type == 'Computed Density':
-                    median_density = density_df[density_type].median()
-                    IQR = density_df[density_type].quantile(0.75) - density_df[density_type].quantile(0.25)
-                    lower_bound = median_density - 3 * IQR 
-                    upper_bound = median_density + 3 * IQR
-                    density_df.loc[:, density_type] = density_df[density_type].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
-
+                    smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
+                    density_df.loc[:, f'{density_type}'] = smoothed_values
+                    median_density = density_df['Computed Density'].median()
+                    density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
+                    density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
                 if density_type != 'Computed Density':
                     density_df.loc[:, f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
                     diff_max = max(abs(density_df[f'{density_type} Difference'].min()), abs(density_df[f'{density_type} Difference'].max()))
@@ -248,8 +254,8 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     ax_right_top = axes[0, 1]
     ax_kp = ax_right_top.twinx()
 
-    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c = 'xkcd:violet')
-    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c = 'xkcd:hot pink')
+    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c='xkcd:violet')
+    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c='xkcd:hot pink')
     plt.setp(ax_right_top.get_xticklabels(), visible=False)
     ax_right_top.set_ylabel('Dst (nT)', color='xkcd:violet')
     ax_right_top.yaxis.label.set_color('xkcd:violet')
@@ -271,20 +277,16 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{day}_{month}_{year}__{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
 def plot_density_data(data_frames, moving_avg_minutes, sat_name):
-    from scipy.signal import savgol_filter
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import pandas as pd
-    import numpy as np
-    import datetime
-    
+
     sns.set_style(style="whitegrid")
 
-    custom_palette = sns.color_palette("Set2", len(data_frames) + 3)
+    custom_palette = ["#FF6347", "#3CB371", "#1E90FF"]  # Tomato, MediumSeaGreen, DodgerBlue
 
     for density_df in data_frames:
-        density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
-        density_df.set_index('UTC', inplace=True)
+        #if UTC is not already the index, convert it to datetime and set it as the index
+        if 'UTC' in density_df.columns:
+            density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
+            density_df.set_index('UTC', inplace=True)
     analysis_start_time = data_frames[0].index[0]
 
     for i, density_df in enumerate(data_frames):
@@ -293,16 +295,17 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
         shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)
         median_density = density_df['Computed Density'].median()
-        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 100 * median_density or x < median_density / 100 else x)
+        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
+        density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
 
-    fig, axs = plt.subplots(4, 1, figsize=(12, 16), gridspec_kw={'height_ratios': [3, 1, 1, 1]})
+    fig, axs = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.4})
 
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color="xkcd:forest green")
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color="xkcd:orange")
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color="xkcd:turquoise")
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0])
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[1])
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2])
 
     for i, density_df in enumerate(data_frames):
-        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label=f'Computed Density', linestyle='--', color="xkcd:hot pink")
+        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink")
 
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
@@ -322,21 +325,21 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     min_residual = min([residual.dropna().min() for residual in residuals])
     max_residual = max([residual.dropna().max() for residual in residuals])
     bins = np.linspace(min_residual, max_residual, 50)
-    max_count = max([np.histogram(residual.dropna(), bins=bins)[0].max() for residual in residuals])
 
-    for i, model_name in enumerate(model_names):
-        axs[i+1].hist(residuals[i].dropna(), bins=bins, color=custom_palette[i], edgecolor='black', alpha=0.7)
-        axs[i+1].set_xlim(min_residual, max_residual)
-        axs[i+1].set_ylim(0, max_count)
-        axs[i+1].set_title(f'Residuals of {model_name} Density')
-        axs[i+1].set_xlabel('Residuals')
-        axs[i+1].set_ylabel('Frequency')
-        axs[i+1].grid(True, linestyle='--', linewidth=0.5)
+    for residual, color, model_name in zip(residuals, custom_palette, model_names):
+        sns.histplot(residual.dropna(), bins=bins, color=color, edgecolor='black', alpha=0.5, label=model_name, ax=axs[1])
+
+    axs[1].set_xlim(min_residual, max_residual)
+    axs[1].set_yscale('log')
+    axs[1].set_title('Model Densities - Computed')
+    axs[1].set_xlabel('Residuals (kg/m³)')
+    axs[1].set_ylabel('Frequency(Log)')
+    axs[1].legend(loc='upper right', frameon=True)
+    axs[1].grid(True, linestyle='--', linewidth=0.5)
 
     plt.tight_layout()
     datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    plt.show()
-    # plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/model_density_vs_computed_density_{datenow}.png')
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_hist_{day}_{month}_{year}.png')
     plt.close()
 
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
