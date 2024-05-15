@@ -337,11 +337,11 @@ def distribute_selection(storm_dates, min_days_apart, max_count, already_selecte
 def select_storms(kp_3hrly):
     satellite_periods = {
         'CHAMP': ('2001-01-01', '2010-12-31'),
-        'GRACE-FO-A': ('2019-01-01', '2024-05-06'),
-        'TerraSAR-X': ('2010-01-01', '2024-05-06')
+        'GRACE-FO-A': ('2019-01-01', '2024-06-01'),
+        'TerraSAR-X': ('2010-01-01', '2024-06-01')
     }
 
-    storm_levels = ['G5', 'G4', 'G3', 'G2']  # Process from highest to lowest
+    storm_levels = ['G5']  # Process from highest to lowest
     storm_selections = {sat: {level: [] for level in storm_levels} for sat in satellite_periods}
 
     # Collect storm dates per satellite and storm level

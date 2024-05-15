@@ -28,7 +28,7 @@ def download_files(ftp_server, path, local_directory):
     except ftplib.all_errors as e:
         print(f"FTP error: {e}")
 
-def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selected_storms.txt'):
+def download_storm_time_ephems(selected_storms_file='output/DensityInversion/PODBasedAccelerometry/selectedG5storms.txt'):
     with open(selected_storms_file, 'r') as file:
         data = file.read()
 
@@ -63,7 +63,7 @@ def download_storm_time_ephems(selected_storms_file='output/DensityInversion/POD
                 start_date = date - timedelta(days=1)
                 end_date = date + timedelta(days=1)
                 satellite_data[satellite_name].append((storm_level, start_date, end_date))
-                # download_sp3(start_date, end_date, satellite_name)
+                download_sp3(start_date, end_date, satellite_name)
 
     return satellite_data
 

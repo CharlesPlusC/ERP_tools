@@ -1,0 +1,9 @@
+CHAMP Satellite:
+  G5: [datetime.date(2003, 11, 20)]
+
+GRACE-FO-A Satellite:
+  G5: [datetime.date(2024, 5, 12)]
+
+TerraSAR-X Satellite:
+  G5: [datetime.date(2024, 5, 12)]
+
