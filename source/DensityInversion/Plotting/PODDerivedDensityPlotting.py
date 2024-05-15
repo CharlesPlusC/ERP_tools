@@ -159,7 +159,6 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     import pandas as pd
     import seaborn as sns
     from matplotlib.colors import LogNorm
-    from scipy.signal import savgol_filter
     from datetime import datetime, timedelta
 
     sns.set_style("darkgrid", {
@@ -181,24 +180,29 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
 
     for i in range(len(data_frames)):
+        if 'UTC' in data_frames[i].columns:
+            data_frames[i]['UTC'] = pd.to_datetime(data_frames[i]['UTC'], utc=True)
+            data_frames[i].set_index('UTC', inplace=True)
         data_frames[i].index = data_frames[i].index.tz_localize('UTC') if data_frames[i].index.tz is None else data_frames[i].index.tz_convert('UTC')
 
     start_time = pd.to_datetime(min(df.index.min() for df in data_frames))
     end_time = pd.to_datetime(max(df.index.max() for df in data_frames))
 
     kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
-    hourly_dst = hourly_dst[(hourly_dst['DateTime'] >= start_time) & (hourly_dst['DateTime'] <= end_time)].sort_values(by='DateTime')
+
+    kp_3hrly = kp_3hrly.sort_values(by='DateTime')
+    hourly_dst = hourly_dst.sort_values(by='DateTime')
 
     max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
 
     analysis_start_time = max_kp_time - timedelta(hours=24)
     analysis_end_time = max_kp_time + timedelta(hours=36)
 
-    kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)].sort_values(by='DateTime')
-    hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)].sort_values(by='DateTime')
+    kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
+    hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
 
     for i, density_df in enumerate(data_frames):
-        density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)].sort_index().copy()
+        density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)].copy()
 
         window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 1
         shift_periods = (moving_avg_minutes * 30) // pd.to_timedelta(pd.infer_freq(density_df.index)).seconds if moving_avg_minutes > 0 else 0
@@ -207,16 +211,21 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
         diff_vmin, diff_vmax = float('inf'), float('-inf')
         for density_type in density_types:
             if density_type in density_df.columns:
+                density_df = get_arglat_from_df(density_df)
+                
                 if density_type == 'Computed Density':
-                    smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean().shift(-shift_periods)
-                    density_df.loc[:, f'{density_type}'] = smoothed_values
-                    median_density = density_df['Computed Density'].median()
-                    density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
-                    density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
+                    median_density = density_df[density_type].median()
+                    IQR = density_df[density_type].quantile(0.75) - density_df[density_type].quantile(0.25)
+                    lower_bound = median_density - 5 * IQR
+                    upper_bound = median_density + 5 * IQR
+                    density_df.loc[:, 'Computed Density'] = density_df[density_type].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
+                    smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
+                    density_df.loc[:, 'Computed Density'] = smoothed_values
+
                 if density_type != 'Computed Density':
                     density_df.loc[:, f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
-                    diff_max = max(abs(density_df[f'{density_type} Difference'].min()), abs(density_df[f'{density_type} Difference'].max()))
-                    diff_vmin, diff_vmax = -diff_max, diff_max
+                    diff_vmax = max(diff_vmax, density_df[f'{density_type} Difference'].max())
+                    diff_vmin = min(diff_vmin, density_df[f'{density_type} Difference'].min())
                     vmax = max(vmax, density_df[density_type].max())
                     vmin = min(vmin, density_df[density_type].min())
 
@@ -254,8 +263,8 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     ax_right_top = axes[0, 1]
     ax_kp = ax_right_top.twinx()
 
-    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c='xkcd:violet')
-    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c='xkcd:hot pink')
+    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c = 'xkcd:violet')
+    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c = 'xkcd:hot pink')
     plt.setp(ax_right_top.get_xticklabels(), visible=False)
     ax_right_top.set_ylabel('Dst (nT)', color='xkcd:violet')
     ax_right_top.yaxis.label.set_color('xkcd:violet')
@@ -266,6 +275,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     ax_kp.yaxis.label.set_color('xkcd:hot pink')
     ax_kp.set_ylim(0, 9)
     ax_kp.tick_params(axis='y', colors='xkcd:hot pink')
+    #set the ticks to be every 1
     ax_kp.set_yticks(np.arange(0, 10, 3))
 
     max_kp_value = kp_3hrly_analysis['Kp'].max()
@@ -274,8 +284,9 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     plt.suptitle(f'Atmospheric Density as Function of Argument of Latitude for {sat_name} - {storm_category} Storm\n{day}/{month}/{year}', color='white')
     plt.tight_layout()
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{day}_{month}_{year}__{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
 
+    
 def plot_density_data(data_frames, moving_avg_minutes, sat_name):
 
     sns.set_style(style="whitegrid")
