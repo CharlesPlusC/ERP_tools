@@ -1,14 +1,125 @@
-# Kp, Ap, SN, F10.7 reader
-# Dst Reader
-# Merge
-# Identify G indices time series and plot
-# Fetch SP3 data at the transition into and out of each of the G indices
-# Perform POD accelerometery density inversion
 import pandas as pd
-import re
 import matplotlib.pyplot as plt
 
+import os
 
+def read_ae(start_date, end_date, components=['AE']):
+    """
+    Read AE index files within a date range and expand each row to have one row per minute.
+    
+    Parameters:
+    - start_date: str, start date in the format 'YYYY-MM-DD'
+    - end_date: str, end date in the format 'YYYY-MM-DD'
+    - components: list of str, components to read (default is ['AE'])
+    
+    Returns:
+    - DataFrame with AE index data within the specified date range or None if no data is found
+    """
+    colspecs = [(0, 12), (12, 14), (14, 16), (16, 18), (18, 19), (19, 21), (21, 24), (24, 34)] + [(34 + i*6, 34 + (i+1)*6) for i in range(60)] + [(394, 400)]
+    names = ['identifier', 'year', 'month', 'day', 'component', 'hour', 'index_name', 'edition'] + [f'minute_{i}' for i in range(1, 61)] + ['hourly_mean']
+    
+    def parse_minute_values(row):
+        return [int(row[f'minute_{i}']) for i in range(1, 61)]
+
+    def read_ae_file(filepath):
+        ae_df = pd.read_fwf(filepath, colspecs=colspecs, names=names)
+        ae_df['date'] = '20' + ae_df['year'].astype(str).str.zfill(2) + ae_df['month'].astype(str).str.zfill(2) + ae_df['day'].astype(str).str.zfill(2)
+        ae_df['Datetime'] = pd.to_datetime(ae_df['date'], format='%Y%m%d') + pd.to_timedelta(ae_df['hour'].astype(int), unit='h')
+        ae_df['minute_values'] = ae_df.apply(parse_minute_values, axis=1)
+        return ae_df
+
+    start_year = int(start_date[:4])
+    end_year = int(end_date[:4])
+
+    all_data = []
+    for year in range(start_year, end_year + 1):
+        filepath = f"external/SWIndices/AE_{year}.txt"
+        if os.path.exists(filepath):
+            yearly_data = read_ae_file(filepath)
+            all_data.append(yearly_data)
+    
+    if not all_data:
+        return None
+
+    ae_df = pd.concat(all_data)
+    ae_df = ae_df[ae_df['index_name'].str.strip().isin(components)]
+    ae_df = ae_df[(ae_df['Datetime'] >= start_date) & (ae_df['Datetime'] <= end_date)]
+
+    if ae_df.empty:
+        return None
+
+    expanded_rows = []
+    for _, row in ae_df.iterrows():
+        base_time = row['Datetime']
+        for i, minute_value in enumerate(row['minute_values']):
+            expanded_rows.append({'Datetime': base_time + pd.Timedelta(minutes=i), 'minute_value': minute_value, 'component': row['index_name'].strip()})
+
+    expanded_df = pd.DataFrame(expanded_rows)
+    expanded_df = expanded_df[(expanded_df['Datetime'] >= start_date) & (expanded_df['Datetime'] <= end_date)]
+    
+    if expanded_df.empty:
+        return None
+    
+    return expanded_df
+
+def read_sym(start_date, end_date, components=['H']):
+    """
+    Read SYM index files within a date range and expand each row to have one row per minute.
+
+    Parameters:
+    - start_date: str, start date in the format 'YYYY-MM-DD'
+    - end_date: str, end date in the format 'YYYY-MM-DD'
+    - components: list of str, list of components to include ('D' for D-comp. and/or 'H' for H-comp.), default is ['H']
+
+    Returns:
+    - DataFrame with SYM index data within the specified date range or None if no data is found
+    """
+    colspecs = [(0, 12), (12, 14), (14, 16), (16, 18), (18, 19), (19, 21), (21, 24), (24, 34)] + [(34 + i*6, 34 + (i+1)*6) for i in range(60)] + [(394, 400)]
+    names = ['identifier', 'year', 'month', 'day', 'component', 'hour', 'index_name', 'edition'] + [f'minute_{i}' for i in range(1, 61)] + ['hourly_mean']
+
+    def parse_minute_values(row):
+        return [int(row[f'minute_{i}']) for i in range(1, 61)]
+
+    def read_sym_file(filepath):
+        sym_df = pd.read_fwf(filepath, colspecs=colspecs, names=names)
+        sym_df['date'] = '20' + sym_df['year'].astype(str).str.zfill(2) + sym_df['month'].astype(str).str.zfill(2) + sym_df['day'].astype(str).str.zfill(2)
+        sym_df['Datetime'] = pd.to_datetime(sym_df['date'], format='%Y%m%d') + pd.to_timedelta(sym_df['hour'].astype(int), unit='h')
+        sym_df['minute_values'] = sym_df.apply(parse_minute_values, axis=1)
+        return sym_df[['Datetime', 'minute_values', 'hourly_mean', 'component']]
+
+    start_year = int(start_date[:4])
+    end_year = int(end_date[:4])
+
+    all_data = []
+    for year in range(start_year, end_year + 1):
+        filepath = f"external/SWIndices/SYM_ASY_{year}.txt"
+        if os.path.exists(filepath):
+            yearly_data = read_sym_file(filepath)
+            all_data.append(yearly_data)
+
+    if not all_data:
+        return None
+
+    sym_df = pd.concat(all_data)
+    sym_df = sym_df[(sym_df['Datetime'] >= start_date) & (sym_df['Datetime'] <= end_date)]
+    sym_df = sym_df[sym_df['component'].isin(components)]
+
+    if sym_df.empty:
+        return None
+
+    expanded_rows = []
+    for _, row in sym_df.iterrows():
+        base_time = row['Datetime']
+        for i, minute_value in enumerate(row['minute_values']):
+            expanded_rows.append({'Datetime': base_time + pd.Timedelta(minutes=i), 'minute_value': minute_value, 'component': row['component']})
+
+    expanded_df = pd.DataFrame(expanded_rows)
+    expanded_df = expanded_df[(expanded_df['Datetime'] >= start_date) & (expanded_df['Datetime'] <= end_date)]
+    
+    if expanded_df.empty:
+        return None
+    
+    return expanded_df
 
 def read_dst(filepath = "external/SWIndices/Dst_2000_2024.txt"):
     """
@@ -97,7 +208,7 @@ def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_19
 
     return kp_data, kp_details
 
-def get_sw_indices():
+def get_kp_ap_dst_f107():
 
     daily_dst_df = read_dst()
 
@@ -368,16 +479,22 @@ def select_storms(kp_3hrly):
 
 if __name__ == "__main__":
 
-    daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
+    # daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
-    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']
-    daily_indices = daily_indices[daily_indices['Date'] > '2000-01-01']  
-    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2000-01-01'] 
+    # kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']
+    # daily_indices = daily_indices[daily_indices['Date'] > '2000-01-01']  
+    # hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2000-01-01'] 
 
-    select_storms(kp_3hrly)
+    # select_storms(kp_3hrly)
 
-    print("Storm selection completed and written to 'selected_storms.txt'.")
+    # print("Storm selection completed and written to 'selected_storms.txt'.")
 
     # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+
+    #Test reading AE index
+    start_date = '2018-01-01'
+    end_date = '2020-02-01'
+    sym = read_ae(start_date, end_date)
+    print(sym.tail())

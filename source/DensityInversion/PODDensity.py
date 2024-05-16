@@ -15,7 +15,7 @@ from tqdm import tqdm
 import pandas as pd
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
-from ..tools.SWIndices import get_sw_indices
+from ..tools.SWIndices import get_kp_ap_dst_f107
 from .Plotting.PODDerivedDensityPlotting import model_reldens_sat_megaplot, reldens_sat_megaplot, get_arglat_from_df, plot_density_arglat_diff, plot_density_data, plot_relative_density_change, density_compare_scatter
 
 def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, force_model_config, nc_accs=False, models_to_query=['JB08'], density_freq='15S'):
@@ -93,7 +93,7 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
 
 if __name__ == "__main__":
     # main()
-    # daily_indices, kp3hrly, dst_hrly = get_sw_indices()
+    # daily_indices, kp3hrly, dst_hrly = get_kp_ap_dst_f107()
     # for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx, densitydf_champ]):
     # force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
     # ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-04')
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                 if os.path.isfile(storm_file_path):
                     storm_df = pd.read_csv(storm_file_path) 
                     # plot_relative_density_change([storm_df], 45, sat_name)
-                    plot_density_arglat_diff([storm_df], 45, sat_name)
+                    # plot_density_arglat_diff([storm_df], 45, sat_name)
                     plot_density_data([storm_df], 90, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name)
 

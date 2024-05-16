@@ -8,7 +8,7 @@ from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates
 from orekit.pyhelpers import datetime_to_absolutedate
 from source.tools.utilities import project_acc_into_HCL, pv_to_kep, interpolate_positions, calculate_acceleration
-from source.tools.SWIndices import get_sw_indices
+from source.tools.SWIndices import get_kp_ap_dst_f107, read_ae, read_sym
 from org.orekit.frames import FramesFactory
 import os
 import numpy as np
@@ -68,7 +68,7 @@ def plot_relative_density_change(data_frames, moving_avg_minutes, sat_name):
 
     fig, axes = plt.subplots(nrows=len(titles), ncols=2, figsize=(10, 3 * len(titles)), dpi=200, constrained_layout=True)
 
-    daily_indices, kp_3hrly, hourly_dst = get_sw_indices()
+    daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
     for density_df in data_frames:
         density_df['Epoch'] = pd.to_datetime(density_df['Epoch'], utc=True) if 'Epoch' in density_df.columns else density_df.index
@@ -174,7 +174,7 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     nrows = len(density_types)
     fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(9, 2 * nrows), dpi=600)
 
-    _, kp_3hrly, hourly_dst = get_sw_indices()
+    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
     
     kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
     hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
@@ -291,12 +291,28 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
 
     custom_palette = ["#FF6347", "#3CB371", "#1E90FF"]  # Tomato, MediumSeaGreen, DodgerBlue
 
+    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
+    
+    kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
+    hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
+
     for density_df in data_frames:
         # if UTC is not already the index, convert it to datetime and set it as the index
         if 'UTC' in density_df.columns:
             density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
             density_df.set_index('UTC', inplace=True)
-    analysis_start_time = data_frames[0].index[0]
+    
+    start_time = pd.to_datetime(min(df.index.min() for df in data_frames))
+    end_time = pd.to_datetime(max(df.index.max() for df in data_frames))
+
+    kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
+    kp_3hrly = kp_3hrly.sort_values(by='DateTime')
+    hourly_dst = hourly_dst.sort_values(by='DateTime')
+    max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
+    analysis_start_time = max_kp_time - datetime.timedelta(hours=24)
+    analysis_end_time = max_kp_time + datetime.timedelta(hours=36)
+    kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
+    hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
 
     for i, density_df in enumerate(data_frames):
         seconds_per_point = 30
@@ -306,15 +322,17 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
         median_density = density_df['Computed Density'].median()
         density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
         density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
+        #slice the data to the analysis period
+        density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.4})
 
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0])
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[1])
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2])
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0], linewidth=1)
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[1], linewidth=1)
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2], linewidth=1)
 
     for i, density_df in enumerate(data_frames):
-        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink")
+        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink", linewidth=1)
 
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
@@ -347,9 +365,9 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
 
     plt.tight_layout()
     datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_hist_{day}_{month}_{year}.png')
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_hist_{day}_{month}_{year}.png', dpi=600)
     plt.close()
-    
+
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
     
     save_path = f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/'
@@ -437,7 +455,7 @@ def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
         print(f"No data directory found for {sat_name}")
         return
     
-    _, kp_3hrly, hourly_dst = get_sw_indices()
+    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
     kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
     hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
 
@@ -532,7 +550,7 @@ def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
     if not os.path.exists(storm_analysis_dir):
         return
     
-    _, kp_3hrly, hourly_dst = get_sw_indices()
+    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
     kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
     hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
 
