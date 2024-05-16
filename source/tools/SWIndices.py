@@ -97,7 +97,6 @@ def process_kp_ap_f107_sn(filepath='external/SWIndices/Kp_ap_Ap_SN_F107_since_19
 
     return kp_data, kp_details
 
-
 def get_sw_indices():
 
     daily_dst_df = read_dst()
