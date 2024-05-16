@@ -478,7 +478,7 @@ def select_storms(kp_3hrly):
             file.write("\n")
 
 if __name__ == "__main__":
-
+    pass
     # daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
     # kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']
@@ -494,7 +494,7 @@ if __name__ == "__main__":
     # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
 
     #Test reading AE index
-    start_date = '2018-01-01'
-    end_date = '2020-02-01'
-    sym = read_ae(start_date, end_date)
-    print(sym.tail())
+    # start_date = '2018-01-01'
+    # end_date = '2020-02-01'
+    # sym = read_ae(start_date, end_date)
+    # print(sym)

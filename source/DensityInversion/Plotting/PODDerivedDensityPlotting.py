@@ -285,44 +285,40 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/SWI_densitydiff_arglat{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg', dpi=600)
     plt.close()
     
-def plot_density_data(data_frames, moving_avg_minutes, sat_name):
+def plot_densities_and_residuals(data_frames, moving_avg_minutes, sat_name):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import seaborn as sns
+    from scipy.signal import savgol_filter
+    from datetime import datetime, timedelta
 
     sns.set_style(style="whitegrid")
 
     custom_palette = ["#FF6347", "#3CB371", "#1E90FF"]  # Tomato, MediumSeaGreen, DodgerBlue
 
-    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
-    
-    kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
-    hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
-
     for density_df in data_frames:
-        # if UTC is not already the index, convert it to datetime and set it as the index
         if 'UTC' in density_df.columns:
             density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
             density_df.set_index('UTC', inplace=True)
+        if density_df.index.tz is None:
+            density_df.index = density_df.index.tz_localize('UTC')
+        else:
+            density_df.index = density_df.index.tz_convert('UTC')
     
-    start_time = pd.to_datetime(min(df.index.min() for df in data_frames))
-    end_time = pd.to_datetime(max(df.index.max() for df in data_frames))
-
-    kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
-    kp_3hrly = kp_3hrly.sort_values(by='DateTime')
-    hourly_dst = hourly_dst.sort_values(by='DateTime')
-    max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
-    analysis_start_time = max_kp_time - datetime.timedelta(hours=24)
-    analysis_end_time = max_kp_time + datetime.timedelta(hours=36)
-    kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
-    hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
+    start_time = min(df.index.min() for df in data_frames)
+    end_time = max(df.index.max() for df in data_frames)
+    max_kp_time = start_time + (end_time - start_time) / 2  # Replace with actual max Kp time if available
+    analysis_start_time = max_kp_time - timedelta(hours=24)
+    analysis_end_time = max_kp_time + timedelta(hours=36)
 
     for i, density_df in enumerate(data_frames):
         seconds_per_point = 30
         window_size = (moving_avg_minutes * 60) // seconds_per_point
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
-        shift_periods = int((moving_avg_minutes / 2 * 60) // seconds_per_point)
         median_density = density_df['Computed Density'].median()
         density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
         density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
-        #slice the data to the analysis period
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.4})
@@ -341,6 +337,7 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     axs[0].legend(loc='upper right', frameon=True)
     axs[0].set_yscale('log')
     axs[0].grid(True, which='both', linestyle='--', linewidth=0.5)
+    axs[0].set_xlim(analysis_start_time, analysis_end_time)
 
     residuals = []
     model_names = ['JB08', 'DTM2000', 'NRLMSISE00']
@@ -352,22 +349,144 @@ def plot_density_data(data_frames, moving_avg_minutes, sat_name):
     max_residual = max([residual.dropna().max() for residual in residuals])
     bins = np.linspace(-max_residual, max_residual, 50)
 
-    for residual, color, model_name in zip(residuals, custom_palette, model_names):
-        sns.histplot(residual.dropna(), bins=bins, color=color, edgecolor='black', alpha=0.5, label=model_name, ax=axs[1])
+    sns.histplot(residuals[0].dropna(), bins=bins, color=custom_palette[0], edgecolor='black', alpha=0.5, label=model_names[0], ax=axs[1])
+    sns.histplot(residuals[1].dropna(), bins=bins, color=custom_palette[1], edgecolor='black', alpha=0.5, label=model_names[1], ax=axs[1])
+    sns.histplot(residuals[2].dropna(), bins=bins, color=custom_palette[2], edgecolor='black', alpha=0.5, label=model_names[2], ax=axs[1])
 
     axs[1].set_xlim(-max_residual, max_residual)
     axs[1].set_yscale('log')
     axs[1].set_title('Model Densities - Computed')
     axs[1].set_xlabel('Residuals (kg/m³)')
-    axs[1].set_ylabel('Frequency(Log)')
+    axs[1].set_ylabel('Frequency (Log)')
     axs[1].legend(loc='upper right', frameon=True)
     axs[1].grid(True, linestyle='--', linewidth=0.5)
+    axs[1].set_xlim(analysis_start_time, analysis_end_time)
 
     plt.tight_layout()
-    datenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_hist_{day}_{month}_{year}.png', dpi=600)
+    datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_hist_residuals_{day}_{month}_{year}.png', dpi=600)
     plt.close()
 
+def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import seaborn as sns
+    from scipy.signal import savgol_filter
+    from datetime import datetime, timedelta
+
+    sns.set_style(style="whitegrid")
+
+    custom_palette = ["#FF6347", "#3CB371", "#1E90FF"]  # Tomato, MediumSeaGreen, DodgerBlue
+
+    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
+    
+    kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime']).dt.tz_localize('UTC')
+    hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime']).dt.tz_localize('UTC')
+
+    for density_df in data_frames:
+        if 'UTC' in density_df.columns:
+            density_df['UTC'] = pd.to_datetime(density_df['UTC'], utc=True)
+            density_df.set_index('UTC', inplace=True)
+        if density_df.index.tz is None:
+            density_df.index = density_df.index.tz_localize('UTC')
+        else:
+            density_df.index = density_df.index.tz_convert('UTC')
+    
+    start_time = min(df.index.min() for df in data_frames)
+    end_time = max(df.index.max() for df in data_frames)
+
+    kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time)]
+    kp_3hrly = kp_3hrly.sort_values(by='DateTime')
+    hourly_dst = hourly_dst.sort_values(by='DateTime')
+    max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
+    analysis_start_time = max_kp_time - timedelta(hours=24)
+    analysis_end_time = max_kp_time + timedelta(hours=36)
+    kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
+    hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
+
+    start_date_str = (analysis_start_time - timedelta(days=1)).strftime('%Y-%m-%d')
+    end_date_str = (analysis_end_time + timedelta(days=1)).strftime('%Y-%m-%d')
+    ae = read_ae(start_date_str, end_date_str)
+    sym = read_sym(start_date_str, end_date_str)
+
+    if ae is not None:
+        ae['Datetime'] = pd.to_datetime(ae['Datetime'], utc=True)
+        ae = ae[(ae['Datetime'] >= analysis_start_time) & (ae['Datetime'] <= analysis_end_time)]
+    if sym is not None:
+        sym['Datetime'] = pd.to_datetime(sym['Datetime'], utc=True)
+        sym = sym[(sym['Datetime'] >= analysis_start_time) & (sym['Datetime'] <= analysis_end_time)]
+
+    for i, density_df in enumerate(data_frames):
+        seconds_per_point = 30
+        window_size = (moving_avg_minutes * 60) // seconds_per_point
+        density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
+        median_density = density_df['Computed Density'].median()
+        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
+        density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
+        density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
+
+    nrows = 3 + (1 if sym is not None else 0)  # One row for densities, one for Kp and Dst, one for AE, and optionally one for SYM
+    fig, axs = plt.subplots(nrows=nrows, ncols=1, figsize=(10, 10), gridspec_kw={'height_ratios': [3, 1, 1] + ([1] if sym is not None else []), 'hspace': 0.4})
+
+    # Plot Densities
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0], linewidth=1)
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[1], linewidth=1)
+    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2], linewidth=1)
+
+    for i, density_df in enumerate(data_frames):
+        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink", linewidth=1)
+
+    day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
+    axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
+    axs[0].set_xlabel('Time (UTC)', fontsize=12)
+    axs[0].set_ylabel('Density (log scale)', fontsize=12)
+    axs[0].legend(loc='upper right', frameon=True)
+    axs[0].set_yscale('log')
+    axs[0].grid(True, which='both', linestyle='--', linewidth=0.5)
+    axs[0].set_xlim(analysis_start_time, analysis_end_time)
+
+    # Plot Kp and Dst
+    ax_right_top = axs[1]
+    ax_kp = ax_right_top.twinx()
+
+    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c='xkcd:violet')
+    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c='xkcd:hot pink')
+    ax_right_top.set_ylabel('Dst (nT)', color='xkcd:violet')
+    ax_right_top.yaxis.label.set_color('xkcd:violet')
+    ax_right_top.set_ylim(50, -300)
+    ax_right_top.tick_params(axis='y', colors='xkcd:violet')
+
+    ax_kp.set_ylabel('Kp', color='xkcd:hot pink')
+    ax_kp.yaxis.label.set_color('xkcd:hot pink')
+    ax_kp.set_ylim(0, 9)
+    ax_kp.tick_params(axis='y', colors='xkcd:hot pink')
+    ax_kp.set_yticks(np.arange(0, 10, 3))
+    ax_right_top.set_xlim(analysis_start_time, analysis_end_time)
+
+    # Plot AE Index
+    if ae is not None:
+        sns.lineplot(ax=axs[2], data=ae, x='Datetime', y='minute_value', label='AE Index', color='xkcd:orange', linewidth=1)
+        axs[2].set_xlim(analysis_start_time, analysis_end_time)
+        axs[2].set_title('AE Index')
+        axs[2].set_xlabel('Time (UTC)')
+        axs[2].set_ylabel('AE (nT)')
+        axs[2].grid(True, linestyle='--', linewidth=0.5)
+
+    # Plot SYM Index if available
+    if sym is not None:
+        sns.lineplot(ax=axs[3], data=sym, x='Datetime', y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1)
+        axs[3].set_xlim(analysis_start_time, analysis_end_time)
+        axs[3].set_title('SYM Index')
+        axs[3].set_xlabel('Time (UTC)')
+        axs[3].set_ylabel('SYM (nT)')
+        axs[3].grid(True, linestyle='--', linewidth=0.5)
+
+    plt.tight_layout() 
+    datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_indices_{day}_{month}_{year}.png', dpi=600)
+    plt.close()
+    
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
     
     save_path = f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/'

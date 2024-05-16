@@ -16,7 +16,7 @@ import pandas as pd
 from orekit.pyhelpers import setup_orekit_curdir, datetime_to_absolutedate
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 from ..tools.SWIndices import get_kp_ap_dst_f107
-from .Plotting.PODDerivedDensityPlotting import model_reldens_sat_megaplot, reldens_sat_megaplot, get_arglat_from_df, plot_density_arglat_diff, plot_density_data, plot_relative_density_change, density_compare_scatter
+from .Plotting.PODDerivedDensityPlotting import plot_densities_and_indices, plot_densities_and_residuals, model_reldens_sat_megaplot, reldens_sat_megaplot, get_arglat_from_df, plot_density_arglat_diff, plot_relative_density_change, density_compare_scatter
 
 def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, force_model_config, nc_accs=False, models_to_query=['JB08'], density_freq='15S'):
     sat_info = get_satellite_info(sat_name)
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
     # List of satellite names
-    sat_names = ["GRACE-FO-A", "TerraSAR-X", "CHAMP"]
+    sat_names = [ "CHAMP","TerraSAR-X", "GRACE-FO-A"]
 
     for sat_name in sat_names:
         # Correctly set the path for the current satellite
@@ -136,7 +136,8 @@ if __name__ == "__main__":
                     storm_df = pd.read_csv(storm_file_path) 
                     # plot_relative_density_change([storm_df], 45, sat_name)
                     # plot_density_arglat_diff([storm_df], 45, sat_name)
-                    plot_density_data([storm_df], 90, sat_name)
+                    plot_densities_and_residuals([storm_df], 90, sat_name)
+                    plot_densities_and_indices([storm_df], 90, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name)
 
     # Example Usage
