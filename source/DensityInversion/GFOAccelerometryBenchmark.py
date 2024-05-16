@@ -10,7 +10,7 @@ from org.orekit.utils import Constants
 from ..tools.utilities import interpolate_positions,calculate_acceleration, get_satellite_info, project_acc_into_HCL
 from ..tools.orekit_tools import state2acceleration, query_jb08, query_dtm2000, query_nrlmsise00
 from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
-from .KinematicDensity import density_inversion
+from .PODDensity import density_inversion
 import numpy as np
 import datetime
 from tqdm import tqdm
@@ -126,7 +126,9 @@ def ACT_vs_EDR_vs_POD():
     
     POD_and_ACT_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/2024-05-09_12-46-12_bench.csv")
     EDR_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/EDR_GRACE-FO-A__2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-13.csv")
-    
+
+    POD_and_ACT_data['UTC'] = pd.to_datetime(POD_and_ACT_data['UTC'])
+    EDR_data['UTC'] = pd.to_datetime(EDR_data['UTC'])
     merged_data = pd.merge(POD_and_ACT_data, EDR_data, on='UTC')
     merged_data['UTC'] = pd.to_datetime(merged_data['UTC'])
     merged_data['EDR_rolling'] = (merged_data['rho_eff']*10).rolling(window=180).mean()
@@ -136,35 +138,32 @@ def ACT_vs_EDR_vs_POD():
 
     median_ACT = merged_data['ACT_Computed Density'].median()
     merged_data['ACT_Computed Density'] = 2 * median_ACT - merged_data['ACT_Computed Density']
-    
-    fig, ax = plt.subplots(2, 1, figsize=(8, 7))
+
+    date_of_data = merged_data['UTC'].iloc[0].strftime("%Y-%m-%d")
+    merged_data = merged_data[(merged_data['UTC'].dt.hour >= 2) & (merged_data['UTC'].dt.hour <= 18)]
+    POD_and_ACT_data = POD_and_ACT_data[(POD_and_ACT_data['UTC'].dt.hour >= 2) & (POD_and_ACT_data['UTC'].dt.hour <= 18)]
+    fig, ax = plt.subplots(2, 1, figsize=(8, 4))
 
     ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['ACT_Computed Density'], label='ACT Density', color="xkcd:teal", linewidth=1)
-    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['EDR_rolling'], label='EDR Density', color="xkcd:pink", linewidth=1)
-    ax[0].plot(mdates.date2num(POD_and_ACT_data['UTC']), POD_and_ACT_data['POD_rolling'], label='POD Density', color="xkcd:hot pink", linewidth=1)
-    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['jb08_rho'], label='JB08', linestyle='--' , color="xkcd:royal blue", linewidth=1)
-    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['dtm2000_rho'], label='DTM2000', linestyle='--', color="xkcd:dark green", linewidth=1)
-    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['nrlmsise00_rho'], label='NRLMSISE-00', linestyle='--', color="xkcd:dark orange", linewidth=1)
-    ax[0].set_ylabel('Density (kg/m^3)')
-    ax[0].legend(loc='lower right')
-    ax[0].grid(which='both', linestyle='--')
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['EDR_rolling'], label='EDR Density', color="xkcd:goldenrod", linewidth=1)
+    ax[0].plot(mdates.date2num(POD_and_ACT_data['UTC']), POD_and_ACT_data['POD_rolling'], label='POD Density', color="xkcd:purple", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['jb08_rho'], label='JB08', linestyle='--' , color="#FF6347", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['dtm2000_rho'], label='DTM2000', linestyle='--', color="xkcd:cherry red", linewidth=1)
+    ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['nrlmsise00_rho'], label='NRLMSISE-00', linestyle='--', color="#1E90FF", linewidth=1)
+    ax[0].set_ylabel('Density (kg/m\u00B3)')
+    ax[0].legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
+    ax[0].grid(which='both', linestyle='-.')
     ax[0].set_xticklabels([])
     ax[0].set_yscale('log')
-    ax[0].set_title('Measured vs Modelled Density Values')
-
-    initial_ACT = merged_data['ACT_Computed Density'].iloc[0]
-    initial_EDR = merged_data['EDR_rolling'].iloc[179]
-    initial_POD = POD_and_ACT_data['POD_rolling'].iloc[94]
-    initial_JB08 = merged_data['jb08_rho'].iloc[179]
-    initial_DTM2000 = merged_data['dtm2000_rho'].iloc[179]
-    initial_MSISE00 = merged_data['nrlmsise00_rho'].iloc[179]
+    ax[0].set_title('GRACE-FO-A Density Comparison:\n' + date_of_data)
     
-    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['ACT_Computed Density'] - initial_ACT) / initial_ACT, label='ACT Density Change', color="xkcd:teal")
-    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['EDR_rolling'] - initial_EDR) / initial_EDR, label='EDR Density Change', color="xkcd:pink")
-    ax[1].plot(mdates.date2num(POD_and_ACT_data['UTC']), 100 * (POD_and_ACT_data['POD_rolling'] - initial_POD) / initial_POD, label='POD Density Change', color="xkcd:hot pink")
-    # ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['jb08_rho'] - initial_JB08) / initial_JB08, label='JB08 Density Change', linestyle='--', color="xkcd:royal blue")
-    # ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['dtm2000_rho'] - initial_DTM2000) / initial_DTM2000, label='DTM2000 Density Change', linestyle='--', color="xkcd:dark green")
-    # ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['nrlmsise00_rho'] - initial_MSISE00) / initial_MSISE00, label='NRLMSISE-00 Density Change', linestyle='--', color="xkcd:dark orange")
+    initial_ACT = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'ACT_Computed Density'].iloc[0]
+    initial_EDR = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'EDR_rolling'].iloc[0]
+    initial_POD = POD_and_ACT_data.loc[POD_and_ACT_data['UTC'].dt.floor('H') == POD_and_ACT_data['UTC'].dt.floor('H').min(), 'POD_rolling'].iloc[0]
+
+    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['ACT_Computed Density'] - initial_ACT) / initial_ACT, label='ACT Density Change', color="xkcd:teal", linewidth=1)
+    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['EDR_rolling'] - initial_EDR) / initial_EDR, label='EDR Density Change', color="xkcd:goldenrod", linewidth=1)
+    ax[1].plot(mdates.date2num(POD_and_ACT_data['UTC']), 100 * (POD_and_ACT_data['POD_rolling'] - initial_POD) / initial_POD, label='POD Density Change', color="xkcd:purple", linewidth=1)
     ax[1].grid(which='both', linestyle='--')
     ax[1].set_ylabel('Relative Change (%)')
     ax[1].set_xlabel('UTC')
@@ -173,9 +172,10 @@ def ACT_vs_EDR_vs_POD():
     ax[1].xaxis.set_major_locator(mdates.HourLocator(interval=3))
     ax[1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     plt.setp(ax[1].get_xticklabels(), rotation=45, ha="right")
-    
+
     plt.tight_layout()
     plt.savefig("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_Comparison.png", dpi=600)
+
 
 if __name__ == '__main__':
     ACT_vs_EDR_vs_POD()
