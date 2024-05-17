@@ -402,11 +402,16 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
     analysis_start_time = max_kp_time - timedelta(hours=24)
     analysis_end_time = max_kp_time + timedelta(hours=36)
+
+    # Make sure to slice the data for the analysis period
     kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
     hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
 
-    start_date_str = (analysis_start_time - timedelta(days=1)).strftime('%Y-%m-%d')
-    end_date_str = (analysis_end_time + timedelta(days=1)).strftime('%Y-%m-%d')
+    storm_category = determine_storm_category(kp_3hrly_analysis['Kp'].max())
+    storm_number = -int(storm_category[1:]) if storm_category != "Below G1" else 0
+
+    start_date_str = analysis_start_time.strftime('%Y-%m-%d %H:%M:%S')
+    end_date_str = analysis_end_time.strftime('%Y-%m-%d %H:%M:%S')
     ae = read_ae(start_date_str, end_date_str)
     sym = read_sym(start_date_str, end_date_str)
 
@@ -426,8 +431,11 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
-    nrows = 3 + (1 if sym is not None else 0)  # One row for densities, one for Kp and Dst, one for AE, and optionally one for SYM
-    fig, axs = plt.subplots(nrows=nrows, ncols=1, figsize=(10, 10), gridspec_kw={'height_ratios': [3, 1, 1] + ([1] if sym is not None else []), 'hspace': 0.4})
+    # Determine the number of rows for the subplots
+    nrows = 2 + (1 if ae is not None else 0) + (1 if sym is not None else 0)
+    height_ratios = [3, 1] + ([1] if ae is not None else []) + ([1] if sym is not None else [])
+
+    fig, axs = plt.subplots(nrows=nrows, ncols=1, figsize=(10, 8 + nrows), gridspec_kw={'height_ratios': height_ratios, 'hspace': 0.4})
 
     # Plot Densities
     sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0], linewidth=1)
@@ -454,8 +462,8 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c='xkcd:hot pink')
     ax_right_top.set_ylabel('Dst (nT)', color='xkcd:violet')
     ax_right_top.yaxis.label.set_color('xkcd:violet')
-    ax_right_top.set_ylim(50, -300)
     ax_right_top.tick_params(axis='y', colors='xkcd:violet')
+    ax_right_top.invert_yaxis()
 
     ax_kp.set_ylabel('Kp', color='xkcd:hot pink')
     ax_kp.yaxis.label.set_color('xkcd:hot pink')
@@ -464,29 +472,31 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     ax_kp.set_yticks(np.arange(0, 10, 3))
     ax_right_top.set_xlim(analysis_start_time, analysis_end_time)
 
-    # Plot AE Index
-    if ae is not None:
-        sns.lineplot(ax=axs[2], data=ae, x='Datetime', y='minute_value', label='AE Index', color='xkcd:orange', linewidth=1)
-        axs[2].set_xlim(analysis_start_time, analysis_end_time)
-        axs[2].set_title('AE Index')
-        axs[2].set_xlabel('Time (UTC)')
-        axs[2].set_ylabel('AE (nT)')
-        axs[2].grid(True, linestyle='--', linewidth=0.5)
+    idx = 2
 
-    # Plot SYM Index if available
     if sym is not None:
-        sns.lineplot(ax=axs[3], data=sym, x='Datetime', y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1)
-        axs[3].set_xlim(analysis_start_time, analysis_end_time)
-        axs[3].set_title('SYM Index')
-        axs[3].set_xlabel('Time (UTC)')
-        axs[3].set_ylabel('SYM (nT)')
-        axs[3].grid(True, linestyle='--', linewidth=0.5)
+        sns.lineplot(ax=axs[idx], data=sym, x='Datetime', y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1)
+        axs[idx].set_xlim(analysis_start_time, analysis_end_time)
+        axs[idx].set_title('SYM Index')
+        axs[idx].set_xlabel('Time (UTC)')
+        axs[idx].set_ylabel('SYM (nT)')
+        axs[idx].grid(True, linestyle='--', linewidth=0.5)
+        axs[idx].invert_yaxis() 
+        idx += 1
+
+    if ae is not None:
+        sns.lineplot(ax=axs[idx], data=ae, x='Datetime', y='minute_value', label='AE Index', color='xkcd:orange', linewidth=1)
+        axs[idx].set_xlim(analysis_start_time, analysis_end_time)
+        axs[idx].set_title('AE Index')
+        axs[idx].set_xlabel('Time (UTC)')
+        axs[idx].set_ylabel('AE (nT)')
+        axs[idx].grid(True, linestyle='--', linewidth=0.5)
 
     plt.tight_layout() 
     datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_indices_{day}_{month}_{year}.png', dpi=600)
     plt.close()
-    
+
 def density_compare_scatter(density_df, moving_avg_window, sat_name):
     
     save_path = f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/'

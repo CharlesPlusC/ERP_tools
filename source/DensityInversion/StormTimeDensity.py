@@ -1,6 +1,6 @@
 from ..tools.Get_SP3_from_GFZ_FTP import download_sp3
 from ..tools.sp3_2_ephemeris import sp3_ephem_to_df
-from ..DensityInversion.KinematicDensity import density_inversion
+from .PODDensity import density_inversion
 from ..tools.utilities import project_acc_into_HCL, get_satellite_info, interpolate_positions, calculate_acceleration
 
 import os
