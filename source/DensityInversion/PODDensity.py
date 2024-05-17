@@ -119,7 +119,7 @@ if __name__ == "__main__":
     base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
     # List of satellite names
-    sat_names = [ "CHAMP","TerraSAR-X", "GRACE-FO-A"]
+    sat_names = ["GRACE-FO-A","CHAMP","TerraSAR-X"]
 
     for sat_name in sat_names:
         # Correctly set the path for the current satellite
@@ -146,3 +146,43 @@ if __name__ == "__main__":
     # for sat_name in sat_names:
     #     # reldens_sat_megaplot(base_dir, sat_name)
     #     model_reldens_sat_megaplot(base_dir, sat_name)
+
+
+    #### Checking storm denstiy
+    # import matplotlib.pyplot as plt
+    # import pandas as pd
+    # import numpy as np
+
+    # storm_g5_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_0_1_20240517115930.csv")
+
+    # storm_g5_df['norm'] = np.linalg.norm(storm_g5_df[['x', 'y', 'z']].values, axis=1)
+    # storm_g5_df['vel_norm'] = np.linalg.norm(storm_g5_df[['xv', 'yv', 'zv']].values, axis=1)
+    # storm_g5_df['norm'] = (storm_g5_df['norm']/1000) - 6378.137
+    # storm_g5_df['vel_norm'] = storm_g5_df['vel_norm']/1000
+    # storm_g5_df['UTC'] = pd.to_datetime(storm_g5_df['UTC'])
+    # storm_g5_df.set_index('UTC', inplace=True)
+
+    # fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+    # # Plot altitude
+    # axs[0].plot(storm_g5_df.index, storm_g5_df['norm'], label='Altitude')
+    # axs[0].set_ylabel('Altitude (km)')
+    # axs[0].axhline(y=500, color='r', linestyle='--')
+    # axs[0].axhline(y=1000, color='g', linestyle='--')
+    # axs[0].text(storm_g5_df.index[0], 500, '500km', color='r')
+    # axs[0].text(storm_g5_df.index[0], 1000, '1000km', color='g')
+    # axs[0].grid()
+    # axs[0].set_title('GRACE-FO-A Storm Density Altitude')
+    # axs[0].set_yscale('log')
+
+    # # Plot velocity
+    # axs[1].plot(storm_g5_df.index, storm_g5_df['vel_norm'], label='Velocity', color='b')
+    # axs[1].set_xlabel('UTC')
+    # axs[1].set_ylabel('Velocity (km/s)')
+    # axs[1].grid()
+    # axs[1].set_title('GRACE-FO-A Storm Density Velocity')
+
+    # plt.tight_layout()
+    # plt.show()
+    
+    # plot_densities_and_indices([storm_g5_df], 1, "GRACE-FO-A")

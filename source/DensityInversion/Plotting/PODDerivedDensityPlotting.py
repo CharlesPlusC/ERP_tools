@@ -403,7 +403,6 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     analysis_start_time = max_kp_time - timedelta(hours=24)
     analysis_end_time = max_kp_time + timedelta(hours=36)
 
-    # Make sure to slice the data for the analysis period
     kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
     hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
 
@@ -431,19 +430,21 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
-    # Determine the number of rows for the subplots
     nrows = 2 + (1 if ae is not None else 0) + (1 if sym is not None else 0)
     height_ratios = [3, 1] + ([1] if ae is not None else []) + ([1] if sym is not None else [])
 
     fig, axs = plt.subplots(nrows=nrows, ncols=1, figsize=(10, 8 + nrows), gridspec_kw={'height_ratios': height_ratios, 'hspace': 0.4})
 
-    # Plot Densities
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0], linewidth=1)
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[1], linewidth=1)
-    sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2], linewidth=1)
+    if 'JB08' in data_frames[0]:
+        sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='JB08', label='JB08 Density', color=custom_palette[0], linewidth=1)
+    if 'DTM2000' in data_frames[0]:
+        sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='DTM2000', label='DTM2000 Density', color=custom_palette[1], linewidth=1)
+    if 'NRLMSISE00' in data_frames[0]:
+        sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2], linewidth=1)
 
     for i, density_df in enumerate(data_frames):
-        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink", linewidth=1)
+        if 'Computed Density' in density_df:
+            sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink", linewidth=1)
 
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
@@ -454,7 +455,6 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     axs[0].grid(True, which='both', linestyle='--', linewidth=0.5)
     axs[0].set_xlim(analysis_start_time, analysis_end_time)
 
-    # Plot Kp and Dst
     ax_right_top = axs[1]
     ax_kp = ax_right_top.twinx()
 
