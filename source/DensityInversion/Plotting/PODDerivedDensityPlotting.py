@@ -458,8 +458,16 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     ax_right_top = axs[1]
     ax_kp = ax_right_top.twinx()
 
-    ax_right_top.plot(hourly_dst_analysis['DateTime'], hourly_dst_analysis['Value'], label='Dst (nT)', linewidth=2, c='xkcd:violet')
-    ax_kp.plot(kp_3hrly_analysis['DateTime'], kp_3hrly_analysis['Kp'], label='Kp', linewidth=2, c='xkcd:hot pink')
+    # Plot Dst as horizontal lines
+    for i in range(len(hourly_dst_analysis) - 1):
+        ax_right_top.hlines(hourly_dst_analysis['Value'].iloc[i], hourly_dst_analysis['DateTime'].iloc[i], hourly_dst_analysis['DateTime'].iloc[i + 1], colors='xkcd:violet', linewidth=2)
+    ax_right_top.hlines(hourly_dst_analysis['Value'].iloc[-1], hourly_dst_analysis['DateTime'].iloc[-1], analysis_end_time, colors='xkcd:violet', linewidth=2)
+    
+    # Plot Kp as horizontal lines
+    for i in range(len(kp_3hrly_analysis) - 1):
+        ax_kp.hlines(kp_3hrly_analysis['Kp'].iloc[i], kp_3hrly_analysis['DateTime'].iloc[i], kp_3hrly_analysis['DateTime'].iloc[i + 1], colors='xkcd:hot pink', linewidth=2)
+    ax_kp.hlines(kp_3hrly_analysis['Kp'].iloc[-1], kp_3hrly_analysis['DateTime'].iloc[-1], analysis_end_time, colors='xkcd:hot pink', linewidth=2)
+
     ax_right_top.set_ylabel('Dst (nT)', color='xkcd:violet')
     ax_right_top.yaxis.label.set_color('xkcd:violet')
     ax_right_top.tick_params(axis='y', colors='xkcd:violet')
@@ -481,7 +489,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('SYM (nT)')
         axs[idx].grid(True, linestyle='--', linewidth=0.5)
-        axs[idx].invert_yaxis() 
+        # axs[idx].invert_yaxis() 
         idx += 1
 
     if ae is not None:
