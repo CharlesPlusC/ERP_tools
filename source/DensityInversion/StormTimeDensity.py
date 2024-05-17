@@ -230,7 +230,7 @@ def main_script(satellite, period_index, df_index, output_folder):
             velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
             
             density_inversion_df = density_inversion(satellite, velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
-                        models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
+                        models_to_query=[None], density_freq='15S')
 
             datenow = datetime.now().strftime("%Y%m%d%H%M%S")
             savepath = f"{output_folder}/StormAnalysis/{satellite}"
