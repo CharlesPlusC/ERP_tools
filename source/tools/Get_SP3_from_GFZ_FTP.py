@@ -27,6 +27,7 @@ def download_files(ftp_server, path, local_directory):
         print(f"FTP error: {e}")
 
 def download_sp3(start_date, end_date, spacecraft_name, json_path="misc/sat_list.json"):
+    print(f"Downloading SP3 files for {spacecraft_name} from {start_date} to {end_date}")
     sp3_codes = load_sp3_codes(json_path)
     if spacecraft_name in sp3_codes:
         sp3_code = sp3_codes[spacecraft_name]["sp3-c_code"]
@@ -54,3 +55,11 @@ def download_sp3(start_date, end_date, spacecraft_name, json_path="misc/sat_list
             current_date += timedelta(days=1)
     else:
         print(f"No SP3-C code found for {spacecraft_name}")
+
+# If you want to download a specific SP3 file, you can call the download_sp3 function with the desired parameters
+# if __name__ == "__main__":
+#     print("running from main")
+#     start_date = datetime(2023, 4, 23)
+#     end_date = datetime(2023, 4, 27)
+#     spacecraft_name = "TanDEM-X"
+#     download_sp3(start_date, end_date, spacecraft_name)
