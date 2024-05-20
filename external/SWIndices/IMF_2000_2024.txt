@@ -1,6 +1,5 @@
 ###
     ITEMS                      FORMAT   
-     
  1 YEAR                          I4        
  2 DOY                           I4        
  3 Hour                          I3        
