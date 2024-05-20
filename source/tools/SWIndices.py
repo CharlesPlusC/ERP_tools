@@ -477,8 +477,53 @@ def select_storms(kp_3hrly):
                 file.write(f"  {level}: [{formatted_dates}]\n")
             file.write("\n")
 
+
+def read_imf(start_date, end_date):
+    def read_ace_data(year, base_path="external/SWIndices/InterPlanMagFieldData"):
+        ace_base_path = os.path.join(base_path, f"ACE_data/magswe_{year}.txt")
+        ace_cols = ['year', 'day_of_year', 'hour', 'minute', 'seconds', 'Bx', 'By', 'Bz']
+        ace_data = pd.read_csv(ace_base_path, delim_whitespace=True, names=ace_cols)
+
+        # Print the first 10 rows with their column names and values
+        for index, row in ace_data.head(10).iterrows():
+            print(row.to_dict())
+
+        def construct_datetime(row):
+            year = int(row['year'])
+            day_of_year = int(row['day_of_year'])
+            hour = int(row['hour'])
+            minute = int(row['minute'])
+            second = int(row['seconds'])
+            # Convert from day of year to month and day
+            date = pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(days=day_of_year - 1)
+            return pd.Timestamp(year=year, month=date.month, day=date.day, hour=hour, minute=minute, second=second)
+
+        ace_data['DateTime'] = ace_data.apply(construct_datetime, axis=1)
+        return ace_data
+
+    def read_discvr_data(year, base_path="external/SWIndices/InterPlanMagFieldData"):
+        # Placeholder implementation
+        return None
+
+    start_year = int(start_date[:4])
+    end_year = int(end_date[:4])
+    all_data = []
+
+    for year in range(start_year, end_year + 1):
+        ace_data = read_ace_data(year)
+        discvr_data = read_discvr_data(year)
+        if discvr_data is not None:
+            all_data.append(discvr_data)
+        else:
+            all_data.append(ace_data)
+
+    imf_df = pd.concat(all_data)
+    imf_df = imf_df[(imf_df['DateTime'] >= start_date) & (imf_df['DateTime'] <= end_date)]
+    return imf_df
+
+
 if __name__ == "__main__":
-    pass
+    ####Plot Space Weather Indices
     # daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
     # kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']
@@ -493,7 +538,7 @@ if __name__ == "__main__":
     # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
 
-    #Test reading AE index
+    ####Test reading AE index
     # start_date = '2018-01-01'
     # end_date = '2020-02-01'
     # sym = read_ae(start_date, end_date)
