@@ -507,7 +507,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     if imf is not None:
         sns.lineplot(ax=axs[idx], data=imf, x='DateTime', y='Bz', label='Bz Component', color='xkcd:blue', linewidth=1)
         axs[idx].set_xlim(analysis_start_time, analysis_end_time)
-        axs[idx].set_title('IMF Bz Component')
+        axs[idx].set_title('IMF Bz Component at L1')
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('Bz (nT)')
         axs[idx].grid(True, linestyle='--', linewidth=0.5)
