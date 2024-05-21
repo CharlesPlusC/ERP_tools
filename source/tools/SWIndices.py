@@ -294,9 +294,6 @@ def read_imf(start_date, end_date):
         ace_cols = ['year', 'day_of_year', 'hour', 'minute', 'seconds', 'Bx', 'By', 'Bz']
         ace_data = pd.read_csv(ace_base_path, delim_whitespace=True, names=ace_cols)
 
-        for index, row in ace_data.head(10).iterrows():
-            print(row.to_dict())
-
         def construct_datetime(row):
             year = int(row['year'])
             day_of_year = int(row['day_of_year'])

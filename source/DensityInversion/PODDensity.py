@@ -119,7 +119,7 @@ if __name__ == "__main__":
     base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
     # List of satellite names
-    sat_names = ["GRACE-FO-A","CHAMP","TerraSAR-X"]
+    sat_names = ["CHAMP","GRACE-FO-A","TerraSAR-X"]
 
     for sat_name in sat_names:
         # Correctly set the path for the current satellite

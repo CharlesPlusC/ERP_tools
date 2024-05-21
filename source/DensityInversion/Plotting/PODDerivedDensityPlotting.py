@@ -8,7 +8,7 @@ from org.hipparchus.geometry.euclidean.threed import Vector3D
 from org.orekit.utils import PVCoordinates
 from orekit.pyhelpers import datetime_to_absolutedate
 from source.tools.utilities import project_acc_into_HCL, pv_to_kep, interpolate_positions, calculate_acceleration
-from source.tools.SWIndices import get_kp_ap_dst_f107, read_ae, read_sym
+from source.tools.SWIndices import get_kp_ap_dst_f107, read_ae, read_sym, read_imf
 from org.orekit.frames import FramesFactory
 import os
 import numpy as np
@@ -413,6 +413,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     end_date_str = analysis_end_time.strftime('%Y-%m-%d %H:%M:%S')
     ae = read_ae(start_date_str, end_date_str)
     sym = read_sym(start_date_str, end_date_str)
+    imf = read_imf(start_date_str, end_date_str)
 
     if ae is not None:
         ae['Datetime'] = pd.to_datetime(ae['Datetime'], utc=True)
@@ -420,6 +421,9 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     if sym is not None:
         sym['Datetime'] = pd.to_datetime(sym['Datetime'], utc=True)
         sym = sym[(sym['Datetime'] >= analysis_start_time) & (sym['Datetime'] <= analysis_end_time)]
+    if imf is not None:
+        imf['DateTime'] = pd.to_datetime(imf['DateTime'], utc=True)
+        imf = imf[(imf['DateTime'] >= analysis_start_time) & (imf['DateTime'] <= analysis_end_time)]
 
     for i, density_df in enumerate(data_frames):
         seconds_per_point = 30
@@ -430,8 +434,8 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
-    nrows = 2 + (1 if ae is not None else 0) + (1 if sym is not None else 0)
-    height_ratios = [3, 1] + ([1] if ae is not None else []) + ([1] if sym is not None else [])
+    nrows = 2 + (1 if ae is not None else 0) + (1 if sym is not None else 0) + (1 if imf is not None else 0)
+    height_ratios = [3, 1] + ([1] if ae is not None else []) + ([1] if sym is not None else []) + ([1] if imf is not None else [])
 
     fig, axs = plt.subplots(nrows=nrows, ncols=1, figsize=(10, 8 + nrows), gridspec_kw={'height_ratios': height_ratios, 'hspace': 0.4})
 
@@ -489,7 +493,6 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('SYM (nT)')
         axs[idx].grid(True, linestyle='--', linewidth=0.5)
-        # axs[idx].invert_yaxis() 
         idx += 1
 
     if ae is not None:
@@ -498,6 +501,15 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         axs[idx].set_title('AE Index')
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('AE (nT)')
+        axs[idx].grid(True, linestyle='--', linewidth=0.5)
+        idx += 1
+
+    if imf is not None:
+        sns.lineplot(ax=axs[idx], data=imf, x='DateTime', y='Bz', label='Bz Component', color='xkcd:blue', linewidth=1)
+        axs[idx].set_xlim(analysis_start_time, analysis_end_time)
+        axs[idx].set_title('IMF Bz Component')
+        axs[idx].set_xlabel('Time (UTC)')
+        axs[idx].set_ylabel('Bz (nT)')
         axs[idx].grid(True, linestyle='--', linewidth=0.5)
 
     plt.tight_layout() 
