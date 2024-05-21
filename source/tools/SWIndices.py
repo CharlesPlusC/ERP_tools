@@ -1,7 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import datetime
 import os
+import gzip
+import netCDF4 as nc
 
 def read_ae(start_date, end_date, components=['AE']):
     """
@@ -477,6 +479,10 @@ def select_storms(kp_3hrly):
                 file.write(f"  {level}: [{formatted_dates}]\n")
             file.write("\n")
 
+def convert_timestamps_to_utc(timestamps):
+    timestamps_seconds = timestamps / 1000
+    utc_datetimes = [datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc) for ts in timestamps_seconds]
+    return utc_datetimes
 
 def read_imf(start_date, end_date):
     def read_ace_data(year, base_path="external/SWIndices/InterPlanMagFieldData"):
@@ -484,7 +490,6 @@ def read_imf(start_date, end_date):
         ace_cols = ['year', 'day_of_year', 'hour', 'minute', 'seconds', 'Bx', 'By', 'Bz']
         ace_data = pd.read_csv(ace_base_path, delim_whitespace=True, names=ace_cols)
 
-        # Print the first 10 rows with their column names and values
         for index, row in ace_data.head(10).iterrows():
             print(row.to_dict())
 
@@ -494,7 +499,6 @@ def read_imf(start_date, end_date):
             hour = int(row['hour'])
             minute = int(row['minute'])
             second = int(row['seconds'])
-            # Convert from day of year to month and day
             date = pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(days=day_of_year - 1)
             return pd.Timestamp(year=year, month=date.month, day=date.day, hour=hour, minute=minute, second=second)
 
@@ -502,25 +506,58 @@ def read_imf(start_date, end_date):
         return ace_data
 
     def read_discvr_data(year, base_path="external/SWIndices/InterPlanMagFieldData"):
-        # Placeholder implementation
-        return None
+        discvr_dir = os.path.join(base_path, "DISCVR_data")
+        discvr_files = [f for f in os.listdir(discvr_dir) if f.startswith(f'oe_m1m_dscovr_s{year}') and f.endswith('.nc.gz')]
+        
+        if not discvr_files:
+            return None
+
+        all_discvr_data = []
+
+        for file_name in discvr_files:
+            file_path = os.path.join(discvr_dir, file_name)
+
+            with gzip.open(file_path, 'rb') as gz_file:
+                temp_file_path = file_path.replace('.gz', '')
+                with open(temp_file_path, 'wb') as temp_file:
+                    temp_file.write(gz_file.read())
+
+            dataset = nc.Dataset(temp_file_path, 'r')
+            time = convert_timestamps_to_utc(dataset.variables['time'][:])
+            bx_gsm = dataset.variables['bx_gsm'][:]
+            by_gsm = dataset.variables['by_gsm'][:]
+            bz_gsm = dataset.variables['bz_gsm'][:]
+
+            discvr_data = pd.DataFrame({
+                'DateTime': time,
+                'Bx': bx_gsm,
+                'By': by_gsm,
+                'Bz': bz_gsm
+            })
+
+            all_discvr_data.append(discvr_data)
+            dataset.close()
+            os.remove(temp_file_path)
+
+        return pd.concat(all_discvr_data)
 
     start_year = int(start_date[:4])
     end_year = int(end_date[:4])
     all_data = []
 
     for year in range(start_year, end_year + 1):
-        ace_data = read_ace_data(year)
         discvr_data = read_discvr_data(year)
         if discvr_data is not None:
+            print(f"DISCVR data for {year} found.")
             all_data.append(discvr_data)
         else:
+            print(f"DISCVR data for {year} not found.\n Fetching ACE data.")
+            ace_data = read_ace_data(year)
             all_data.append(ace_data)
 
     imf_df = pd.concat(all_data)
     imf_df = imf_df[(imf_df['DateTime'] >= start_date) & (imf_df['DateTime'] <= end_date)]
     return imf_df
-
 
 if __name__ == "__main__":
     ####Plot Space Weather Indices
@@ -543,3 +580,7 @@ if __name__ == "__main__":
     # end_date = '2020-02-01'
     # sym = read_ae(start_date, end_date)
     # print(sym)
+    start_date = '2022-05-16'
+    end_date = '2022-05-18'
+    imf_df = read_imf(start_date, end_date)
+    print(imf_df)
