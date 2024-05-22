@@ -318,7 +318,6 @@ def plot_densities_and_residuals(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
         median_density = density_df['Computed Density'].median()
         density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
-        density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.4})
@@ -328,7 +327,7 @@ def plot_densities_and_residuals(data_frames, moving_avg_minutes, sat_name):
     sns.lineplot(ax=axs[0], data=data_frames[0], x=data_frames[0].index, y='NRLMSISE00', label='NRLMSISE00 Density', color=custom_palette[2], linewidth=1)
 
     for i, density_df in enumerate(data_frames):
-        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink", linewidth=1)
+        sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', color="xkcd:hot pink", linewidth=0.5)
 
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
@@ -344,23 +343,20 @@ def plot_densities_and_residuals(data_frames, moving_avg_minutes, sat_name):
 
     for model_name in model_names:
         residual = data_frames[0][model_name] - data_frames[0]['Computed Density']
-        residuals.append(residual)
+        residuals.append(residual.dropna())  # Ensure no NaN values in residuals
 
-    max_residual = max([residual.dropna().max() for residual in residuals])
+    max_residual = max([residual.max() for residual in residuals])
     bins = np.linspace(-max_residual, max_residual, 50)
 
-    sns.histplot(residuals[0].dropna(), bins=bins, color=custom_palette[0], edgecolor='black', alpha=0.5, label=model_names[0], ax=axs[1])
-    sns.histplot(residuals[1].dropna(), bins=bins, color=custom_palette[1], edgecolor='black', alpha=0.5, label=model_names[1], ax=axs[1])
-    sns.histplot(residuals[2].dropna(), bins=bins, color=custom_palette[2], edgecolor='black', alpha=0.5, label=model_names[2], ax=axs[1])
+    for residual, color, label in zip(residuals, custom_palette, model_names):
+        sns.histplot(residual, bins=bins, color=color, edgecolor='black', alpha=0.5, label=label, ax=axs[1])
 
-    axs[1].set_xlim(-max_residual, max_residual)
     axs[1].set_yscale('log')
     axs[1].set_title('Model Densities - Computed')
     axs[1].set_xlabel('Residuals (kg/m³)')
     axs[1].set_ylabel('Frequency (Log)')
     axs[1].legend(loc='upper right', frameon=True)
     axs[1].grid(True, linestyle='--', linewidth=0.5)
-    axs[1].set_xlim(analysis_start_time, analysis_end_time)
 
     plt.tight_layout()
     datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -392,6 +388,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
             density_df.index = density_df.index.tz_localize('UTC')
         else:
             density_df.index = density_df.index.tz_convert('UTC')
+        density_df = density_df[~density_df.index.duplicated(keep='first')]
     
     start_time = min(df.index.min() for df in data_frames)
     end_time = max(df.index.max() for df in data_frames)
@@ -415,15 +412,21 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     sym = read_sym(start_date_str, end_date_str)
     imf = read_imf(start_date_str, end_date_str)
 
-    if ae is not None:
-        ae['Datetime'] = pd.to_datetime(ae['Datetime'], utc=True)
-        ae = ae[(ae['Datetime'] >= analysis_start_time) & (ae['Datetime'] <= analysis_end_time)]
+    def process_dataframe(df, time_col):
+        if df is not None:
+            df[time_col] = pd.to_datetime(df[time_col], utc=True)
+            df = df[(df[time_col] >= analysis_start_time) & (df[time_col] <= analysis_end_time)]
+            df = df[~df[time_col].duplicated(keep='first')]
+            df.set_index(time_col, inplace=True)
+        return df
+
+    ae = process_dataframe(ae, 'Datetime')
+    sym = process_dataframe(sym, 'Datetime')
+    imf = process_dataframe(imf, 'DateTime')
+
+    # Invert SYM values before further processing
     if sym is not None:
-        sym['Datetime'] = pd.to_datetime(sym['Datetime'], utc=True)
-        sym = sym[(sym['Datetime'] >= analysis_start_time) & (sym['Datetime'] <= analysis_end_time)]
-    if imf is not None:
-        imf['DateTime'] = pd.to_datetime(imf['DateTime'], utc=True)
-        imf = imf[(imf['DateTime'] >= analysis_start_time) & (imf['DateTime'] <= analysis_end_time)]
+        sym['minute_value'] = -sym['minute_value']
 
     for i, density_df in enumerate(data_frames):
         seconds_per_point = 30
@@ -431,7 +434,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
         median_density = density_df['Computed Density'].median()
         density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
-        density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
+        # density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
     nrows = 2 + (1 if ae is not None else 0) + (1 if sym is not None else 0) + (1 if imf is not None else 0)
@@ -462,12 +465,10 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     ax_right_top = axs[1]
     ax_kp = ax_right_top.twinx()
 
-    # Plot Dst as horizontal lines
     for i in range(len(hourly_dst_analysis) - 1):
         ax_right_top.hlines(hourly_dst_analysis['Value'].iloc[i], hourly_dst_analysis['DateTime'].iloc[i], hourly_dst_analysis['DateTime'].iloc[i + 1], colors='xkcd:violet', linewidth=2)
     ax_right_top.hlines(hourly_dst_analysis['Value'].iloc[-1], hourly_dst_analysis['DateTime'].iloc[-1], analysis_end_time, colors='xkcd:violet', linewidth=2)
     
-    # Plot Kp as horizontal lines
     for i in range(len(kp_3hrly_analysis) - 1):
         ax_kp.hlines(kp_3hrly_analysis['Kp'].iloc[i], kp_3hrly_analysis['DateTime'].iloc[i], kp_3hrly_analysis['DateTime'].iloc[i + 1], colors='xkcd:hot pink', linewidth=2)
     ax_kp.hlines(kp_3hrly_analysis['Kp'].iloc[-1], kp_3hrly_analysis['DateTime'].iloc[-1], analysis_end_time, colors='xkcd:hot pink', linewidth=2)
@@ -487,33 +488,38 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     idx = 2
 
     if sym is not None:
-        sns.lineplot(ax=axs[idx], data=sym, x='Datetime', y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1)
+        sns.lineplot(ax=axs[idx], data=sym, x=sym.index, y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1, ci=None)
         axs[idx].set_xlim(analysis_start_time, analysis_end_time)
         axs[idx].set_title('SYM Index')
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('SYM (nT)')
-        axs[idx].grid(True, linestyle='--', linewidth=0.5)
+        axs[idx].grid(True, linestyle='-', linewidth=0.5)
         idx += 1
 
     if ae is not None:
-        sns.lineplot(ax=axs[idx], data=ae, x='Datetime', y='minute_value', label='AE Index', color='xkcd:orange', linewidth=1)
+        sns.lineplot(ax=axs[idx], data=ae, x=ae.index, y='minute_value', label='AE Index', color='xkcd:orange', linewidth=1)
         axs[idx].set_xlim(analysis_start_time, analysis_end_time)
         axs[idx].set_title('AE Index')
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('AE (nT)')
-        axs[idx].grid(True, linestyle='--', linewidth=0.5)
+        axs[idx].grid(True, linestyle='-', linewidth=0.5)
         idx += 1
 
     if imf is not None:
-        sns.lineplot(ax=axs[idx], data=imf, x='DateTime', y='Bz', label='Bz Component', color='xkcd:blue', linewidth=1)
+        sns.lineplot(ax=axs[idx], data=imf, x=imf.index, y='Bz', label='Bz Component', color='xkcd:blue', linewidth=1)
         axs[idx].set_xlim(analysis_start_time, analysis_end_time)
         axs[idx].set_title('IMF Bz Component at L1')
         axs[idx].set_xlabel('Time (UTC)')
         axs[idx].set_ylabel('Bz (nT)')
-        axs[idx].grid(True, linestyle='--', linewidth=0.5)
+        axs[idx].grid(True, linestyle='-', linewidth=0.5)
+
+    # Adjust Dst and SYM axes to have the same min and max values
+    min_dst_sym = min(ax_right_top.get_ylim()[0], axs[2].get_ylim()[0])
+    max_dst_sym = max(ax_right_top.get_ylim()[1], axs[2].get_ylim()[1])
+    ax_right_top.set_ylim(min_dst_sym, max_dst_sym)
+    axs[2].set_ylim(min_dst_sym, max_dst_sym)
 
     plt.tight_layout() 
-    datenow = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/tseries_indices_{day}_{month}_{year}.png', dpi=600)
     plt.close()
 

@@ -361,6 +361,7 @@ def read_imf(start_date, end_date):
     return imf_df
 
 if __name__ == "__main__":
+    pass
     ####Plot Space Weather Indices
     # daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
@@ -377,12 +378,20 @@ if __name__ == "__main__":
     # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
 
     ####Test reading AE index
-    # start_date = '2018-01-01'
-    # end_date = '2020-02-01'
-    # sym = read_ae(start_date, end_date)
-    # print(sym)
-    start_date = '2001-01-01'
-    end_date = '2001-12-31'
-    imf_df = read_imf(start_date, end_date)
-    plot_imf_components(imf_df, start_date, end_date)
-    
+    # start_date = '2019-01-01'
+    # end_date = '2019-01-03'
+    # sym = read_sym(start_date, end_date)
+    # # print(sym)
+    # #plot lineplot of sym using seaborn
+    # import seaborn as sns
+    # plt.figure(figsize=(15, 5))
+    # sns.lineplot(data=sym, x='Datetime', y='minute_value', hue='component', ci=None)
+    # plt.title('SYM index')
+
+    # plt.show()
+
+    ### Test reading IMF
+    # start_date = '2001-01-01'
+    # end_date = '2001-12-31'
+    # imf_df = read_imf(start_date, end_date)
+    # plot_imf_components(imf_df, start_date, end_date)

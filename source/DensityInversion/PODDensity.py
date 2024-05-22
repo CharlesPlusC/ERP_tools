@@ -119,7 +119,7 @@ if __name__ == "__main__":
     base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
     # List of satellite names
-    sat_names = ["CHAMP","GRACE-FO-A","TerraSAR-X"]
+    sat_names = ["CHAMP", "TerraSAR-X", "GRACE-FO-A"]
 
     for sat_name in sat_names:
         # Correctly set the path for the current satellite
@@ -136,7 +136,7 @@ if __name__ == "__main__":
                     storm_df = pd.read_csv(storm_file_path) 
                     # plot_relative_density_change([storm_df], 45, sat_name)
                     # plot_density_arglat_diff([storm_df], 45, sat_name)
-                    # plot_densities_and_residuals([storm_df], 90, sat_name)
+                    plot_densities_and_residuals([storm_df], 90, sat_name)
                     plot_densities_and_indices([storm_df], 90, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name)
 
