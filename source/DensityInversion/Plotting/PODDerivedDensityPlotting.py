@@ -219,8 +219,8 @@ def plot_density_arglat_diff(data_frames, moving_avg_minutes, sat_name):
                     lower_bound = median_density - 5 * IQR
                     upper_bound = median_density + 5 * IQR
                     density_df.loc[:, 'Computed Density'] = density_df[density_type].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
-                    smoothed_values = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
-                    density_df.loc[:, 'Computed Density'] = smoothed_values
+                    density_df['Computed Density'] = density_df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
+                    density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
 
                 if density_type != 'Computed Density':
                     density_df.loc[:, f'{density_type} Difference'] = density_df['Computed Density'] - density_df[density_type]
@@ -429,11 +429,11 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         sym['minute_value'] = -sym['minute_value']
 
     for i, density_df in enumerate(data_frames):
-        seconds_per_point = 30
-        window_size = (moving_avg_minutes * 60) // seconds_per_point
-        density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
-        median_density = density_df['Computed Density'].median()
-        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
+        # seconds_per_point = 30
+        # window_size = (moving_avg_minutes * 60) // seconds_per_point
+        # density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
+        # median_density = density_df['Computed Density'].median()
+        # density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
         # density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
@@ -451,7 +451,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
 
     for i, density_df in enumerate(data_frames):
         if 'Computed Density' in density_df:
-            sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', linestyle='--', color="xkcd:hot pink", linewidth=1)
+            sns.lineplot(ax=axs[0], data=density_df, x=density_df.index, y='Computed Density', label='Computed Density', color="xkcd:hot pink", linewidth=0.5)
 
     day, month, year = analysis_start_time.day, analysis_start_time.month, analysis_start_time.year
     axs[0].set_title(f'Model vs. Estimated: {sat_name} \n{day}-{month}-{year}', fontsize=12)
@@ -488,7 +488,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     idx = 2
 
     if sym is not None:
-        sns.lineplot(ax=axs[idx], data=sym, x=sym.index, y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1, ci=None)
+        sns.lineplot(ax=axs[idx], data=sym, x=sym.index, y='minute_value', label='SYM Index', color='xkcd:violet', linewidth=1, errorbar=None)
         axs[idx].set_xlim(analysis_start_time, analysis_end_time)
         axs[idx].set_title('SYM Index')
         axs[idx].set_xlabel('Time (UTC)')

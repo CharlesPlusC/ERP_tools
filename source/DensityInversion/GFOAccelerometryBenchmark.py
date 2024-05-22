@@ -142,7 +142,7 @@ def ACT_vs_EDR_vs_POD():
     date_of_data = merged_data['UTC'].iloc[0].strftime("%Y-%m-%d")
     merged_data = merged_data[(merged_data['UTC'].dt.hour >= 2) & (merged_data['UTC'].dt.hour <= 18)]
     POD_and_ACT_data = POD_and_ACT_data[(POD_and_ACT_data['UTC'].dt.hour >= 2) & (POD_and_ACT_data['UTC'].dt.hour <= 18)]
-    fig, ax = plt.subplots(2, 1, figsize=(8, 4))
+    fig, ax = plt.subplots(2, 1, figsize=(8, 6))
 
     ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['ACT_Computed Density'], label='ACT Density', color="xkcd:teal", linewidth=1)
     ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['EDR_rolling'], label='EDR Density', color="xkcd:goldenrod", linewidth=1)
@@ -160,14 +160,40 @@ def ACT_vs_EDR_vs_POD():
     initial_ACT = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'ACT_Computed Density'].iloc[0]
     initial_EDR = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'EDR_rolling'].iloc[0]
     initial_POD = POD_and_ACT_data.loc[POD_and_ACT_data['UTC'].dt.floor('H') == POD_and_ACT_data['UTC'].dt.floor('H').min(), 'POD_rolling'].iloc[0]
+    initial_JB08 = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'jb08_rho'].iloc[0]
 
     ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['ACT_Computed Density'] - initial_ACT) / initial_ACT, label='ACT Density Change', color="xkcd:teal", linewidth=1)
     ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['EDR_rolling'] - initial_EDR) / initial_EDR, label='EDR Density Change', color="xkcd:goldenrod", linewidth=1)
     ax[1].plot(mdates.date2num(POD_and_ACT_data['UTC']), 100 * (POD_and_ACT_data['POD_rolling'] - initial_POD) / initial_POD, label='POD Density Change', color="xkcd:purple", linewidth=1)
+    ax[1].plot(mdates.date2num(merged_data['UTC']), 100 * (merged_data['jb08_rho'] - initial_JB08) / initial_JB08, label='JB08 Density Change', linestyle='--', color="#FF6347", linewidth=1)
     ax[1].grid(which='both', linestyle='--')
     ax[1].set_ylabel('Relative Change (%)')
     ax[1].set_xlabel('UTC')
-    ax[1].set_title('Relative Change in Density')
+    ax[1].set_title('ρᵢ - ρ₀ / ρ₀ (%)')
+
+    #calculate the RMS between the ACT and all the other densities
+    rms_ACT_EDR = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['EDR_rolling'])**2))
+    rms_ACT_POD = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - POD_and_ACT_data['POD_rolling'])**2))
+    rms_ACT_JB08 = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['jb08_rho'])**2))
+    rms_ACT_DTM2000 = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['dtm2000_rho'])**2))
+    rms_ACT_MSISE00 = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['nrlmsise00_rho'])**2))
+    print(f"RMS between ACT and EDR: {rms_ACT_EDR}")
+    print(f"RMS between ACT and POD: {rms_ACT_POD}")
+    print(f"RMS between ACT and JB08: {rms_ACT_JB08}")
+    print(f"RMS between ACT and DTM2000: {rms_ACT_DTM2000}")
+    print(f"RMS between ACT and MSISE00: {rms_ACT_MSISE00}")
+
+    #now do it for the relative changes
+    rms_ACT_EDR = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['EDR_rolling'] - initial_EDR))**2))
+    rms_ACT_POD = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (POD_and_ACT_data['POD_rolling'] - initial_POD))**2))
+    rms_ACT_JB08 = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['jb08_rho'] - initial_JB08))**2))
+    rms_ACT_DTM2000 = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['dtm2000_rho'] - merged_data['dtm2000_rho'].iloc[0]))**2))
+    rms_ACT_MSISE00 = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['nrlmsise00_rho'] - merged_data['nrlmsise00_rho'].iloc[0]))**2))
+    print(f"RMS between ACT and EDR: {rms_ACT_EDR}")
+    print(f"RMS between ACT and POD: {rms_ACT_POD}")
+    print(f"RMS between ACT and JB08: {rms_ACT_JB08}")
+    print(f"RMS between ACT and DTM2000: {rms_ACT_DTM2000}")
+    print(f"RMS between ACT and MSISE00: {rms_ACT_MSISE00}")
 
     ax[1].xaxis.set_major_locator(mdates.HourLocator(interval=3))
     ax[1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
@@ -359,3 +385,5 @@ if __name__ == '__main__':
     # plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_PSD_minutes.png")
     # # plt.show()
     # plt.close()
+
+
