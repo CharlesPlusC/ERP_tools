@@ -429,12 +429,12 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         sym['minute_value'] = -sym['minute_value']
 
     for i, density_df in enumerate(data_frames):
-        # seconds_per_point = 30
-        # window_size = (moving_avg_minutes * 60) // seconds_per_point
-        # density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
-        # median_density = density_df['Computed Density'].median()
-        # density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
-        # density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
+        seconds_per_point = 30
+        window_size = (moving_avg_minutes * 60) // seconds_per_point
+        density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
+        median_density = density_df['Computed Density'].median()
+        density_df['Computed Density'] = density_df['Computed Density'].apply(lambda x: median_density if x > 20 * median_density or x < median_density / 20 else x)
+        density_df['Computed Density'] = savgol_filter(density_df['Computed Density'], 51, 3)
         density_df = density_df[(density_df.index >= analysis_start_time) & (density_df.index <= analysis_end_time)]
 
     nrows = 2 + (1 if ae is not None else 0) + (1 if sym is not None else 0) + (1 if imf is not None else 0)
@@ -604,7 +604,7 @@ def determine_storm_category(kp_max):
     else:
         return "G5"
 
-def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
+def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes):
     storm_analysis_dir = os.path.join(base_dir, sat_name)
     if not os.path.exists(storm_analysis_dir):
         print(f"No data directory found for {sat_name}")
@@ -635,7 +635,11 @@ def reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
             density_types = ['Computed Density']
             for density_type in density_types:
                 if density_type in df.columns:
-                    df[density_type] = df[density_type].rolling(window=moving_avg_minutes, min_periods=1, center=True).mean()
+                    window_size = (moving_avg_minutes * 60) // 30
+                    df[density_type] = df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
+                    median_density = df[density_type].median()
+                    df[density_type] = df[density_type].apply(lambda x: median_density if x > 10 * median_density or x < median_density / 10 else x)
+                    df[density_type] = savgol_filter(df[density_type], 51, 3)
 
             kp_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= start_time + datetime.timedelta(days=3))]
             max_kp_time = kp_filtered.loc[kp_filtered['Kp'].idxmax()]['DateTime'] if not kp_filtered.empty else start_time

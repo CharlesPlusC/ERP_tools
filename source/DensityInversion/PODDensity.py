@@ -94,15 +94,27 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
 if __name__ == "__main__":
     # main()
     # daily_indices, kp3hrly, dst_hrly = get_kp_ap_dst_f107()
-    # for df_num, density_df in enumerate([densitydf_gfoa, densitydf_tsx, densitydf_champ]):
+
     # force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    # ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-04')
+    # ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2024-05-11')
     # ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-05 18:00:00']
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2024-05-10 15:00:00']
     # #make the ephemeris stop 24hrs after the start time
     # print(f"ephemeris_df: {ephemeris_df.head()}")
-    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2023-05-06 18:00:00']
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2024-05-12 07:00:00']
     # print(f"ephemeris_df: {ephemeris_df.head()}")
+    # #plot the norm of the position vector
+    # pos_norm = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values, axis=1)
+    # ephemeris_df['pos_norm'] = pos_norm
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots()
+    # ax.plot(ephemeris_df['UTC'], ephemeris_df['pos_norm'])
+    # ax.set_ylabel('Position Norm (km)')
+    # ax.set_xlabel('UTC')
+    # ax.set_title('GRACE-FO-A Position Norm')
+    # plt.show()
+
+
     # interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
     # velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
     # print(f"velacc_ephem: {velacc_ephem.head()}")
@@ -116,37 +128,36 @@ if __name__ == "__main__":
 
     # instead of continuing to manually list the paths just iterate over the list of satellite names in "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # Base directory for storm analysis
-    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
 
     # List of satellite names
-    sat_names = ["TerraSAR-X"]
+    # sat_names = ["TerraSAR-X"]
     #"CHAMP", "", 
 
-    for sat_name in sat_names:
-        # Correctly set the path for the current satellite
-        storm_analysis_dir = os.path.join(base_dir, sat_name)
+    # for sat_name in sat_names:
+        # storm_analysis_dir = os.path.join(base_dir, sat_name)
         
         # Check if the directory exists before listing files
-        if os.path.exists(storm_analysis_dir):
-            for storm_file in os.listdir(storm_analysis_dir):
+        # if os.path.exists(storm_analysis_dir):
+            # for storm_file in os.listdir(storm_analysis_dir):
                 # Form the full path to the storm file
-                storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+                # storm_file_path = os.path.join(storm_analysis_dir, storm_file)
                 
                 # Check if it's actually a file
-                if os.path.isfile(storm_file_path):
-                    storm_df = pd.read_csv(storm_file_path) 
+                # if os.path.isfile(storm_file_path):
+                    # storm_df = pd.read_csv(storm_file_path) 
                     # plot_relative_density_change([storm_df], 45, sat_name)
-                    plot_density_arglat_diff([storm_df], 45, sat_name)
+                    # plot_density_arglat_diff([storm_df], 45, sat_name)
                     # plot_densities_and_residuals([storm_df], 90, sat_name)
                     # plot_densities_and_indices([storm_df], 90, sat_name)
-                    # density_compare_scatter([storm_df], 45, sat_name)
+                    # density_compare_scatter([storm_df], 45, sat_name) 
 
     # Example Usage
-    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
-    # sat_names = ["CHAMP", "GRACE-FO-A", "TerraSAR-X"]
-    # for sat_name in sat_names:
-    #     # reldens_sat_megaplot(base_dir, sat_name)
-    #     model_reldens_sat_megaplot(base_dir, sat_name)
+    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    sat_names = [ "CHAMP"] #"GRACE-FO-A", "TerraSAR-X"
+    for sat_name in sat_names:
+        reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45)
+        # model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=90)
 
 
     #### Checking storm denstiy
@@ -154,7 +165,24 @@ if __name__ == "__main__":
     # import pandas as pd
     # import numpy as np
 
-    # storm_g5_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_0_1_20240517115930.csv")
+    # storm_g5_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_0_1_20240524153130.csv")
+
+    # storm_g5_df['UTC'] = pd.to_datetime(storm_g5_df['UTC'])
+    # storm_g5_df.set_index('UTC', inplace=True)
+
+    # start_time = '2024-05-10 23:00:00'
+    # end_time = '2024-05-11 11:00:00'
+
+    # mask = (storm_g5_df.index < start_time) | (storm_g5_df.index > end_time)
+    # mean_computed_density = storm_g5_df.loc[mask, 'Computed Density'].mean()
+
+    # storm_g5_df.loc[start_time:end_time, 'Computed Density'] = mean_computed_density
+
+    # storm_g5_df[['Computed Density']].plot()
+    # plt.xlabel('UTC')
+    # plt.ylabel('Density')
+    # plt.title('Computed Density over UTC')
+    # plt.show()
 
     # storm_g5_df['norm'] = np.linalg.norm(storm_g5_df[['x', 'y', 'z']].values, axis=1)
     # storm_g5_df['vel_norm'] = np.linalg.norm(storm_g5_df[['xv', 'yv', 'zv']].values, axis=1)
@@ -186,4 +214,4 @@ if __name__ == "__main__":
     # plt.tight_layout()
     # plt.show()
     
-    # plot_densities_and_indices([storm_g5_df], 1, "GRACE-FO-A")
+    # plot_densities_and_indices([storm_g5_df], 90, "GRACE-FO-A")
