@@ -796,3 +796,248 @@ def model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45):
 
     plt.subplots_adjust(left=0.055, bottom=0.012, right=0.905, top=0.967, wspace=0.2, hspace=0.32)
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_megadensity_diff_plots.png', dpi=300, bbox_inches='tight')
+
+# def plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=45):
+#     import os
+#     import numpy as np
+#     import pandas as pd
+#     import matplotlib.pyplot as plt
+#     from datetime import datetime, timedelta
+
+#     storm_analysis_dir = os.path.join(base_dir, sat_name)
+#     if not os.path.exists(storm_analysis_dir):
+#         return
+
+#     _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
+
+#     storm_data = []
+#     unique_dates = set()
+
+#     for storm_file in sorted(os.listdir(storm_analysis_dir)):
+#         storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+#         if os.path.isfile(storm_file_path):
+#             df = pd.read_csv(storm_file_path)
+#             df['UTC'] = pd.to_datetime(df['UTC'], utc=True)
+#             df.set_index('UTC', inplace=True)
+#             df.index = df.index.tz_convert('UTC')
+
+#             start_time = df.index.min()
+#             end_time = df.index.max()
+#             if start_time.strftime("%Y-%m-%d") in unique_dates:
+#                 continue
+#             unique_dates.add(start_time.strftime("%Y-%m-%d"))
+
+#             kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime'])
+#             hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime'])
+
+#             if kp_3hrly['DateTime'].dt.tz is None:
+#                 kp_3hrly['DateTime'] = kp_3hrly['DateTime'].dt.tz_localize('UTC')
+#             else:
+#                 kp_3hrly['DateTime'] = kp_3hrly['DateTime'].dt.tz_convert('UTC')
+
+#             if hourly_dst['DateTime'].dt.tz is None:
+#                 hourly_dst['DateTime'] = hourly_dst['DateTime'].dt.tz_localize('UTC')
+#             else:
+#                 hourly_dst['DateTime'] = hourly_dst['DateTime'].dt.tz_convert('UTC')
+
+#             kp_3hrly_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time + timedelta(days=3))]
+#             hourly_dst_filtered = hourly_dst[(hourly_dst['DateTime'] >= start_time) & (hourly_dst['DateTime'] <= end_time + timedelta(days=3))]
+
+#             if kp_3hrly_filtered.empty or hourly_dst_filtered.empty:
+#                 continue
+
+#             hourly_dst_filtered = hourly_dst_filtered.sort_values(by='DateTime')
+#             max_kp_time = kp_3hrly_filtered.loc[kp_3hrly_filtered['Kp'].idxmax(), 'DateTime']
+#             analysis_start_time = max_kp_time - timedelta(hours=24)
+#             analysis_end_time = max_kp_time + timedelta(hours=36)
+#             hourly_dst_analysis = hourly_dst_filtered[(hourly_dst_filtered['DateTime'] >= analysis_start_time) & (hourly_dst_filtered['DateTime'] <= analysis_end_time)]
+#             start_date_str = analysis_start_time.strftime('%Y-%m-%d %H:%M:%S')
+#             end_date_str = analysis_end_time.strftime('%Y-%m-%d %H:%M:%S')
+#             sym = read_sym(start_date_str, end_date_str)
+
+#             window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(df.index)).seconds if moving_avg_minutes > 0 else 1
+
+#             df['Computed Density'] = df['Computed Density'].rolling(window=window_size, min_periods=1, center=True).mean()
+#             df['Relative Density'] = df['Computed Density'] / df['Computed Density'].max()
+
+#             # Process Dst and SYM-H dataframes
+#             def process_dataframe(df, time_col):
+#                 if df is not None:
+#                     df.loc[:, time_col] = pd.to_datetime(df[time_col], utc=True)
+#                     df = df[(df[time_col] >= analysis_start_time) & (df[time_col] <= analysis_end_time)]
+#                     df = df[~df[time_col].duplicated(keep='first')]
+#                     df.set_index(time_col, inplace=True)
+#                 return df
+
+#             hourly_dst_analysis = process_dataframe(hourly_dst_analysis, 'DateTime')
+#             sym = process_dataframe(sym, 'Datetime')  # Assuming 'Datetime' is the correct column name for sym
+
+#             # Scale indices to be between 0 and 1
+#             if not hourly_dst_analysis.empty:
+#                 hourly_dst_min = hourly_dst_analysis['Value'].min()
+#                 hourly_dst_max = hourly_dst_analysis['Value'].max()
+#                 hourly_dst_analysis['Scaled Value'] = (hourly_dst_analysis['Value'] - hourly_dst_min) / (hourly_dst_max - hourly_dst_min)
+
+#             if not sym.empty:
+#                 sym['minute_value'] = -sym['minute_value']  # Invert SYM-H values before normalization
+#                 sym_min = sym['minute_value'].min()
+#                 sym_max = sym['minute_value'].max()
+#                 sym['Scaled Value'] = (sym['minute_value'] - sym_min) / (sym_max - sym_min)
+
+#             # Map scaled Dst and SYM-H values to the dataframe
+#             df['Relative Dst'] = df.index.map(lambda x: hourly_dst_analysis['Scaled Value'].asof(x) if not hourly_dst_analysis.empty else np.nan)
+#             df['Relative SYM-h'] = df.index.map(lambda x: sym['Scaled Value'].asof(x) if not sym.empty else np.nan)
+
+#             storm_data.append((df, start_time.strftime("%Y-%m-%d")))
+
+#     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(7, 7), dpi=600)
+
+#     num_storms = len(storm_data)
+#     colors = plt.cm.get_cmap('tab20', num_storms)
+
+#     for (df, storm_date), i in zip(storm_data, range(num_storms)):
+#         axes[0].scatter(df['Relative Density'], df['Relative Dst'], label=storm_date, color=colors(i), alpha=0.1, s=1)
+#         axes[1].scatter(df['Relative Density'], df['Relative SYM-h'], label=storm_date, color=colors(i), alpha=0.1, s=1)
+
+#     axes[0].set_title('Relative Density vs Relative Dst')
+#     axes[0].set_xlabel('Relative Density')
+#     axes[0].set_ylabel('Relative Dst')
+#     axes[0].plot([1, 0], [0, 1], color='black', linewidth=1)
+#     #force axes to be between 0 and 1
+#     axes[0].set_xlim(0, 1)
+#     axes[0].set_ylim(0, 1)
+
+#     axes[1].set_title('Relative Density vs Relative SYM-h')
+#     axes[1].set_xlabel('Relative Density')
+#     axes[1].set_ylabel('Relative SYM-h')
+#     axes[1].plot([1, 0], [0, 1], color='black', linewidth=1)
+#     # axes[1].legend(fontsize='small', loc='upper left', bbox_to_anchor=(1, 1))
+#     #make the points in the label alpha=1
+#     # for lh in axes[1].get_legend().legendHandles:
+#     #     lh.set_alpha(1)
+#     #force axes to be between 0 and 1
+#     axes[1].set_xlim(0, 1)
+#     axes[1].set_ylim(0, 1)
+
+#     plt.tight_layout(rect=[0, 0, 0.85, 1])  # Adjust layout to make space for legends
+#     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_density_vs_dst_symh.png', dpi=300, bbox_inches='tight')
+#     # plt.show()
+
+def plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=45):
+    import os
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from datetime import datetime, timedelta
+
+    storm_analysis_dir = os.path.join(base_dir, sat_name)
+    if not os.path.exists(storm_analysis_dir):
+        return
+
+    _, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
+
+    storm_data = []
+    unique_dates = set()
+
+    for storm_file in sorted(os.listdir(storm_analysis_dir)):
+        storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+        if os.path.isfile(storm_file_path):
+            df = pd.read_csv(storm_file_path)
+            df['UTC'] = pd.to_datetime(df['UTC'], utc=True)
+            df.set_index('UTC', inplace=True)
+            df.index = df.index.tz_convert('UTC')
+
+            start_time = df.index.min()
+            end_time = df.index.max()
+            if start_time.strftime("%Y-%m-%d") in unique_dates:
+                continue
+            unique_dates.add(start_time.strftime("%Y-%m-%d"))
+
+            kp_3hrly['DateTime'] = pd.to_datetime(kp_3hrly['DateTime'])
+            hourly_dst['DateTime'] = pd.to_datetime(hourly_dst['DateTime'])
+
+            if kp_3hrly['DateTime'].dt.tz is None:
+                kp_3hrly['DateTime'] = kp_3hrly['DateTime'].dt.tz_localize('UTC')
+            else:
+                kp_3hrly['DateTime'] = kp_3hrly['DateTime'].dt.tz_convert('UTC')
+
+            if hourly_dst['DateTime'].dt.tz is None:
+                hourly_dst['DateTime'] = hourly_dst['DateTime'].dt.tz_localize('UTC')
+            else:
+                hourly_dst['DateTime'] = hourly_dst['DateTime'].dt.tz_convert('UTC')
+
+            kp_3hrly_filtered = kp_3hrly[(kp_3hrly['DateTime'] >= start_time) & (kp_3hrly['DateTime'] <= end_time + timedelta(days=3))]
+            hourly_dst_filtered = hourly_dst[(hourly_dst['DateTime'] >= start_time) & (hourly_dst['DateTime'] <= end_time + timedelta(days=3))]
+
+            if kp_3hrly_filtered.empty or hourly_dst_filtered.empty:
+                continue
+
+            hourly_dst_filtered = hourly_dst_filtered.sort_values(by='DateTime')
+            max_kp_time = kp_3hrly_filtered.loc[kp_3hrly_filtered['Kp'].idxmax(), 'DateTime']
+            analysis_start_time = max_kp_time - timedelta(hours=24)
+            analysis_end_time = max_kp_time + timedelta(hours=36)
+            hourly_dst_analysis = hourly_dst_filtered[(hourly_dst_filtered['DateTime'] >= analysis_start_time) & (hourly_dst_filtered['DateTime'] <= analysis_end_time)]
+            start_date_str = analysis_start_time.strftime('%Y-%m-%d %H:%M:%S')
+            end_date_str = analysis_end_time.strftime('%Y-%m-%d %H:%M:%S')
+            sym = read_sym(start_date_str, end_date_str)
+
+            window_size = (moving_avg_minutes * 60) // pd.to_timedelta(pd.infer_freq(df.index)).seconds if moving_avg_minutes > 0 else 1
+
+            df['Computed Density'] = df['Computed Density'].rolling(window=window_size, min_periods=1, center=True).mean()
+            df['Relative Density'] = df['Computed Density'] / df['Computed Density'].max()
+
+            # Process Dst and SYM-H dataframes
+            def process_dataframe(df, time_col):
+                if df is not None:
+                    df.loc[:, time_col] = pd.to_datetime(df[time_col], utc=True)
+                    df = df[(df[time_col] >= analysis_start_time) & (df[time_col] <= analysis_end_time)]
+                    df = df[~df[time_col].duplicated(keep='first')]
+                    df.set_index(time_col, inplace=True)
+                return df
+
+            hourly_dst_analysis = process_dataframe(hourly_dst_analysis, 'DateTime')
+            sym = process_dataframe(sym, 'Datetime')  # Assuming 'Datetime' is the correct column name for sym
+
+            # Scale indices to be between 0 and 1
+            if not hourly_dst_analysis.empty:
+                hourly_dst_min = hourly_dst_analysis['Value'].min()
+                hourly_dst_max = hourly_dst_analysis['Value'].max()
+                hourly_dst_analysis['Scaled Value'] = (hourly_dst_analysis['Value'] - hourly_dst_min) / (hourly_dst_max - hourly_dst_min)
+
+            if not sym.empty:
+                sym['minute_value'] = -sym['minute_value']  # Invert SYM-H values before normalization
+                sym_min = sym['minute_value'].min()
+                sym_max = sym['minute_value'].max()
+                sym['Scaled Value'] = (sym['minute_value'] - sym_min) / (sym_max - sym_min)
+
+            # Map scaled Dst and SYM-H values to the dataframe
+            df['Relative Dst'] = df.index.map(lambda x: hourly_dst_analysis['Scaled Value'].asof(x) if not hourly_dst_analysis.empty else np.nan)
+            df['Relative SYM-h'] = df.index.map(lambda x: sym['Scaled Value'].asof(x) if not sym.empty else np.nan)
+
+            storm_data.append(df)
+
+    combined_df = pd.concat(storm_data)
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(7, 7), dpi=600)
+
+    sns.kdeplot(ax=axes[0], x=combined_df['Relative Density'], y=combined_df['Relative Dst'], fill=True, cmap='Blues', cbar=True)
+    sns.kdeplot(ax=axes[1], x=combined_df['Relative Density'], y=combined_df['Relative SYM-h'], fill=True, cmap='Greens', cbar=True)
+
+    axes[0].set_title('Relative Density vs Relative Dst')
+    axes[0].set_xlabel('Relative Density')
+    axes[0].set_ylabel('Relative Dst')
+    axes[0].plot([0, 1], [0, 1], color='black', linewidth=2)
+    axes[0].set_xlim(0, 1)
+    axes[0].set_ylim(0, 1)
+
+    axes[1].set_title('Relative Density vs Relative SYM-h')
+    axes[1].set_xlabel('Relative Density')
+    axes[1].set_ylabel('Relative SYM-h')
+    axes[1].plot([0, 1], [0, 1], color='black', linewidth=2)
+    axes[1].set_xlim(0, 1)
+    axes[1].set_ylim(0, 1)
+
+    plt.tight_layout()
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_density_vs_dst_symh_kde.png', dpi=300, bbox_inches='tight')
+    plt.show()
