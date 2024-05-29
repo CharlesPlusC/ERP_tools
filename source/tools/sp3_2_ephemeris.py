@@ -62,29 +62,51 @@ def process_sp3_files(base_path, sat_list):
                     df = read_sp3_gz_file(sp3_gz_file)
                     df['Time'] = pd.to_datetime(df['Time'])  # Ensure 'Time' is in datetime format
                     all_dataframes[sat_name].append(df)
+                    print(f"total records for {sat_name}: {len(all_dataframes[sat_name])}")
 
     contiguous_dataframes = {}
     for sat_name, dfs in all_dataframes.items():
-        grouped_dfs = []
+        print(f"Processing {sat_name}")
         if dfs:
+            print(f"Concatenating {len(dfs)} dataframes for {sat_name}")
             concatenated_df = pd.concat(dfs).drop_duplicates(subset='Time').set_index('Time').sort_index()
-            date_diffs = concatenated_df.index.to_series().diff().dt.days > 1
+            print(f"Total records after concatenation for {sat_name}: {len(concatenated_df)}")
+            
+            date_diffs = concatenated_df.index.to_series().diff().dt.total_seconds() > 1800  # 30 minutes
+            print(f"Number of date diffs: {date_diffs.sum()}")
+            print(f"Date diffs: {date_diffs}")
             split_points = concatenated_df[date_diffs].index
-            last_idx = None
+            print(f"Splitting into {len(split_points) + 1} dataframes for {sat_name}")
+            
+            grouped_dfs = []
+            last_idx = concatenated_df.index[0] if not split_points.empty else None
+            
             for idx in split_points:
-                if last_idx is not None:
-                    current_df = concatenated_df.loc[last_idx:idx - pd.Timedelta(seconds=1)]
-                    grouped_dfs.append(current_df)
+                current_df = concatenated_df.loc[last_idx:idx - pd.Timedelta(seconds=1)]
+                grouped_dfs.append(current_df)
+                print(f"Number of records in current_df: {len(current_df)}")
                 last_idx = idx
-            if last_idx is not None:
+                
+            if last_idx is not None and last_idx != concatenated_df.index[-1]:
                 grouped_dfs.append(concatenated_df.loc[last_idx:])
-        contiguous_dataframes[sat_name] = grouped_dfs
+                print(f"Number of records in last current_df: {len(grouped_dfs[-1])}")
+            elif split_points.empty:
+                # When there are no split points, the whole concatenated_df should be added.
+                grouped_dfs.append(concatenated_df)
+                print(f"Number of records in full dataframe: {len(concatenated_df)}")
+                
+            contiguous_dataframes[sat_name] = grouped_dfs
+        else:
+            contiguous_dataframes[sat_name] = []
+        
+        print(f"Total number of dataframes for {sat_name}: {len(contiguous_dataframes[sat_name])}")
 
     return contiguous_dataframes
 
 def write_ephemeris_file(file_name, df, satellite_info, output_dir="external/ephems"):
     # Create directory for satellite if it doesn't exist
     sat_dir = os.path.join(output_dir, file_name.split('_')[0])  # Adjust directory naming
+    print(f"Writing ephemeris file to {sat_dir}")
     os.makedirs(sat_dir, exist_ok=True)
 
     # Define the file name
@@ -179,13 +201,20 @@ def main():
     with open(sat_list_path, 'r') as file:
         sat_dict = json.load(file)
 
-    print(f"processing {list(sat_dict.keys())}")
+    #only keep the the following satellites: 'Sentinel-1A', 'Sentinel-1B', 'Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B'
+    satellites_to_keep = ['Sentinel-1B', 'Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B']
+    sat_dict = {k: v for k, v in sat_dict.items() if k in satellites_to_keep}
+    print(f"sat_dict: {sat_dict}")
+
 
     sp3_dataframes = process_sp3_files(sp3_files_path, sat_dict)
+    print(f"sp3_dataframes: {sp3_dataframes}")
 
     for satellite, dfs in sp3_dataframes.items():
+        print(f"Processing {satellite}")
         base_satellite_name = satellite.split('_')[0]  # Extract the original satellite name
         for df_index, df in enumerate(dfs):
+            print(f"Processing {base_satellite_name}_{df_index}")
             if not isinstance(df.index, pd.DatetimeIndex):
                 df.index = pd.to_datetime(df.index)
 
@@ -194,6 +223,7 @@ def main():
 
             itrs_positions = df[['Position_X', 'Position_Y', 'Position_Z']].values
             itrs_velocities = df[['Velocity_X', 'Velocity_Y', 'Velocity_Z']].values
+            print(f"Converting ITRS to EME2000 for {base_satellite_name}_{df_index}")
             icrs_positions, icrs_velocities = SP3_to_EME2000(itrs_positions, itrs_velocities, df['MJD'])
             df['pos_x_eci'], df['pos_y_eci'], df['pos_z_eci'] = icrs_positions.T
             df['vel_x_eci'], df['vel_y_eci'], df['vel_z_eci'] = icrs_velocities.T
@@ -206,7 +236,8 @@ def main():
             df['sigma_zv'] = 1e-3 # in km/s
 
             file_name = f"{base_satellite_name}_{df_index}"
-            write_ephemeris_file(file_name, df, sat_dict[base_satellite_name])  # Pass correct satellite-specific data
+            print(f"Writing ephemeris file for {file_name}")
+            write_ephemeris_file(file_name, df, sat_dict[base_satellite_name])  
 
 
 if __name__ == "__main__":

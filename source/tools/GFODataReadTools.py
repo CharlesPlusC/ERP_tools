@@ -126,3 +126,4 @@ def get_gfo_inertial_accelerations(acc_data_path, quat_data_path):
     #drop any rows with missing/Nan values
     inertial_df.dropna(inplace=True)
     return inertial_df
+
