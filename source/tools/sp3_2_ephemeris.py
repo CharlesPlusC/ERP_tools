@@ -62,21 +62,14 @@ def process_sp3_files(base_path, sat_list):
                     df = read_sp3_gz_file(sp3_gz_file)
                     df['Time'] = pd.to_datetime(df['Time'])  # Ensure 'Time' is in datetime format
                     all_dataframes[sat_name].append(df)
-                    print(f"total records for {sat_name}: {len(all_dataframes[sat_name])}")
 
     contiguous_dataframes = {}
     for sat_name, dfs in all_dataframes.items():
-        print(f"Processing {sat_name}")
         if dfs:
-            print(f"Concatenating {len(dfs)} dataframes for {sat_name}")
             concatenated_df = pd.concat(dfs).drop_duplicates(subset='Time').set_index('Time').sort_index()
-            print(f"Total records after concatenation for {sat_name}: {len(concatenated_df)}")
             
             date_diffs = concatenated_df.index.to_series().diff().dt.total_seconds() > 1800  # 30 minutes
-            print(f"Number of date diffs: {date_diffs.sum()}")
-            print(f"Date diffs: {date_diffs}")
             split_points = concatenated_df[date_diffs].index
-            print(f"Splitting into {len(split_points) + 1} dataframes for {sat_name}")
             
             grouped_dfs = []
             last_idx = concatenated_df.index[0] if not split_points.empty else None
@@ -84,29 +77,23 @@ def process_sp3_files(base_path, sat_list):
             for idx in split_points:
                 current_df = concatenated_df.loc[last_idx:idx - pd.Timedelta(seconds=1)]
                 grouped_dfs.append(current_df)
-                print(f"Number of records in current_df: {len(current_df)}")
                 last_idx = idx
                 
             if last_idx is not None and last_idx != concatenated_df.index[-1]:
                 grouped_dfs.append(concatenated_df.loc[last_idx:])
-                print(f"Number of records in last current_df: {len(grouped_dfs[-1])}")
             elif split_points.empty:
                 # When there are no split points, the whole concatenated_df should be added.
                 grouped_dfs.append(concatenated_df)
-                print(f"Number of records in full dataframe: {len(concatenated_df)}")
                 
             contiguous_dataframes[sat_name] = grouped_dfs
         else:
             contiguous_dataframes[sat_name] = []
         
-        print(f"Total number of dataframes for {sat_name}: {len(contiguous_dataframes[sat_name])}")
-
     return contiguous_dataframes
 
 def write_ephemeris_file(file_name, df, satellite_info, output_dir="external/ephems"):
     # Create directory for satellite if it doesn't exist
     sat_dir = os.path.join(output_dir, file_name.split('_')[0])  # Adjust directory naming
-    print(f"Writing ephemeris file to {sat_dir}")
     os.makedirs(sat_dir, exist_ok=True)
 
     # Define the file name
