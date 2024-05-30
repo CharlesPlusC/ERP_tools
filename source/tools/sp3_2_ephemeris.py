@@ -182,15 +182,16 @@ def sp3_ephem_to_df(satellite, date=None, ephemeris_dir="external/ephems"):
 
     return df
 
-def main():
+def main(satellite_list=None):
+    #satellite_list is a list of satellite names to process. If None, all satellites will be processed.
     sat_list_path = "misc/sat_list.json"
     sp3_files_path = "external/sp3_files"
     with open(sat_list_path, 'r') as file:
         sat_dict = json.load(file)
 
-    #only keep the the following satellites: 'Sentinel-1A', 'Sentinel-1B', 'Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B'
-    satellites_to_keep = ['Sentinel-1B', 'Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B']
-    sat_dict = {k: v for k, v in sat_dict.items() if k in satellites_to_keep}
+    if satellite_list:
+        sat_dict = {k: v for k, v in sat_dict.items() if k in satellite_list}
+
     print(f"sat_dict: {sat_dict}")
 
 
@@ -228,4 +229,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(satellite_list = ['GRACE-FO-B'])
