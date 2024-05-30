@@ -102,6 +102,70 @@ def ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data):
     timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_Comparison_{timenow}.png", dpi=600)
 
+def act_edr_pod_stats(POD_and_ACT_data, EDR_data):
+    POD_and_ACT_data['UTC'] = pd.to_datetime(POD_and_ACT_data['UTC'])
+    EDR_data['UTC'] = pd.to_datetime(EDR_data['UTC'])
+    merged_data = pd.merge(POD_and_ACT_data, EDR_data, on='UTC')
+    merged_data['UTC'] = pd.to_datetime(merged_data['UTC'])
+    merged_data['EDR_rolling'] = (merged_data['rho_eff']*10).rolling(window=180).mean()
+    POD_and_ACT_data['POD_rolling'] = POD_and_ACT_data['Velocity_Computed Density'].rolling(window=90, center=True).mean()
+
+    merged_data = merged_data.iloc[100:]
+
+    median_ACT = merged_data['ACT_Computed Density'].median()
+    merged_data['ACT_Computed Density'] = 2 * median_ACT - merged_data['ACT_Computed Density']
+
+    date_of_data = merged_data['UTC'].iloc[0].strftime("%Y-%m-%d")
+    merged_data = merged_data[(merged_data['UTC'].dt.hour >= 2) & (merged_data['UTC'].dt.hour <= 18)]
+    POD_and_ACT_data = POD_and_ACT_data[(POD_and_ACT_data['UTC'].dt.hour >= 2) & (POD_and_ACT_data['UTC'].dt.hour <= 18)]
+
+    merged_data['ACT_Computed Density'] = -1 * merged_data['ACT_Computed Density']
+
+    initial_ACT = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'ACT_Computed Density'].iloc[0]
+    initial_EDR = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'EDR_rolling'].iloc[0]
+    initial_POD = POD_and_ACT_data.loc[POD_and_ACT_data['UTC'].dt.floor('H') == POD_and_ACT_data['UTC'].dt.floor('H').min(), 'POD_rolling'].iloc[0]
+    initial_JB08 = merged_data.loc[merged_data['UTC'].dt.floor('H') == merged_data['UTC'].dt.floor('H').min(), 'jb08_rho'].iloc[0]
+
+    rms_ACT_EDR_abs = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['EDR_rolling'])**2))
+    rms_ACT_POD_abs = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - POD_and_ACT_data['POD_rolling'])**2))
+    rms_ACT_JB08_abs = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['jb08_rho'])**2))
+    rms_ACT_DTM2000_abs = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['dtm2000_rho'])**2))
+    rms_ACT_MSISE00_abs = np.sqrt(np.mean((merged_data['ACT_Computed Density'] - merged_data['nrlmsise00_rho'])**2))
+
+    rms_ACT_EDR_rel = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['EDR_rolling'] - initial_EDR))**2)) / initial_ACT * 100
+    rms_ACT_POD_rel = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (POD_and_ACT_data['POD_rolling'] - initial_POD))**2)) / initial_ACT * 100
+    rms_ACT_JB08_rel = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['jb08_rho'] - initial_JB08))**2)) / initial_ACT * 100
+    rms_ACT_DTM2000_rel = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['dtm2000_rho'] - merged_data['dtm2000_rho'].iloc[0]))**2)) / initial_ACT * 100
+    rms_ACT_MSISE00_rel = np.sqrt(np.mean(((merged_data['ACT_Computed Density'] - initial_ACT) - (merged_data['nrlmsise00_rho'] - merged_data['nrlmsise00_rho'].iloc[0]))**2)) / initial_ACT * 100
+
+    rmse_abs = [rms_ACT_EDR_abs, rms_ACT_POD_abs, rms_ACT_JB08_abs, rms_ACT_DTM2000_abs, rms_ACT_MSISE00_abs]
+    rmse_rel = [rms_ACT_EDR_rel, rms_ACT_POD_rel, rms_ACT_JB08_rel, rms_ACT_DTM2000_rel, rms_ACT_MSISE00_rel]
+    labels = ['EDR', 'POD', 'JB08', 'DTM2000', 'MSISE00']
+
+    fig, ax = plt.subplots(1, 2, figsize=(7, 4))
+
+    bars_abs = ax[0].bar(labels, rmse_abs, color=['xkcd:teal', 'xkcd:goldenrod', '#FF6347', 'xkcd:cherry red', '#1E90FF'])
+    ax[0].set_title('Absolute RMSE')
+    ax[0].set_ylabel('RMSE (kg/m³)')
+    #rotate the x-axis labels by 25 degrees
+    plt.setp(ax[0].get_xticklabels(), rotation=25, ha="right")
+    #add grid but only horizontal lines and make them dashed
+    ax[0].grid(axis='y', linestyle='--')
+
+    for bar in bars_abs:
+        yval = bar.get_height()
+        ax[0].text(bar.get_x() + bar.get_width() / 2, yval + 0.02, f"{yval:.2e}", ha='center', va='bottom')
+
+    bars_rel = ax[1].bar(labels, rmse_rel, color=['xkcd:teal', 'xkcd:goldenrod', '#FF6347', 'xkcd:cherry red', '#1E90FF'])
+    ax[1].set_title('Relative RMSE')
+    ax[1].set_ylabel('RMSE (%)')
+    plt.setp(ax[1].get_xticklabels(), rotation=25, ha="right")
+
+    ax[1].grid(axis='y', linestyle='--')
+    plt.tight_layout()
+    timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_RMSE_{timenow}.png", dpi=600)
+    plt.show()
 
 def ACT_vs_POD(acc_data_path, quat_data_path, sat_name="GRACE-FO-A", max_time=24, calculate_rho_from_vel=True, models_to_query=['JB08', 'DTM2000', 'NRLMSISE00']):
     force_model_config = {
@@ -200,7 +264,7 @@ if __name__ == '__main__':
     EDR_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/EDR_GRACE-FO-A__2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-13.csv")
 
     # ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data)
-    ACT_EDR_POD_histograms(POD_and_ACT_data, EDR_data)
+    act_edr_pod_stats(POD_and_ACT_data, EDR_data)
 
 
 #     sat_name = "GRACE-FO-A"

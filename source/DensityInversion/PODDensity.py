@@ -147,24 +147,23 @@ if __name__ == "__main__":
 
     # instead of continuing to manually list the paths just iterate over the list of satellite names in "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # Base directory for storm analysis
-    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
-
+    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # List of satellite names
-    # sat_names = ["TerraSAR-X"]
-    #"CHAMP", "", 
+    sat_names = ["CHAMP"] #"GRACE-FO-A", "TerraSAR-X"
 
-    # for sat_name in sat_names:
-        # storm_analysis_dir = os.path.join(base_dir, sat_name)
+    for sat_name in sat_names:
+        storm_analysis_dir = os.path.join(base_dir, sat_name)
         
         # Check if the directory exists before listing files
-        # if os.path.exists(storm_analysis_dir):
-            # for storm_file in os.listdir(storm_analysis_dir):
+        if os.path.exists(storm_analysis_dir):
+            for storm_file in os.listdir(storm_analysis_dir):
                 # Form the full path to the storm file
-                # storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+                storm_file_path = os.path.join(storm_analysis_dir, storm_file)
                 
                 # Check if it's actually a file
-                # if os.path.isfile(storm_file_path):
-                    # storm_df = pd.read_csv(storm_file_path) 
+                if os.path.isfile(storm_file_path):
+                    storm_df = pd.read_csv(storm_file_path) 
+                    density_compare_scatter(storm_df, 45, sat_name)
                     # plot_relative_density_change([storm_df], 45, sat_name)
                     # plot_density_arglat_diff([storm_df], 45, sat_name)
                     # plot_densities_and_residuals([storm_df], 90, sat_name)
@@ -172,17 +171,17 @@ if __name__ == "__main__":
                     # density_compare_scatter([storm_df], 45, sat_name) 
 
     # Example Usage
-    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
-    sat_names = ["CHAMP"] #"GRACE-FO-A", "TerraSAR-X"
-    for sat_name in sat_names:
+    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    # sat_names = ["CHAMP"] #"GRACE-FO-A", "TerraSAR-X"
+    # for sat_name in sat_names:
         # reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45)
-        plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=45)
+        # plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=45)
         # model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=90)
 
-    sat_names = ["GRACE-FO-A", "TerraSAR-X"] #"GRACE-FO-A", "TerraSAR-X"
-    for sat_name in sat_names:
+    # sat_names = ["CHAMP","GRACE-FO-A", "TerraSAR-X"] #"GRACE-FO-A", "TerraSAR-X"
+    # for sat_name in sat_names:
         # reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=45)
-        plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=90)
+        # plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=90)
         # model_reldens_sat_megaplot(base_dir, sat_name, moving_avg_minutes=90)
 
 
