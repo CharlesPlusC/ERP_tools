@@ -918,3 +918,109 @@ def plot_relative_density_vs_dst_symh(base_dir, sat_name, moving_avg_minutes=45)
     plt.tight_layout()
     plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_density_vs_dst_symh_kde.png', dpi=300, bbox_inches='tight')
     plt.show()
+
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+def plot_all_storms_scatter(base_dir, sat_name, moving_avg_minutes=45):
+    def aggregate_density_data(storm_analysis_dir, moving_avg_minutes):
+        aggregated_data = []
+
+        for storm_file in sorted(os.listdir(storm_analysis_dir)):
+            storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+            if os.path.isfile(storm_file_path):
+                df = pd.read_csv(storm_file_path)
+                df['UTC'] = pd.to_datetime(df['UTC'], utc=True)
+                df.set_index('UTC', inplace=True)
+                df.index = df.index.tz_convert('UTC')
+
+                density_types = ['Computed Density']
+                for density_type in density_types:
+                    if density_type in df.columns:
+                        window_size = (moving_avg_minutes * 60) // 30
+                        df[density_type] = df[density_type].rolling(window=window_size, min_periods=1, center=True).mean()
+                        median_density = df[density_type].median()
+                        df[density_type] = df[density_type].apply(lambda x: median_density if x > 10 * median_density or x < median_density / 10 else x)
+                        df[density_type] = savgol_filter(df[density_type], 51, 3)
+                
+                aggregated_data.append(df)
+
+        if aggregated_data:
+            return pd.concat(aggregated_data)
+        else:
+            return pd.DataFrame()
+
+    storm_analysis_dir = os.path.join(base_dir, sat_name)
+    if not os.path.exists(storm_analysis_dir):
+        print(f"No data directory found for {sat_name}")
+        return
+
+    aggregated_df = aggregate_density_data(storm_analysis_dir, moving_avg_minutes)
+    
+    if aggregated_df.empty:
+        print("No aggregated data available.")
+        return
+
+    # Calculate moving average for the Computed Density
+    if 'UTC' in aggregated_df.columns:
+        aggregated_df['UTC'] = pd.to_datetime(aggregated_df['UTC'], utc=True)
+        aggregated_df.set_index('UTC', inplace=True)
+    aggregated_df.index = aggregated_df.index.tz_localize('UTC') if aggregated_df.index.tz is None else aggregated_df.index.tz_convert('UTC')
+
+    freq_in_seconds = 30
+    window_size = (moving_avg_minutes * 60) // freq_in_seconds
+    
+    median_density = aggregated_df['Computed Density'].median()
+    IQR = aggregated_df['Computed Density'].quantile(0.75) - aggregated_df['Computed Density'].quantile(0.25)
+    lower_bound = median_density - 5 * IQR
+    upper_bound = median_density + 5 * IQR
+    aggregated_df.loc[:, 'Computed Density'] = aggregated_df['Computed Density'].apply(lambda x: median_density if x < lower_bound or x > upper_bound else x)
+    aggregated_df['Computed Density'] = aggregated_df['Computed Density'].rolling(window=window_size, min_periods=1, center=True).mean()
+    aggregated_df['Computed Density'] = savgol_filter(aggregated_df['Computed Density'], 51, 3)
+
+    # Model names to compare
+    model_names = ['JB08', 'DTM2000', 'NRLMSISE00']
+
+    f, axs = plt.subplots(1, 3, figsize=(18, 6), sharex=True, sharey=True)
+
+    x_min, x_max = np.inf, -np.inf
+    y_min, y_max = np.inf, -np.inf
+
+    for i, model in enumerate(model_names):
+        plot_data = aggregated_df.dropna(subset=['Computed Density', model])
+        plot_data = plot_data[plot_data['Computed Density'] > 0]  # Ensure positive values for log scale
+        
+        x_min = min(x_min, plot_data[model].min())
+        x_max = max(x_max, plot_data[model].max())
+        y_min = min(y_min, plot_data['Computed Density'].min())
+        y_max = max(y_max, plot_data['Computed Density'].max())
+        
+        sns.scatterplot(x=plot_data[model], y=plot_data['Computed Density'], s=5, color=".15", ax=axs[i])
+        sns.histplot(x=plot_data[model], y=plot_data['Computed Density'], bins=50, pthresh=.1, cmap="rocket", cbar=True, ax=axs[i])
+        sns.kdeplot(x=plot_data[model], y=plot_data['Computed Density'], levels=4, color="xkcd:white", linewidths=1, ax=axs[i])
+        
+        # Fit a linear regression model
+        X = plot_data[model].values.reshape(-1, 1)
+        y = plot_data['Computed Density'].values
+        reg = LinearRegression().fit(X, y)
+        y_pred = reg.predict(np.array([x_min, x_max]).reshape(-1, 1))
+        r2 = r2_score(y, reg.predict(X))
+        
+        # Plot the line of best fit
+        axs[i].plot([x_min, x_max], y_pred, color='teal', linestyle='--', linewidth=2, label=f'Best Fit Line (R²={r2:.2f})')
+        
+        # Plot the 1:1 line
+        axs[i].plot([x_min, x_max], [x_min, x_max], color='DodgerBlue', linestyle='-', linewidth=1, label='1:1 Line')
+
+        axs[i].set_xscale('log')
+        axs[i].set_yscale('log')
+        axs[i].set_title(f'Comparison of {model} vs. Computed Density')
+        axs[i].set_xlabel('Model Density')
+        axs[i].set_ylabel('Computed Density')
+        axs[i].grid(color='black', linestyle='-', linewidth=0.5)
+        axs[i].legend()
+
+    plt.setp(axs, xlim=(x_min, x_max), ylim=(y_min, y_max))
+    plt.tight_layout()
+    plt.savefig(f'output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}_allstorm_density_scatter_plots.png', dpi=300, bbox_inches='tight')
+    # plt.show()
