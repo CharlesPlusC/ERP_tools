@@ -14,115 +14,15 @@ from .PODDensity import density_inversion
 import numpy as np
 import datetime
 from tqdm import tqdm
+import matplotlib.dates as mdates
+import pandas as pd
+import matplotlib.pyplot as plt
+
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 
 # podaac-data-downloader -c GRACEFO_L1B_ASCII_GRAV_JPL_RL04 -d ./GRACE-FO_A_DATA -sd 2023-05-10T06:00:00Z -ed 2023-05-11T23:59:59Z -e ".*" --verbose
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from scipy.signal import welch, coherence
-
-def compute_and_plot_psd_coherence(df, components, window_lengths, fs=1, nperseg=256):
-    for window_length in window_lengths:
-        fig, axes = plt.subplots(nrows=len(components), ncols=2, figsize=(15, 8), sharex=True)
-        min_psd, max_psd, max_coh = float('inf'), float('-inf'), float('-inf')
-
-        # First pass to determine the global min and max for PSD, max for Coherence
-        for component in components:
-            signal_inverted = df[f'inverted_{component}_acc'].rolling(window=window_length, center=True).mean().dropna()
-            signal_inertial = df[f'inertial_{component}_acc']#.rolling(window=window_length, center=True).mean().dropna()
-
-            # PSD and Coherence calculation
-            f_inv, Pxx_inv = welch(signal_inverted, fs=fs, nperseg=nperseg)
-            f_iner, Pxx_iner = welch(signal_inertial, fs=fs, nperseg=nperseg)
-            _, Cxy = coherence(signal_inverted, signal_inertial, fs=fs, nperseg=nperseg)
-
-            min_psd = min(min_psd, np.min(Pxx_inv), np.min(Pxx_iner))
-            max_psd = max(max_psd, np.max(Pxx_inv), np.max(Pxx_iner))
-            max_coh = max(max_coh, np.max(Cxy))
-
-        # Second pass to plot using consistent axes
-        for i, component in enumerate(components):
-            signal_inverted = df[f'inverted_{component}_acc'].rolling(window=window_length, center=True).mean().dropna()
-            signal_inertial = df[f'inertial_{component}_acc']#.rolling(window=window_length, center=True).mean().dropna()
-
-            # PSD and Coherence calculation again
-            f_inv, Pxx_inv = welch(signal_inverted, fs=fs, nperseg=nperseg)
-            f_iner, Pxx_iner = welch(signal_inertial, fs=fs, nperseg=nperseg)
-            f_coh, Cxy = coherence(signal_inverted, signal_inertial, fs=fs, nperseg=nperseg)
-
-            # Plot PSD
-            axes[i, 0].plot(f_inv, Pxx_inv, label=f'Inverted {component}')
-            axes[i, 0].plot(f_iner, Pxx_iner, label=f'Inertial {component}')
-            axes[i, 0].set_title(f'PSD for {component} Component')
-            axes[i, 0].set_xlabel('Frequency (Hz)')
-            axes[i, 0].set_ylabel('PSD (m/s^-2 Hz^-0.5)')
-            axes[i, 0].legend()
-            axes[i, 0].set_yscale('log')
-            axes[i, 0].set_xscale('log')
-            axes[i, 0].set_ylim([min_psd, max_psd])
-            axes[i, 0].grid(which='both', linestyle='--')
-
-            # Plot Coherence
-            axes[i, 1].plot(f_coh, Cxy, label=f'Coherence {component}')
-            axes[i, 1].set_title(f'Coherence for {component} Component')
-            axes[i, 1].set_xlabel('Frequency (Hz)')
-            axes[i, 1].set_ylabel('Coherence')
-            axes[i, 1].set_xscale('log')
-            axes[i, 1].legend()
-            axes[i, 1].set_ylim([0, max_coh])
-            axes[i, 1].grid(which='both', linestyle='--')
-        
-        plt.tight_layout()
-        plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/PSD/PSD_Coherence_Comparison_{window_length}.png")
-        plt.close()
-def avg_win_length_rms(merged_df):
-    #plot the RMS difference between the inverted and measured accelerations as a function of averaging window size
-    #used to select the averaging window size that gives the best agreement between the inverted and measured accelerations
-
-    for component in ["h", "c", "l"]:
-
-        #print the first five h values
-        print(merged_df[f'inverted_{component}_acc'].head())
-        print(merged_df[f'inertial_{component}_acc'].head())
-        #make both the values positive
-        merged_df[f'inverted_{component}_acc'] = merged_df[f'inverted_{component}_acc'].abs()
-        merged_df[f'inertial_{component}_acc'] = merged_df[f'inertial_{component}_acc'].abs()
-
-        rmss = []
-        for window in range(5, 256, 5):
-            
-            #plot the 'window' minute rolling average of the inverted against the measured accelerations
-            rolling_inverted = merged_df[f'inverted_{component}_acc'].rolling(window=window, center=True).mean()
-            rms_diff = np.sqrt(np.mean((rolling_inverted - merged_df[f'inertial_{component}_acc'])**2))
-            rmss.append(rms_diff)
-            print(f"RMS: {rms_diff}, window size: {window}")
-            plt.plot(merged_df['utc_time'], rolling_inverted, label=f'inverted_{component}_acc')
-            plt.plot(merged_df['utc_time'], merged_df[f'inertial_{component}_acc'], label=f'inertial_{component}_acc')
-            plt.xlabel('Time')
-            plt.ylabel(f'{component} Acceleration (m/s^2)')
-            plt.legend()
-            #set ylim from 1e-8 to 1e-6
-            plt.ylim(1e-8, 1e-5)
-            #log scale
-            plt.yscale('log')
-            plt.tight_layout()
-            plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/HCLAccDiffs/{component}_diff_comparison{window}.png")
-            plt.close()
-
-        #plot the RMS difference as a function of window size
-        plt.plot(range(5, 256, 5), rmss)
-        plt.xlabel('Window Size')
-        plt.ylabel('RMS Difference')
-        plt.tight_layout()
-        plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/AccelerometerBenchmarking/HCLAccDiffs/{component}_diff_RMS_Difference.png")
-        plt.close()
-
 def ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data):
-    import matplotlib.dates as mdates
-    import matplotlib.pyplot as plt
-    import pandas as pd
     
     POD_and_ACT_data['UTC'] = pd.to_datetime(POD_and_ACT_data['UTC'])
     EDR_data['UTC'] = pd.to_datetime(EDR_data['UTC'])
@@ -140,6 +40,8 @@ def ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data):
     merged_data = merged_data[(merged_data['UTC'].dt.hour >= 2) & (merged_data['UTC'].dt.hour <= 18)]
     POD_and_ACT_data = POD_and_ACT_data[(POD_and_ACT_data['UTC'].dt.hour >= 2) & (POD_and_ACT_data['UTC'].dt.hour <= 18)]
     fig, ax = plt.subplots(2, 1, figsize=(8, 6))
+    #multiply ACT_computed density by -1
+    merged_data['ACT_Computed Density'] = -1 * merged_data['ACT_Computed Density']
 
     ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['ACT_Computed Density'], label='ACT Density', color="xkcd:teal", linewidth=1)
     ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['EDR_rolling'], label='EDR Density', color="xkcd:goldenrod", linewidth=1)
@@ -197,7 +99,9 @@ def ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data):
     plt.setp(ax[1].get_xticklabels(), rotation=45, ha="right")
 
     plt.tight_layout()
-    plt.savefig("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_Comparison.png", dpi=600)
+    timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    plt.savefig(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/ACT_EDR_POD_Comparison_{timenow}.png", dpi=600)
+
 
 def ACT_vs_POD(acc_data_path, quat_data_path, sat_name="GRACE-FO-A", max_time=24, calculate_rho_from_vel=True, models_to_query=['JB08', 'DTM2000', 'NRLMSISE00']):
     force_model_config = {
@@ -232,10 +136,15 @@ def ACT_vs_POD(acc_data_path, quat_data_path, sat_name="GRACE-FO-A", max_time=24
     print(f"columns of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.columns}")
 
     act_x_acc_col, act_y_acc_col, act_z_acc_col = 'inertial_x_acc', 'inertial_y_acc', 'inertial_z_acc'
+    rp_fm_config = {
+    'knocke_erp': True,
+    'SRP': True}
+    #this rp fm config also appears in density inveersion function
+    #TODO: just keep one pls.
     rho_from_ACT = density_inversion(
         sat_name, inertial_act_gfo_ephem, 
         act_x_acc_col, act_y_acc_col, act_z_acc_col, 
-        force_model_config, nc_accs=True, 
+        rp_fm_config, nc_accs=True, 
         models_to_query=models_to_query, density_freq='15S'
     )
     rho_from_ACT.rename(columns={'Computed Density': 'ACT_Computed Density'}, inplace=True)
@@ -270,79 +179,81 @@ def ACT_vs_POD(acc_data_path, quat_data_path, sat_name="GRACE-FO-A", max_time=24
 
     print(f"head of merged_df: {merged_df.head()}")
     print(f"columns of merged_df: {merged_df.columns}")
-    merged_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Plots/{sat_name}/Accelerometer_benchmark/{timenow}_bench.csv", index=False)
+    merged_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Data/{sat_name}/Accelerometer_benchmark/{timenow}_bench.csv", index=False)
 
 if __name__ == '__main__':
-    POD_and_ACT_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/2024-05-09_12-46-12_bench.csv")
-    EDR_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/EDR_GRACE-FO-A__2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-13.csv")
-
-    ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data)
 
     # File paths
-    acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-06_C_04.txt"
-    quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-06_C_04.txt"
+    # acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-06_C_04.txt"
+    # quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-06_C_04.txt"
 
-    # Call the function with appropriate parameters
-    ACT_vs_POD(
-        acc_data_path=acc_data_path,
-        quat_data_path=quat_data_path,
-        sat_name="GRACE-FO-A",
-        max_time=24,
-        calculate_rho_from_vel=True,
-        models_to_query=['JB08', 'DTM2000', 'NRLMSISE00']
-)
+    # # Call the function with appropriate parameters
+    # ACT_vs_POD(
+    #     acc_data_path=acc_data_path,
+    #     quat_data_path=quat_data_path,
+    #     sat_name="GRACE-FO-A",
+    #     max_time=24,
+    #     calculate_rho_from_vel=True,
+    #     models_to_query=['JB08', 'DTM2000', 'NRLMSISE00'])
 
-    sat_name = "GRACE-FO-A"
-    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    max_time = 24
-    acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-06_C_04.txt"
-    quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-06_C_04.txt"
-    inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
-    inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['utc_time'])
-    inertial_gfo_data.drop(columns=['utc_time'], inplace=True)
+    POD_and_ACT_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/2024-05-30_11-56-15_bench.csv")
+    EDR_data = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/ACTvsEDRvsPOD/EDR_GRACE-FO-A__2023-05-05 18:00:12_2023-05-06 18:00:12_2024-05-13.csv")
 
-    intertial_t0 = inertial_gfo_data['UTC'].iloc[0]
-    inertial_act_gfo_data = inertial_gfo_data[(inertial_gfo_data['UTC'] >= intertial_t0) & (inertial_gfo_data['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
-    sp3_ephemeris_df = sp3_ephem_to_df(satellite="GRACE-FO-A", date="2023-05-06")
-    sp3_ephemeris_df['UTC'] = pd.to_datetime(sp3_ephemeris_df['UTC'])
-    sp3_ephemeris_df = sp3_ephemeris_df[(sp3_ephemeris_df['UTC'] >= intertial_t0) & (sp3_ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
+    # ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data)
+    ACT_EDR_POD_histograms(POD_and_ACT_data, EDR_data)
 
-    inertial_act_gfo_ephem = pd.merge(inertial_act_gfo_data, sp3_ephemeris_df, on='UTC', how='inner')
-    print(f"head of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.head()}")
-    print(f"columns of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.columns}")
 
-    act_x_acc_col, act_y_acc_col, act_z_acc_col = 'inertial_x_acc', 'inertial_y_acc', 'inertial_z_acc'
-    rho_from_ACT = density_inversion(sat_name, inertial_act_gfo_ephem, 
-                                     act_x_acc_col, act_y_acc_col, act_z_acc_col, 
-                                     force_model_config, nc_accs=True, 
-                                     models_to_query=['JB08', "DTM2000", "NRLMSISE00"], density_freq='15S')
-    rho_from_ACT.rename(columns={'Computed Density': 'ACT_Computed Density'}, inplace=True)
+#     sat_name = "GRACE-FO-A"
+#     force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+#     max_time = 24
+#     acc_data_path = "external/GFOInstrumentData/ACT1B_2023-05-06_C_04.txt"
+#     quat_data_path = "external/GFOInstrumentData/SCA1B_2023-05-06_C_04.txt"
+#     inertial_gfo_data = get_gfo_inertial_accelerations(acc_data_path, quat_data_path)
+#     inertial_gfo_data['UTC'] = pd.to_datetime(inertial_gfo_data['utc_time'])
+#     inertial_gfo_data.drop(columns=['utc_time'], inplace=True)
 
-    print(f"head of rho_from_ACT: {rho_from_ACT.head()}")
+#     intertial_t0 = inertial_gfo_data['UTC'].iloc[0]
+#     inertial_act_gfo_data = inertial_gfo_data[(inertial_gfo_data['UTC'] >= intertial_t0) & (inertial_gfo_data['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
+#     sp3_ephemeris_df = sp3_ephem_to_df(satellite="GRACE-FO-A", date="2023-05-06")
+#     sp3_ephemeris_df['UTC'] = pd.to_datetime(sp3_ephemeris_df['UTC'])
+#     sp3_ephemeris_df = sp3_ephemeris_df[(sp3_ephemeris_df['UTC'] >= intertial_t0) & (sp3_ephemeris_df['UTC'] <= intertial_t0 + pd.Timedelta(hours=max_time))]
 
-    interp_ephemeris_df = interpolate_positions(sp3_ephemeris_df, '0.01S')
-    sp3_velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
-    sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
-    rho_from_vel = density_inversion(sat_name, sp3_velacc_ephem, 
-                                    sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z, 
-                                    force_model_config=force_model_config, nc_accs=False, 
-                                    models_to_query=[None], density_freq='15S')
-    rho_from_vel.rename(columns={'Computed Density': 'Velocity_Computed Density'}, inplace=True)
+#     inertial_act_gfo_ephem = pd.merge(inertial_act_gfo_data, sp3_ephemeris_df, on='UTC', how='inner')
+#     print(f"head of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.head()}")
+#     print(f"columns of inertial_act_gfo_ephem: {inertial_act_gfo_ephem.columns}")
 
-    print(f"head of rho_from_vel: {rho_from_vel.head()}")
+#     act_x_acc_col, act_y_acc_col, act_z_acc_col = 'inertial_x_acc', 'inertial_y_acc', 'inertial_z_acc'
+#     rho_from_ACT = density_inversion(sat_name, inertial_act_gfo_ephem, 
+#                                      act_x_acc_col, act_y_acc_col, act_z_acc_col, 
+#                                      force_model_config, nc_accs=True, 
+#                                      models_to_query=['JB08', "DTM2000", "NRLMSISE00"], density_freq='15S')
+#     rho_from_ACT.rename(columns={'Computed Density': 'ACT_Computed Density'}, inplace=True)
 
-    merged_df = pd.merge(rho_from_ACT[['UTC', 'ACT_Computed Density', 'JB08', 'DTM2000', 'NRLMSISE00']], rho_from_vel[['UTC', 'Velocity_Computed Density']], on='UTC', how='inner')
+#     print(f"head of rho_from_ACT: {rho_from_ACT.head()}")
 
-    timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    merged_df.dropna(inplace=True)
+#     interp_ephemeris_df = interpolate_positions(sp3_ephemeris_df, '0.01S')
+#     sp3_velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+#     sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
+#     rho_from_vel = density_inversion(sat_name, sp3_velacc_ephem, 
+#                                     sp3_vel_acc_col_x, sp3_vel_acc_col_y, sp3_vel_acc_col_z, 
+#                                     force_model_config=force_model_config, nc_accs=False, 
+#                                     models_to_query=[None], density_freq='15S')
+#     rho_from_vel.rename(columns={'Computed Density': 'Velocity_Computed Density'}, inplace=True)
 
-    print(f"head of merged_df: {merged_df.head()}")
-    print(f"columns of merged_df: {merged_df.columns}")
-    merged_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_bench.csv", index=False)
+#     print(f"head of rho_from_vel: {rho_from_vel.head()}")
 
-    # #load the data from path 
-    # # path = "output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/2024-05-09_10-47-36_bench.csv"
-    # # merged_df = pd.read_csv(path)
+#     merged_df = pd.merge(rho_from_ACT[['UTC', 'ACT_Computed Density', 'JB08', 'DTM2000', 'NRLMSISE00']], rho_from_vel[['UTC', 'Velocity_Computed Density']], on='UTC', how='inner')
+
+#     timenow = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+#     merged_df.dropna(inplace=True)
+
+#     print(f"head of merged_df: {merged_df.head()}")
+#     print(f"columns of merged_df: {merged_df.columns}")
+#     merged_df.to_csv(f"output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/{timenow}_bench.csv", index=False)
+
+    #load the data from path 
+    # path = "output/DensityInversion/PODBasedAccelerometry/Plots/GRACE-FO-A/Accelerometer_benchmark/2024-05-09_10-47-36_bench.csv"
+    # merged_df = pd.read_csv(path)
     # merged_df = merged_df.iloc[10:-10]
     # median_ACT = merged_df['ACT_Computed Density'].median()
     # flipped_ACT = 2 * median_ACT - merged_df['ACT_Computed Density'] #TODO: figure out why the accelerometer density is inverted? Is the X/along track sign different in the ACT file?

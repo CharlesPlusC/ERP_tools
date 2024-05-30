@@ -210,7 +210,7 @@ def compute_rho_eff(EDR, velocity, positions, CD, A_ref, mass, dt):
         integral_v_rel3 = dt * v_rel_mag**3
         
         # Solve for rho_eff for this position
-        rho_eff = (2 * mass * -EDR) / (CD * A_ref * integral_v_rel3)
+        rho_eff = (2 * mass * EDR) / (CD * A_ref * integral_v_rel3)
         rho_effs.append(rho_eff)
     
     return np.array(rho_eff)
@@ -233,7 +233,7 @@ def Density_from_EDR(sat_name, energy_ephemeris_df, query_models=False):
     if 'UTC' not in energy_ephemeris_df.columns:
         energy_ephemeris_df['UTC'] = [start_date_utc + pd.Timedelta(seconds=30) * i for i in range(len(energy_ephemeris_df))]
 
-    EDR = -energy_ephemeris_df['HOT_total_diff']
+    EDR = energy_ephemeris_df['HOT_total_diff']
     velocity = np.vstack([energy_ephemeris_df['xv'], energy_ephemeris_df['yv'], energy_ephemeris_df['zv']]).T
     position = np.vstack([energy_ephemeris_df['x'], energy_ephemeris_df['y'], energy_ephemeris_df['z']]).T
     CD = 2.2

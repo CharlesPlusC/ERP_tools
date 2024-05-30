@@ -1,0 +1,674 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x0000000104d8d168, pid=76428, tid=0x0000000000000103
+#
+# JRE version: OpenJDK Runtime Environment (Zulu 8.72.0.17-CA-macos-aarch64) (8.0_382-b05) (build 1.8.0_382-b05)
+# Java VM: OpenJDK 64-Bit Server VM (25.382-b05 mixed mode bsd-aarch64 compressed oops)
+# Problematic frame:
+# C  [python3.11+0x1e1168]  gc_collect_main+0x29c
+#
+# Failed to write core dump. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# If you would like to submit a bug report, please visit:
+#   http://www.azul.com/support/
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x0000000120b7e000):  JavaThread "main" [_thread_in_native, id=259, stack(0x0000000169254000,0x000000016b254000)]
+
+siginfo: si_signo: 11 (SIGSEGV), si_code: 2 (SEGV_ACCERR), si_addr: 0x0000000169255f48
+
+Registers:
+ x0=0x0000000000000002  x1=0x0000000000000002  x2=0x000000016b24bac0  x3=0x000000016b24bab8
+ x4=0x0000000000000000  x5=0x000000000000006c  x6=0x000000000000006c  x7=0x000000016b24bca8
+ x8=0x0000000169255f40  x9=0x0000000000000006 x10=0x0000000000000004 x11=0x000000010507d208
+x12=0x0000000000000000 x13=0x000000010507d1e8 x14=0x00000002a5e38070 x15=0x000000010507d1d0
+x16=0x00000002a5eb44b0 x17=0x00000002a5eb44b0 x18=0x0000000000000000 x19=0x0000000105228030
+x20=0x0000000000000002 x21=0x00000001050972b0 x22=0x000000010507d200 x23=0x0000000000000001
+x24=0x000000010507d200 x25=0x00000002a5eaa010 x26=0x0000000000000001 x27=0x000000010507cf30
+x28=0x0000000000000000  fp=0x000000016b24baa0  lr=0x0000000104d8e7e4  sp=0x000000016b24b960
+pc=0x0000000104d8d168 cpsr=0x0000000080001000
+Top of Stack: (sp=0x000000016b24b960)
+0x000000016b24b960:   0000000000000001 00000002a5eaa010
+0x000000016b24b970:   000000000000005a 0000000104ff6358
+0x000000016b24b980:   0000000000000000 00000000a5eb44f0
+0x000000016b24b990:   0000000000000002 000000016b24bac0
+0x000000016b24b9a0:   000000016b24bab8 0000000000000002
+0x000000016b24b9b0:   0000000000000000 0000000000000000
+0x000000016b24b9c0:   000000010506b3b0 52155705773c00d4
+0x000000016b24b9d0:   000000000000005a 0000000000000001
+0x000000016b24b9e0:   000000000000005a 0000000000000001
+0x000000016b24b9f0:   0000000000000001 52155705773c00d4
+0x000000016b24ba00:   0000000000000000 0000000000000000
+0x000000016b24ba10:   0000000000000000 000000016b24c418
+0x000000016b24ba20:   000000016b24ba30 0000000104d52080
+0x000000016b24ba30:   000000016b24bb80 0000000104d51620
+0x000000016b24ba40:   52155705773c00d4 0000000000000360
+0x000000016b24ba50:   0000000000000000 0000000000000000
+0x000000016b24ba60:   0000000000000001 00000002a5eaa010
+0x000000016b24ba70:   0000000000000029 0000000000000001
+0x000000016b24ba80:   0000000000000010 0000000000000002
+0x000000016b24ba90:   00000001050972b0 000000010507cf30
+0x000000016b24baa0:   000000016b24baf0 0000000104d8e7e4
+0x000000016b24bab0:   000000016b24bb10 75370001a8cb7110
+0x000000016b24bac0:   0000000000000260 52155705773c00d4
+0x000000016b24bad0:   0000000000000010 0000000000000002
+0x000000016b24bae0:   0000000104fecc18 00000002a5eb4500
+0x000000016b24baf0:   000000016b24bb30 0000000104d8e9f0
+0x000000016b24bb00:   00000002a5eb43b0 00000002a5eb4470
+0x000000016b24bb10:   000000010506e000 0000000000000000
+0x000000016b24bb20:   0000000000000002 0000000000000000
+0x000000016b24bb30:   000000016b24bb80 0000000104c7d9b8
+0x000000016b24bb40:   0000000000000001 00000002a5eaa010
+0x000000016b24bb50:   0000000000000029 0000000000000001 
+
+Instructions: (pc=0x0000000104d8d168)
+0x0000000104d8d148:   9ba92908 f90027f4 71000a9f 9a98b116
+0x0000000104d8d158:   f9400313 eb13031f 540002a0 aa1303e8
+0x0000000104d8d168:   a940a50a 9240014a b37ef52a b27f0149
+0x0000000104d8d178:   f9000509 f9400108 eb08031f 54ffff21 
+
+Register to memory mapping:
+
+ x0=0x0000000000000002 is an unknown value
+ x1=0x0000000000000002 is an unknown value
+ x2=0x000000016b24bac0 is pointing into the stack for thread: 0x0000000120b7e000
+ x3=0x000000016b24bab8 is pointing into the stack for thread: 0x0000000120b7e000
+ x4=0x0000000000000000 is an unknown value
+ x5=0x000000000000006c is an unknown value
+ x6=0x000000000000006c is an unknown value
+ x7=0x000000016b24bca8 is pointing into the stack for thread: 0x0000000120b7e000
+ x8=0x0000000169255f40 is pointing into the stack for thread: 0x0000000120b7e000
+ x9=0x0000000000000006 is an unknown value
+x10=0x0000000000000004 is an unknown value
+x11=0x000000010507d208: _PyRuntime+0xe948 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x12=0x0000000000000000 is an unknown value
+x13=0x000000010507d1e8: _PyRuntime+0xe928 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x14=0x00000002a5e38070 is an unknown value
+x15=0x000000010507d1d0: _PyRuntime+0xe910 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x16=0x00000002a5eb44b0 is an unknown value
+x17=0x00000002a5eb44b0 is an unknown value
+x18=0x0000000000000000 is an unknown value
+x19=0x0000000105228030 is an unknown value
+x20=0x0000000000000002 is an unknown value
+x21=0x00000001050972b0: _PyRuntime+0x289f0 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x22=0x000000010507d200: _PyRuntime+0xe940 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x23=0x0000000000000001 is an unknown value
+x24=0x000000010507d200: _PyRuntime+0xe940 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x25=0x00000002a5eaa010 is an unknown value
+x26=0x0000000000000001 is an unknown value
+x27=0x000000010507cf30: _PyRuntime+0xe670 in /Users/charlesc/anaconda3/envs/erp_tools_env/bin/python3.11 at 0x0000000104bac000
+x28=0x0000000000000000 is an unknown value
+
+
+Stack: [0x0000000169254000,0x000000016b254000],  sp=0x000000016b24b960,  free space=32734k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [python3.11+0x1e1168]  gc_collect_main+0x29c
+C  [python3.11+0x1e27e4]  _PyObject_GC_Link+0x130
+C  [python3.11+0x1e29f0]  _PyObject_GC_NewVar+0x84
+C  [python3.11+0xd19b8]  PyTuple_New+0x154
+C  [python3.11+0x1a5260]  r_object+0x1e4
+C  [python3.11+0x1a5470]  r_object+0x3f4
+C  [python3.11+0x1a5298]  r_object+0x21c
+C  [python3.11+0x1a544c]  r_object+0x3d0
+C  [python3.11+0x1a5298]  r_object+0x21c
+C  [python3.11+0x1a544c]  r_object+0x3d0
+C  [python3.11+0x1a5054]  read_object+0xb8
+C  [python3.11+0x1a6f8c]  marshal_loads+0x1a4
+C  [python3.11+0x160de0]  _PyEval_EvalFrameDefault+0xc730
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x14dce8]  builtin___import__+0x11c
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e8c]  PyImport_ImportModuleLevelObject+0x738
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x14dce8]  builtin___import__+0x11c
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e8c]  PyImport_ImportModuleLevelObject+0x738
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+C  [python3.11+0x61b2c]  object_vacall+0x110
+C  [python3.11+0x61954]  PyObject_CallMethodObjArgs+0x6c
+C  [python3.11+0x193e08]  PyImport_ImportModuleLevelObject+0x6b4
+C  [python3.11+0x15c424]  _PyEval_EvalFrameDefault+0x7d74
+C  [python3.11+0x15372c]  PyEval_EvalCode+0xdc
+C  [python3.11+0x14f4d8]  builtin_exec+0x484
+C  [python3.11+0xb761c]  cfunction_vectorcall_FASTCALL_KEYWORDS+0xa8
+C  [python3.11+0x161ddc]  _PyEval_EvalFrameDefault+0xd72c
+C  [python3.11+0x164078]  _PyEval_Vector+0xb8
+...<more frames>...
+
+
+---------------  P R O C E S S  ---------------
+
+Java Threads: ( => current thread )
+  0x0000000105a16000 JavaThread "Service Thread" daemon [_thread_blocked, id=23043, stack(0x00000002a4540000,0x00000002a4743000)]
+  0x0000000105a15800 JavaThread "C1 CompilerThread3" daemon [_thread_blocked, id=22531, stack(0x00000002a4334000,0x00000002a4537000)]
+  0x00000001062cf000 JavaThread "C2 CompilerThread2" daemon [_thread_blocked, id=22275, stack(0x00000002a4128000,0x00000002a432b000)]
+  0x00000001062ce000 JavaThread "C2 CompilerThread1" daemon [_thread_blocked, id=32259, stack(0x00000002a3f1c000,0x00000002a411f000)]
+  0x00000001062c6000 JavaThread "C2 CompilerThread0" daemon [_thread_blocked, id=22019, stack(0x00000002a3d10000,0x00000002a3f13000)]
+  0x00000001200c6000 JavaThread "Signal Dispatcher" daemon [_thread_blocked, id=18691, stack(0x000000029cd50000,0x000000029cf53000)]
+  0x00000001059fe000 JavaThread "Finalizer" daemon [_thread_blocked, id=20739, stack(0x000000029cb44000,0x000000029cd47000)]
+  0x0000000120bce000 JavaThread "Reference Handler" daemon [_thread_blocked, id=16643, stack(0x000000029c938000,0x000000029cb3b000)]
+=>0x0000000120b7e000 JavaThread "main" [_thread_in_native, id=259, stack(0x0000000169254000,0x000000016b254000)]
+
+Other Threads:
+  0x0000000120bc7000 VMThread [stack: 0x000000016fd0c000,0x000000016ff0f000] [id=21507]
+  0x00000001059f4000 WatcherThread [stack: 0x00000002a474c000,0x00000002a494f000] [id=31235]
+
+VM state:not at safepoint (normal execution)
+
+VM Mutex/Monitor currently owned by a thread: None
+
+heap address: 0x00000005c0000000, size: 8192 MB, Compressed Oops mode: Zero based, Oop shift amount: 3
+Narrow klass base: 0x0000000800000000, Narrow klass shift: 0
+Compressed class space size: 1073741824 Address: 0x0000000800000000
+
+Heap:
+ PSYoungGen      total 153088K, used 52635K [0x0000000715580000, 0x0000000720000000, 0x00000007c0000000)
+  eden space 131584K, 40% used [0x0000000715580000,0x00000007188e6ce0,0x000000071d600000)
+  from space 21504K, 0% used [0x000000071eb00000,0x000000071eb00000,0x0000000720000000)
+  to   space 21504K, 0% used [0x000000071d600000,0x000000071d600000,0x000000071eb00000)
+ ParOldGen       total 349696K, used 0K [0x00000005c0000000, 0x00000005d5580000, 0x0000000715580000)
+  object space 349696K, 0% used [0x00000005c0000000,0x00000005c0000000,0x00000005d5580000)
+ Metaspace       used 15891K, capacity 16679K, committed 16768K, reserved 1062912K
+  class space    used 2381K, capacity 2898K, committed 2944K, reserved 1048576K
+
+Card table byte_map: [0x000000016d598000,0x000000016e59c000] byte_map_base: 0x000000016a798000
+
+Marking Bits: (ParMarkBitMap*) 0x000000016cf1a1a8
+ Begin Bits: [0x000000028b134000, 0x0000000293134000)
+ End Bits:   [0x0000000293134000, 0x000000029b134000)
+
+Polling page: 0x000000010533c000
+
+CodeCache: size=131072Kb used=3805Kb max_used=3805Kb free=127266Kb
+ bounds [0x0000000283134000, 0x00000002834f4000, 0x000000028b134000]
+ total_blobs=1451 nmethods=958 adapters=410
+ compilation: enabled
+
+Compilation events (10 events):
+Event: 0.457 Thread 0x0000000105a15800  954       1       sun.nio.cs.UTF_8::historicalName (3 bytes)
+Event: 0.457 Thread 0x0000000105a15800 nmethod 954 0x00000002834e1f10 code [0x00000002834e2080, 0x00000002834e2150]
+Event: 0.465 Thread 0x00000001062ce000  955       4       java.lang.String::concat (47 bytes)
+Event: 0.466 Thread 0x00000001062c6000  956       4       sun.misc.URLClassPath::getResource (83 bytes)
+Event: 0.466 Thread 0x0000000105a15800  957       1       java.lang.StringCoding$StringEncoder::requestedCharsetName (5 bytes)
+Event: 0.466 Thread 0x0000000105a15800 nmethod 957 0x00000002834b2910 code [0x00000002834b2a40, 0x00000002834b2ad0]
+Event: 0.466 Thread 0x0000000105a15800  958       3       java.util.regex.Pattern::sequence (553 bytes)
+Event: 0.467 Thread 0x00000001062c6000 nmethod 956 0x00000002834ea1d0 code [0x00000002834ea340, 0x00000002834ea660]
+Event: 0.467 Thread 0x00000001062ce000 nmethod 955 0x00000002834e8450 code [0x00000002834e85c0, 0x00000002834e8a50]
+Event: 0.468 Thread 0x0000000105a15800 nmethod 958 0x00000002834ec4d0 code [0x00000002834ecc00, 0x00000002834efaf0]
+
+GC Heap History (0 events):
+No events
+
+Deoptimization events (1 events):
+Event: 0.203 Thread 0x0000000120b7e000 Uncommon trap: reason=unstable_if action=reinterpret pc=0x000000028332bd54 method=java.lang.CharacterData.of(I)Ljava/lang/CharacterData; @ 4
+
+Classes redefined (0 events):
+No events
+
+Internal exceptions (8 events):
+Event: 0.017 Thread 0x0000000120b7e000 Exception <a 'java/lang/NoSuchMethodError': Method sun.misc.Unsafe.defineClass(Ljava/lang/String;[BII)Ljava/lang/Class; name or signature does not match> (0x0000000715587ce0) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-sr
+Event: 0.017 Thread 0x0000000120b7e000 Exception <a 'java/lang/NoSuchMethodError': Method sun.misc.Unsafe.prefetchRead(Ljava/lang/Object;J)V name or signature does not match> (0x0000000715587fc8) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/
+Event: 0.092 Thread 0x0000000120b7e000 Exception <a 'java/lang/NoSuchFieldError': method resolution failed> (0x0000000715ae8568) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/share/vm/prims/methodHandles.cpp, line 1194]
+Event: 0.093 Thread 0x0000000120b7e000 Exception <a 'java/lang/NoSuchFieldError': method resolution failed> (0x0000000715af5998) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/share/vm/prims/methodHandles.cpp, line 1194]
+Event: 0.123 Thread 0x0000000120b7e000 Exception <a 'java/security/PrivilegedActionException'> (0x0000000715d0be90) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/share/vm/prims/jvm.cpp, line 1514]
+Event: 0.123 Thread 0x0000000120b7e000 Exception <a 'java/security/PrivilegedActionException'> (0x0000000715d0c288) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/share/vm/prims/jvm.cpp, line 1514]
+Event: 0.123 Thread 0x0000000120b7e000 Exception <a 'java/security/PrivilegedActionException'> (0x0000000715d0f7a8) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/share/vm/prims/jvm.cpp, line 1514]
+Event: 0.123 Thread 0x0000000120b7e000 Exception <a 'java/security/PrivilegedActionException'> (0x0000000715d0fba0) thrown at [/Users/tester/jenkins/blue/workspace/Zulu/zulu-platform-build/zulu-src.git/hotspot/src/share/vm/prims/jvm.cpp, line 1514]
+
+Events (10 events):
+Event: 0.465 loading class org/orekit/utils/StateJacobian
+Event: 0.465 loading class org/orekit/utils/StateJacobian done
+Event: 0.466 loading class org/orekit/utils/PythonTimeStampedCache
+Event: 0.466 loading class org/orekit/utils/PythonTimeStampedCache done
+Event: 0.466 loading class org/orekit/utils/PythonTimeStampedGenerator
+Event: 0.466 loading class org/orekit/utils/PythonTimeStampedGenerator done
+Event: 0.466 loading class org/orekit/data/ZipJarCrawler
+Event: 0.466 loading class org/orekit/data/ZipJarCrawler done
+Event: 0.466 loading class org/orekit/data/ZipJarCrawler$Archive$EntryStream
+Event: 0.466 loading class org/orekit/data/ZipJarCrawler$Archive$EntryStream done
+
+
+Dynamic libraries:
+0x00000001b482d000 	/usr/lib/libSystem.B.dylib
+0x00000001b4827000 	/usr/lib/system/libcache.dylib
+0x00000001b47e3000 	/usr/lib/system/libcommonCrypto.dylib
+0x00000001b480e000 	/usr/lib/system/libcompiler_rt.dylib
+0x00000001b4804000 	/usr/lib/system/libcopyfile.dylib
+0x00000001a8c29000 	/usr/lib/system/libcorecrypto.dylib
+0x00000001a8ce0000 	/usr/lib/system/libdispatch.dylib
+0x00000001a8e9a000 	/usr/lib/system/libdyld.dylib
+0x00000001b481d000 	/usr/lib/system/libkeymgr.dylib
+0x00000001b47bd000 	/usr/lib/system/libmacho.dylib
+0x00000001b3dc2000 	/usr/lib/system/libquarantine.dylib
+0x00000001b481a000 	/usr/lib/system/libremovefile.dylib
+0x00000001adb49000 	/usr/lib/system/libsystem_asl.dylib
+0x00000001a8bc5000 	/usr/lib/system/libsystem_blocks.dylib
+0x00000001a8d2b000 	/usr/lib/system/libsystem_c.dylib
+0x00000001b4812000 	/usr/lib/system/libsystem_collections.dylib
+0x00000001b31ff000 	/usr/lib/system/libsystem_configuration.dylib
+0x00000001b2293000 	/usr/lib/system/libsystem_containermanager.dylib
+0x00000001b44b1000 	/usr/lib/system/libsystem_coreservices.dylib
+0x00000001abc8f000 	/usr/lib/system/libsystem_darwin.dylib
+0x00000001b481e000 	/usr/lib/system/libsystem_dnssd.dylib
+0x00000001a8d28000 	/usr/lib/system/libsystem_featureflags.dylib
+0x00000001a8ec6000 	/usr/lib/system/libsystem_info.dylib
+0x00000001b4785000 	/usr/lib/system/libsystem_m.dylib
+0x00000001a8cb4000 	/usr/lib/system/libsystem_malloc.dylib
+0x00000001adac7000 	/usr/lib/system/libsystem_networkextension.dylib
+0x00000001ac0fa000 	/usr/lib/system/libsystem_notify.dylib
+0x00000001b3204000 	/usr/lib/system/libsystem_sandbox.dylib
+0x00000001b4817000 	/usr/lib/system/libsystem_secinit.dylib
+0x00000001a8e53000 	/usr/lib/system/libsystem_kernel.dylib
+0x00000001a8ebf000 	/usr/lib/system/libsystem_platform.dylib
+0x00000001a8e8d000 	/usr/lib/system/libsystem_pthread.dylib
+0x00000001af313000 	/usr/lib/system/libsystem_symptoms.dylib
+0x00000001a8c0e000 	/usr/lib/system/libsystem_trace.dylib
+0x00000001b47f1000 	/usr/lib/system/libunwind.dylib
+0x00000001a8bca000 	/usr/lib/system/libxpc.dylib
+0x00000001a8e37000 	/usr/lib/libc++abi.dylib
+0x00000001a8af0000 	/usr/lib/libobjc.A.dylib
+0x00000001b47fc000 	/usr/lib/liboah.dylib
+0x00000001a8daa000 	/usr/lib/libc++.1.dylib
+0x0000000107c08000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/core/_multiarray_umath.cpython-311-darwin.so
+0x0000000109550000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/.dylibs/libopenblas64_.0.dylib
+0x00000001082b8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/.dylibs/libgfortran.5.dylib
+0x000000010538c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/.dylibs/libquadmath.0.dylib
+0x0000000105358000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/.dylibs/libgcc_s.1.1.dylib
+0x00000001053e8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/math.cpython-311-darwin.so
+0x0000000107a00000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_datetime.cpython-311-darwin.so
+0x0000000105344000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_struct.cpython-311-darwin.so
+0x0000000107a4c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_pickle.cpython-311-darwin.so
+0x000000010537c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_contextvars.cpython-311-darwin.so
+0x0000000107a74000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/core/_multiarray_tests.cpython-311-darwin.so
+0x0000000107a94000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_ctypes.cpython-311-darwin.so
+0x0000000107abc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libffi.8.dylib
+0x0000000107a24000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_typing.cpython-311-darwin.so
+0x000000010825c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/linalg/_umath_linalg.cpython-311-darwin.so
+0x0000000108230000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/fft/_pocketfft_internal.cpython-311-darwin.so
+0x0000000109000000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/mtrand.cpython-311-darwin.so
+0x0000000108774000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/bit_generator.cpython-311-darwin.so
+0x00000001090ac000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_common.cpython-311-darwin.so
+0x0000000107a34000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/binascii.cpython-311-darwin.so
+0x0000000108288000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libz.1.2.13.dylib
+0x0000000108740000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_hashlib.cpython-311-darwin.so
+0x000000010eb78000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libcrypto.3.dylib
+0x0000000107adc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_blake2.cpython-311-darwin.so
+0x0000000107af0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_bisect.cpython-311-darwin.so
+0x000000010824c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_random.cpython-311-darwin.so
+0x0000000108758000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_sha512.cpython-311-darwin.so
+0x0000000109248000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_bounded_integers.cpython-311-darwin.so
+0x00000001087c4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_mt19937.cpython-311-darwin.so
+0x00000001087e0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_philox.cpython-311-darwin.so
+0x000000010920c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_pcg64.cpython-311-darwin.so
+0x00000001091ec000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_sfc64.cpython-311-darwin.so
+0x0000000109370000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numpy/random/_generator.cpython-311-darwin.so
+0x00000001082a8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_opcode.cpython-311-darwin.so
+0x00000001087a8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_bz2.cpython-311-darwin.so
+0x00000001092c4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libbz2.1.0.8.dylib
+0x000000010922c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_lzma.cpython-311-darwin.so
+0x000000010931c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/liblzma.5.dylib
+0x000000011e800000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pyarrow/lib.cpython-311-darwin.so
+0x000000010f9dc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pyarrow/libarrow_python.dylib
+0x000000014597c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libarrow.1400.2.0.dylib
+0x000000010fbb8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libc++.1.0.dylib
+0x000000011ef60000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libparquet.1400.2.0.dylib
+0x000000010f8a0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libthrift.0.15.0.dylib
+0x000000010ff00000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libbrotlienc.1.0.9.dylib
+0x00000001092e4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libbrotlidec.1.0.9.dylib
+0x000000011ebbc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/liborc.dylib
+0x000000010f800000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libglog.0.5.0.dylib
+0x000000010fcd8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libutf8proc.2.dylib
+0x000000010f844000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/liblz4.1.9.4.dylib
+0x0000000109300000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libsnappy.1.1.10.dylib
+0x000000011ed9c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libzstd.1.5.5.dylib
+0x000000010f940000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-cpp-sdk-identity-management.dylib
+0x000000011f6d4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-cpp-sdk-s3.dylib
+0x000000011f450000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-cpp-sdk-core.dylib
+0x000000010fd3c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libre2.9.0.0.dylib
+0x000000011ee6c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-crt-cpp.dylib
+0x000000010f970000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libbrotlicommon.1.0.9.dylib
+0x0000000127000000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libprotobuf.31.dylib
+0x000000010f9a0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libgflags.2.2.2.dylib
+0x000000011f59c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-cpp-sdk-cognito-identity.dylib
+0x000000011eeec000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-cpp-sdk-sts.dylib
+0x000000011f304000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libcurl.4.dylib
+0x000000010efd8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-event-stream.1.0.0.dylib
+0x0000000109354000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-checksums.1.0.0.dylib
+0x000000010ffa4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-common.1.0.0.dylib
+0x000000011eccc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libnghttp2.14.dylib
+0x000000011ed00000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libssh2.1.0.1.dylib
+0x000000011fb7c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libssl.3.dylib
+0x000000011ed48000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libgssapi_krb5.2.2.dylib
+0x00000001a8ef3000 	/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation
+0x00000001abfa2000 	/System/Library/PrivateFrameworks/CoreServicesInternal.framework/Versions/A/CoreServicesInternal
+0x00000001b482f000 	/usr/lib/libfakelink.dylib
+0x00000001ab9db000 	/usr/lib/libicucore.A.dylib
+0x00000001b4833000 	/System/Library/PrivateFrameworks/SoftLinking.framework/Versions/A/SoftLinking
+0x00000001ac01f000 	/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit
+0x00000001bbbcd000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices
+0x00000001affcd000 	/usr/lib/libDiagnosticMessagesClient.dylib
+0x00000001adae0000 	/usr/lib/libenergytrace.dylib
+0x00000001b3de9000 	/usr/lib/libbsm.0.dylib
+0x00000001b4773000 	/usr/lib/libz.1.dylib
+0x00000001b47c3000 	/usr/lib/system/libkxld.dylib
+0x00000001ad704000 	/System/Library/Frameworks/CFNetwork.framework/Versions/A/CFNetwork
+0x00000001b0ab6000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/FSEvents
+0x00000001abc9a000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/CarbonCore.framework/Versions/A/CarbonCore
+0x00000001b0011000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Metadata
+0x00000001b44b7000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/OSServices.framework/Versions/A/OSServices
+0x00000001b49f5000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/SearchKit.framework/Versions/A/SearchKit
+0x00000001af295000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/AE.framework/Versions/A/AE
+0x00000001a93cd000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/LaunchServices
+0x00000001b5cbe000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/DictionaryServices.framework/Versions/A/DictionaryServices
+0x00000001b0ac3000 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/SharedFileList.framework/Versions/A/SharedFileList
+0x00000001ab625000 	/System/Library/Frameworks/Security.framework/Versions/A/Security
+0x00000001a9b5a000 	/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration
+0x00000001b4a93000 	/usr/lib/libapple_nghttp2.dylib
+0x00000001b4ac9000 	/usr/lib/libcompression.dylib
+0x00000001ad700000 	/usr/lib/libnetwork.dylib
+0x00000001aef44000 	/usr/lib/libsqlite3.dylib
+0x00000001a9e8d000 	/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation
+0x00000001af31c000 	/System/Library/Frameworks/Network.framework/Versions/A/Network
+0x0000000237432000 	/usr/lib/libCoreEntitlements.dylib
+0x00000002233c7000 	/System/Library/PrivateFrameworks/MessageSecurity.framework/Versions/A/MessageSecurity
+0x00000001aef2a000 	/System/Library/PrivateFrameworks/ProtocolBuffer.framework/Versions/A/ProtocolBuffer
+0x00000001adae2000 	/usr/lib/libMobileGestalt.dylib
+0x00000001b43df000 	/System/Library/PrivateFrameworks/AppleFSCompression.framework/Versions/A/AppleFSCompression
+0x00000001b3dd1000 	/usr/lib/libcoretls.dylib
+0x00000001b5d2e000 	/usr/lib/libcoretls_cfhelpers.dylib
+0x00000001b4ac3000 	/usr/lib/libpam.2.dylib
+0x00000001b5d9a000 	/usr/lib/libxar.1.dylib
+0x00000001b0af4000 	/System/Library/PrivateFrameworks/CoreAutoLayout.framework/Versions/A/CoreAutoLayout
+0x00000001b00aa000 	/System/Library/Frameworks/DiskArbitration.framework/Versions/A/DiskArbitration
+0x00000001b496d000 	/usr/lib/libarchive.2.dylib
+0x00000001b0b3e000 	/usr/lib/libxml2.2.dylib
+0x00000001b3211000 	/usr/lib/liblangid.dylib
+0x00000001b9b06000 	/System/Library/Frameworks/Combine.framework/Versions/A/Combine
+0x00000001b7bb6000 	/usr/lib/swift/libswiftCore.dylib
+0x00000001cbb50000 	/usr/lib/swift/libswiftCoreFoundation.dylib
+0x00000001c9a8b000 	/usr/lib/swift/libswiftDarwin.dylib
+0x00000001bd119000 	/usr/lib/swift/libswiftDispatch.dylib
+0x00000001cbb71000 	/usr/lib/swift/libswiftIOKit.dylib
+0x00000001bf6de000 	/usr/lib/swift/libswiftObjectiveC.dylib
+0x00000001cbb64000 	/usr/lib/swift/libswiftXPC.dylib
+0x0000000238353000 	/usr/lib/swift/libswift_Concurrency.dylib
+0x00000002384a1000 	/usr/lib/swift/libswift_StringProcessing.dylib
+0x00000001bf6e2000 	/usr/lib/swift/libswiftos.dylib
+0x00000001b320c000 	/System/Library/PrivateFrameworks/AppleSystemInfo.framework/Versions/A/AppleSystemInfo
+0x00000001b3ac4000 	/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/Versions/A/IOMobileFramebuffer
+0x00000001b22c5000 	/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface
+0x00000001b4834000 	/usr/lib/libpcap.A.dylib
+0x00000001af309000 	/usr/lib/libdns_services.dylib
+0x00000001b5d15000 	/usr/lib/liblzma.5.dylib
+0x00000001b44a4000 	/usr/lib/libbz2.1.0.dylib
+0x00000001b4869000 	/usr/lib/libiconv.2.dylib
+0x00000001b47bc000 	/usr/lib/libcharset.1.dylib
+0x00000002383f1000 	/usr/lib/swift/libswift_RegexParser.dylib
+0x00000001b6169000 	/usr/lib/libheimdal-asn1.dylib
+0x00000001b3dc5000 	/usr/lib/libCheckFix.dylib
+0x00000001adb61000 	/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC
+0x00000001b3213000 	/System/Library/PrivateFrameworks/CoreNLP.framework/Versions/A/CoreNLP
+0x00000001affcf000 	/System/Library/PrivateFrameworks/MetadataUtilities.framework/Versions/A/MetadataUtilities
+0x00000001bbe7e000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate
+0x00000001b3dfb000 	/usr/lib/libmecab.dylib
+0x00000001a9be4000 	/usr/lib/libCRFSuite.dylib
+0x00000001b3e57000 	/usr/lib/libgermantok.dylib
+0x00000001b4a6c000 	/usr/lib/libThaiTokenizer.dylib
+0x00000001b00b3000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vImage.framework/Versions/A/vImage
+0x00000001bbba4000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/vecLib
+0x00000001b5de0000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libvMisc.dylib
+0x00000001b39c3000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libvDSP.dylib
+0x00000001a9785000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+0x00000001b4b9e000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libLAPACK.dylib
+0x00000001b3e5a000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libLinearAlgebra.dylib
+0x00000001b4aae000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libSparseBLAS.dylib
+0x00000001b4b99000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libQuadrature.dylib
+0x00000001b3308000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBNNS.dylib
+0x00000001a9af2000 	/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libSparse.dylib
+0x00000002225f5000 	/System/Library/PrivateFrameworks/MIL.framework/Versions/A/MIL
+0x00000001b0a96000 	/System/Library/Frameworks/OpenDirectory.framework/Versions/A/Frameworks/CFOpenDirectory.framework/Versions/A/CFOpenDirectory
+0x00000001b0a86000 	/System/Library/Frameworks/OpenDirectory.framework/Versions/A/OpenDirectory
+0x00000001b5d30000 	/System/Library/PrivateFrameworks/APFS.framework/Versions/A/APFS
+0x00000001b3d00000 	/System/Library/Frameworks/SecurityFoundation.framework/Versions/A/SecurityFoundation
+0x00000001b5da9000 	/usr/lib/libutil.dylib
+0x000000022146d000 	/System/Library/PrivateFrameworks/InstalledContentLibrary.framework/Versions/A/InstalledContentLibrary
+0x00000001abfe2000 	/System/Library/PrivateFrameworks/CoreServicesStore.framework/Versions/A/CoreServicesStore
+0x00000001b0aed000 	/usr/lib/libapp_launch_measurement.dylib
+0x000000021817b000 	/System/Library/PrivateFrameworks/AppleMobileFileIntegrity.framework/Versions/A/AppleMobileFileIntegrity
+0x00000001cbb30000 	/usr/lib/libmis.dylib
+0x00000001d9d22000 	/System/Library/PrivateFrameworks/MobileSystemServices.framework/Versions/A/MobileSystemServices
+0x00000001f5282000 	/System/Library/PrivateFrameworks/ConfigProfileHelper.framework/Versions/A/ConfigProfileHelper
+0x00000001aff9f000 	/System/Library/PrivateFrameworks/CoreAnalytics.framework/Versions/A/CoreAnalytics
+0x00000001b4a6e000 	/System/Library/PrivateFrameworks/AppleSauce.framework/Versions/A/AppleSauce
+0x00000001aa853000 	/System/Library/PrivateFrameworks/LanguageModeling.framework/Versions/A/LanguageModeling
+0x00000001b5dad000 	/usr/lib/libxslt.1.dylib
+0x00000001b495b000 	/usr/lib/libcmph.dylib
+0x00000001b3ab1000 	/System/Library/PrivateFrameworks/CoreEmoji.framework/Versions/A/CoreEmoji
+0x00000001b3302000 	/System/Library/PrivateFrameworks/LinguisticData.framework/Versions/A/LinguisticData
+0x00000001a9aaa000 	/System/Library/PrivateFrameworks/Lexicon.framework/Versions/A/Lexicon
+0x00000001b3d92000 	/System/Library/PrivateFrameworks/BackgroundTaskManagement.framework/Versions/A/BackgroundTaskManagement
+0x00000002375d5000 	/usr/lib/libTLE.dylib
+0x000000011fc54000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libkrb5.3.3.dylib
+0x000000010efb0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libk5crypto.3.1.dylib
+0x00000001092a4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libcom_err.3.0.dylib
+0x000000010fda4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libkrb5support.1.1.dylib
+0x00000001b8424000 	/usr/lib/libresolv.9.dylib
+0x000000011f3b0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-mqtt.1.0.0.dylib
+0x000000011f3dc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-s3.1.0.0.dylib
+0x000000011f410000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-auth.1.0.0.dylib
+0x000000011fb04000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-http.1.0.0.dylib
+0x000000011fd20000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-io.1.0.0.dylib
+0x000000010fdbc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-cal.1.0.0.dylib
+0x000000011f690000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-sdkutils.1.0.0.dylib
+0x000000010953c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/libaws-c-compression.1.0.0.dylib
+0x000000011fd6c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_decimal.cpython-311-darwin.so
+0x000000010f88c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_uuid.cpython-311-darwin.so
+0x000000011faa4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_socket.cpython-311-darwin.so
+0x000000010fdec000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/select.cpython-311-darwin.so
+0x000000011f6b8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/array.cpython-311-darwin.so
+0x000000010f9cc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_heapq.cpython-311-darwin.so
+0x000000010fdd8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_queue.cpython-311-darwin.so
+0x000000011fdc4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pyarrow/_hdfsio.cpython-311-darwin.so
+0x000000011fac4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/pandas_parser.cpython-311-darwin.so
+0x000000011fadc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/pandas_datetime.cpython-311-darwin.so
+0x0000000127b1c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/interval.cpython-311-darwin.so
+0x0000000127dc8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/hashtable.cpython-311-darwin.so
+0x0000000127a00000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/missing.cpython-311-darwin.so
+0x0000000127a3c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/dtypes.cpython-311-darwin.so
+0x0000000127a6c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/np_datetime.cpython-311-darwin.so
+0x0000000127a90000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/conversion.cpython-311-darwin.so
+0x000000011fb64000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/base.cpython-311-darwin.so
+0x0000000144000000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/offsets.cpython-311-darwin.so
+0x0000000127ccc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/timestamps.cpython-311-darwin.so
+0x0000000127c38000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/nattype.cpython-311-darwin.so
+0x00000001440f4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/timedeltas.cpython-311-darwin.so
+0x0000000127c7c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/timezones.cpython-311-darwin.so
+0x00000001274c4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_zoneinfo.cpython-311-darwin.so
+0x0000000127d60000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/fields.cpython-311-darwin.so
+0x00000001274d8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/ccalendar.cpython-311-darwin.so
+0x000000010ffe4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/fcntl.cpython-311-darwin.so
+0x000000011faf4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_posixsubprocess.cpython-311-darwin.so
+0x0000000127f5c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/tzconversion.cpython-311-darwin.so
+0x0000000127ae8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/properties.cpython-311-darwin.so
+0x00000001442e0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/parsing.cpython-311-darwin.so
+0x0000000144280000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/strptime.cpython-311-darwin.so
+0x00000001443b4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/period.cpython-311-darwin.so
+0x0000000144344000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslibs/vectorized.cpython-311-darwin.so
+0x0000000127da8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/ops_dispatch.cpython-311-darwin.so
+0x00000001445cc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/algos.cpython-311-darwin.so
+0x00000001444cc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/lib.cpython-311-darwin.so
+0x0000000145224000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/unicodedata.cpython-311-darwin.so
+0x000000014437c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/ops.cpython-311-darwin.so
+0x0000000127fcc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/numexpr/interpreter.cpython-311-darwin.so
+0x0000000145464000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pyarrow/_compute.cpython-311-darwin.so
+0x0000000144424000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/bottleneck/move.cpython-311-darwin.so
+0x0000000127b04000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/bottleneck/nonreduce.cpython-311-darwin.so
+0x0000000127fa4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/bottleneck/nonreduce_axis.cpython-311-darwin.so
+0x0000000144464000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/bottleneck/reduce.cpython-311-darwin.so
+0x00000001442cc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_json.cpython-311-darwin.so
+0x00000001444a8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/arrays.cpython-311-darwin.so
+0x0000000144444000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_csv.cpython-311-darwin.so
+0x0000000144484000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/zlib.cpython-311-darwin.so
+0x0000000144778000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/tslib.cpython-311-darwin.so
+0x0000000147624000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/sparse.cpython-311-darwin.so
+0x0000000144574000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/indexing.cpython-311-darwin.so
+0x00000001479d0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/index.cpython-311-darwin.so
+0x0000000145900000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/internals.cpython-311-darwin.so
+0x0000000147c6c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/join.cpython-311-darwin.so
+0x00000001447bc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/writers.cpython-311-darwin.so
+0x000000014458c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/mmap.cpython-311-darwin.so
+0x0000000127acc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/grp.cpython-311-darwin.so
+0x0000000147568000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/window/aggregations.cpython-311-darwin.so
+0x00000001455b4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/window/indexers.cpython-311-darwin.so
+0x0000000147900000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/reshape.cpython-311-darwin.so
+0x000000016829c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/groupby.cpython-311-darwin.so
+0x0000000145200000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/json.cpython-311-darwin.so
+0x0000000147ba0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/parsers.cpython-311-darwin.so
+0x0000000145584000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/pandas/_libs/testing.cpython-311-darwin.so
+0x00000001445b4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/cmath.cpython-311-darwin.so
+0x0000000127cbc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/matplotlib/_c_internal_utils.cpython-311-darwin.so
+0x0000000147f3c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/_imaging.cpython-311-darwin.so
+0x0000000168900000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/libtiff.6.dylib
+0x0000000168200000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/libjpeg.62.4.0.dylib
+0x00000001689b8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/libopenjp2.2.5.0.dylib
+0x00000001475e8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/libz.1.3.dylib
+0x0000000147984000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/libxcb.1.1.0.dylib
+0x000000016853c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/liblzma.5.dylib
+0x0000000145448000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/PIL/.dylibs/libXau.6.0.0.dylib
+0x0000000147940000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/matplotlib/_path.cpython-311-darwin.so
+0x0000000168f20000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/matplotlib/ft2font.cpython-311-darwin.so
+0x000000016858c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/kiwisolver/_cext.cpython-311-darwin.so
+0x0000000147c1c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/matplotlib/_image.cpython-311-darwin.so
+0x0000000280000000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/_orekit.cpython-311-darwin.so
+0x000000016c864000 	/Users/charlesc/anaconda3/envs/erp_tools_env/jre/lib/server/libjvm.dylib
+0x0000000168e5c000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_ssl.cpython-311-darwin.so
+0x0000000127fbc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_scproxy.cpython-311-darwin.so
+0x00000001455e4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/jre/lib/libverify.dylib
+0x000000016a200000 	/Users/charlesc/anaconda3/envs/erp_tools_env/jre/lib/libjava.dylib
+0x00000001475bc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/jre/lib/libzip.dylib
+0x0000000147c48000 	/Users/charlesc/anaconda3/envs/erp_tools_env/jre/lib/libnio.dylib
+0x00000001685cc000 	/Users/charlesc/anaconda3/envs/erp_tools_env/jre/lib/libnet.dylib
+0x00000002a4954000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/erfa/ufunc.cpython-311-darwin.so
+0x00000001476e4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/astropy/utils/_compiler.cpython-311-darwin.so
+0x0000000147968000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/lz4/_version.cpython-311-darwin.so
+0x0000000147fc8000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/lz4/frame/_frame.cpython-311-darwin.so
+0x0000000147fe0000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/lib-dynload/_asyncio.cpython-311-darwin.so
+0x0000000168ed4000 	/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/astropy/time/_parse_times.cpython-311-darwin.so
+
+VM Arguments:
+java_command: <unknown>
+java_class_path (initial): /Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/orekit-12.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-core-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-fitting-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-filtering-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-geometry-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-ode-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-optim-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/hipparchus-stat-3.0.jar:/Users/charlesc/anaconda3/envs/erp_tools_env/lib/python3.11/site-packages/orekit/rugged-3.0.jar
+Launcher Type: generic
+
+Environment Variables:
+JAVA_HOME=/Users/charlesc/anaconda3/envs/erp_tools_env
+SHELL=/bin/zsh
+
+Signal Handlers:
+SIGSEGV: [libjvm.dylib+0x5668e4], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_ONSTACK|SA_RESTART|SA_SIGINFO
+SIGBUS: [libjvm.dylib+0x5668e4], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGFPE: [libjvm.dylib+0x45f480], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGPIPE: [libjvm.dylib+0x45f480], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGXFSZ: [libjvm.dylib+0x45f480], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGILL: [libjvm.dylib+0x45f480], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGUSR1: SIG_DFL, sa_mask[0]=00000000000000000000000000000000, sa_flags=SA_RESTART
+SIGUSR2: [libjvm.dylib+0x45fda4], sa_mask[0]=00000000000000000000000000000000, sa_flags=SA_RESTART|SA_SIGINFO
+SIGHUP: [libjvm.dylib+0x45dd2c], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGINT: [libjvm.dylib+0x45dd2c], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGTERM: [libjvm.dylib+0x45dd2c], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+SIGQUIT: [libjvm.dylib+0x45dd2c], sa_mask[0]=11111111011111110111111111111111, sa_flags=SA_RESTART|SA_SIGINFO
+
+
+---------------  S Y S T E M  ---------------
+
+OS:Bsduname:Darwin 22.6.0 Darwin Kernel Version 22.6.0: Mon Feb 19 19:45:09 PST 2024; root:xnu-8796.141.3.704.6~1/RELEASE_ARM64_T6000 arm64
+rlimit: STACK 8176k, CORE 0k, NPROC 5333, NOFILE 10240, AS infinity
+load average:3.42 3.70 3.91
+
+CPU:total 10 (initial active 10) 0x61:0x0:0x1b588bb3:0, simd, crc, lse
+
+Memory: 16k page, physical 33554432k(801264k free)
+
+/proc/meminfo:
+
+
+vm_info: OpenJDK 64-Bit Server VM (25.382-b05) for bsd-aarch64 JRE (Zulu 8.72.0.17-CA-macos-aarch64) (1.8.0_382-b05), built on Jul 14 2023 01:24:33 by "zulu_re" with gcc Apple LLVM 12.0.0 (clang-1200.0.32.28)
+
+time: Thu May 30 12:10:05 2024
+timezone: BST
+elapsed time: 0.665630 seconds (0d 0h 0m 0s)
+

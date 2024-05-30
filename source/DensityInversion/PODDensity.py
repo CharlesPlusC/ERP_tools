@@ -35,6 +35,9 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
     ephemeris_df.set_index('UTC', inplace=True)
     ephemeris_df = ephemeris_df.asfreq(settings['density_freq'])
 
+    #drop NA rows
+    ephemeris_df.dropna(inplace=True)
+
     columns = [
         'UTC', 'x', 'y', 'z', 'xv', 'yv', 'zv', 'accx', 'accy', 'accz',
         'nc_accx', 'nc_accy', 'nc_accz', 'Computed Density', *(models_to_query)
@@ -48,21 +51,37 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
         time = ephemeris_df.index[i]
         vel = np.array([ephemeris_df['xv'].iloc[i], ephemeris_df['yv'].iloc[i], ephemeris_df['zv'].iloc[i]])
         state_vector = np.array([ephemeris_df['x'].iloc[i], ephemeris_df['y'].iloc[i], ephemeris_df['z'].iloc[i], vel[0], vel[1], vel[2]])
-
         if not nc_accs: 
-            conservative_accelerations = state2acceleration(state_vector, time, 
+            #except drag acceleration
+            all_accelerations = state2acceleration(state_vector, time, 
                                                             settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], 
                                                             **force_model_config)
-            conservative_accelerations_sum = np.sum(list(conservative_accelerations.values()), axis=0)
+            all_accelerations_sum = np.sum(list(all_accelerations.values()), axis=0)
             observed_acc = np.array([ephemeris_df['accx'].iloc[i], ephemeris_df['accy'].iloc[i], ephemeris_df['accz'].iloc[i]])
 
-            nc_accelerations = conservative_accelerations_sum - observed_acc
+            nc_accelerations = all_accelerations_sum - observed_acc
 
             nc_accx, nc_accy, nc_accz = nc_accelerations[0], nc_accelerations[1], nc_accelerations[2]
+    
         else:
-            nc_accx, nc_accy, nc_accz = ephemeris_df[x_acc_col].iloc[i], ephemeris_df[y_acc_col].iloc[i], ephemeris_df[z_acc_col].iloc[i]
+            #now just compute radiation pressure since our observed only contain non conservative (SRP + ERP)
+            #assuming a_nonconservative = a_rp + a_drag, where a_rp = a_srp + a_erp
+            rp_fm_config = {
+            'knocke_erp': True,
+            'SRP': True}
 
-        nc_acc_h, nc_acc_c, nc_acc_l = project_acc_into_HCL(nc_accx, nc_accy, nc_accz, 
+            rp_accelerations = state2acceleration(state_vector, time, 
+                                                            settings['cr'], settings['cd'], settings['cross_section'], settings['mass'], 
+                                                            **rp_fm_config)
+            print(f"rp_accelerations: {rp_accelerations}")
+            rp_accelerations_sum = np.sum(list(rp_accelerations.values()), axis=0)
+            observed_acc = np.array([ephemeris_df[x_acc_col].iloc[i], ephemeris_df[y_acc_col].iloc[i], ephemeris_df[z_acc_col].iloc[i]])
+
+            nc_accelerations = rp_accelerations_sum - observed_acc
+
+            nc_accx, nc_accy, nc_accz = nc_accelerations[0], nc_accelerations[1], nc_accelerations[2]
+
+        _, _, nc_acc_l = project_acc_into_HCL(nc_accx, nc_accy, nc_accz, 
                                             ephemeris_df['x'].iloc[i], ephemeris_df['y'].iloc[i], ephemeris_df['z'].iloc[i],
                                              ephemeris_df['xv'].iloc[i], ephemeris_df['yv'].iloc[i], ephemeris_df['zv'].iloc[i])
 
