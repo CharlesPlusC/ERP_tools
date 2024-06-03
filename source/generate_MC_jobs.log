@@ -1,0 +1,392 @@
+nohup: ignoring input
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Your job-array 1093181.1-10000:1 ("Prop_fm0_GRACE-FO-A") has been submitted
+Your job-array 1093182.1-10000:1 ("Prop_fm1_GRACE-FO-A") has been submitted
+Your job-array 1093183.1-10000:1 ("Prop_fm2_GRACE-FO-A") has been submitted
+Your job-array 1093184.1-10000:1 ("Prop_fm3_GRACE-FO-A") has been submitted
+Your job-array 1093190.1-10000:1 ("Prop_fm4_GRACE-FO-A") has been submitted
+Your job-array 1093393.1-10000:1 ("Prop_fm5_GRACE-FO-A") has been submitted
+Your job-array 1093398.1-10000:1 ("Prop_fm6_GRACE-FO-A") has been submitted
+Your job-array 1093419.1-10000:1 ("Prop_fm7_GRACE-FO-A") has been submitted
+Your job-array 1093425.1-10000:1 ("Prop_fm8_GRACE-FO-A") has been submitted
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Your job-array 1093426.1-10000:1 ("Prop_fm0_GRACE-FO-B") has been submitted
+Your job-array 1093427.1-10000:1 ("Prop_fm1_GRACE-FO-B") has been submitted
+Your job-array 1093430.1-10000:1 ("Prop_fm2_GRACE-FO-B") has been submitted
+Your job-array 1093441.1-10000:1 ("Prop_fm3_GRACE-FO-B") has been submitted
+Your job-array 1093445.1-10000:1 ("Prop_fm4_GRACE-FO-B") has been submitted
+Your job-array 1093450.1-10000:1 ("Prop_fm5_GRACE-FO-B") has been submitted
+Your job-array 1093456.1-10000:1 ("Prop_fm6_GRACE-FO-B") has been submitted
+Your job-array 1093459.1-10000:1 ("Prop_fm7_GRACE-FO-B") has been submitted
+Your job-array 1093461.1-10000:1 ("Prop_fm8_GRACE-FO-B") has been submitted
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Your job-array 1093462.1-10000:1 ("Prop_fm0_TerraSAR-X") has been submitted
+Your job-array 1093463.1-10000:1 ("Prop_fm1_TerraSAR-X") has been submitted
+Your job-array 1093464.1-10000:1 ("Prop_fm2_TerraSAR-X") has been submitted
+Your job-array 1093506.1-10000:1 ("Prop_fm3_TerraSAR-X") has been submitted
+Your job-array 1094441.1-10000:1 ("Prop_fm4_TerraSAR-X") has been submitted
+Your job-array 1096047.1-10000:1 ("Prop_fm5_TerraSAR-X") has been submitted
+Your job-array 1096287.1-10000:1 ("Prop_fm6_TerraSAR-X") has been submitted
+Your job-array 1096295.1-10000:1 ("Prop_fm7_TerraSAR-X") has been submitted
+Your job-array 1096303.1-10000:1 ("Prop_fm8_TerraSAR-X") has been submitted
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Your job-array 1096304.1-10000:1 ("Prop_fm0_TanDEM-X") has been submitted
+Your job-array 1096449.1-10000:1 ("Prop_fm1_TanDEM-X") has been submitted
+Your job-array 1096450.1-10000:1 ("Prop_fm2_TanDEM-X") has been submitted
+Your job-array 1097003.1-10000:1 ("Prop_fm3_TanDEM-X") has been submitted
+Your job-array 1097114.1-10000:1 ("Prop_fm4_TanDEM-X") has been submitted
+Your job-array 1097120.1-10000:1 ("Prop_fm5_TanDEM-X") has been submitted
+Your job-array 1097128.1-10000:1 ("Prop_fm6_TanDEM-X") has been submitted
+Your job-array 1097135.1-10000:1 ("Prop_fm7_TanDEM-X") has been submitted
+Your job-array 1097151.1-10000:1 ("Prop_fm8_TanDEM-X") has been submitted
+Running MC job generation script.
+Generating nominal and perturbed states for ['GRACE-FO-A', 'GRACE-FO-B', 'TerraSAR-X', 'TanDEM-X']
+Generating nominal and perturbed states for GRACE-FO-A
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.19071779069259887
+Iteration: 2 in progress...
+RMS: 0.011163464845058611
+Iteration: 3 in progress...
+RMS: 0.0115620751654115
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.02910853618370103
+Iteration: 2 in progress...
+RMS: 0.006596374158209258
+Iteration: 3 in progress...
+RMS: 0.006661709960048871
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.0416654952123146
+Iteration: 2 in progress...
+RMS: 0.004555016892401665
+Iteration: 3 in progress...
+RMS: 0.004503792031241281
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04095879479269985
+Iteration: 2 in progress...
+RMS: 0.004510178217524015
+Iteration: 3 in progress...
+RMS: 0.0044601293616832955
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03805077158868739
+Iteration: 2 in progress...
+RMS: 0.00433711679649824
+Iteration: 3 in progress...
+RMS: 0.004292231414365586
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03803666434935677
+Iteration: 2 in progress...
+RMS: 0.004335768599974138
+Iteration: 3 in progress...
+RMS: 0.004290862832252301
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03886803388606487
+Iteration: 2 in progress...
+RMS: 0.004616034977942819
+Iteration: 3 in progress...
+RMS: 0.004571242546750001
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03885134862566729
+Iteration: 2 in progress...
+RMS: 0.004647552507222047
+Iteration: 3 in progress...
+RMS: 0.00460304602537338
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03948510856140462
+Iteration: 2 in progress...
+RMS: 0.00479341520205426
+Iteration: 3 in progress...
+RMS: 0.004748734112870727
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for GRACE-FO-B
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.1893152931862991
+Iteration: 2 in progress...
+RMS: 0.011664444313559971
+Iteration: 3 in progress...
+RMS: 0.012069049105937963
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.029612729577758616
+Iteration: 2 in progress...
+RMS: 0.00673721847159697
+Iteration: 3 in progress...
+RMS: 0.006799181780421972
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04494045469670538
+Iteration: 2 in progress...
+RMS: 0.005185029379152927
+Iteration: 3 in progress...
+RMS: 0.005130554401358443
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.044247328381273404
+Iteration: 2 in progress...
+RMS: 0.005140055685190518
+Iteration: 3 in progress...
+RMS: 0.005086794654242096
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04136796971762308
+Iteration: 2 in progress...
+RMS: 0.004960774399679682
+Iteration: 3 in progress...
+RMS: 0.004912739535850686
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04135726468379394
+Iteration: 2 in progress...
+RMS: 0.004959651625577683
+Iteration: 3 in progress...
+RMS: 0.004911622279522387
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04219130506634493
+Iteration: 2 in progress...
+RMS: 0.0052394092005348045
+Iteration: 3 in progress...
+RMS: 0.005191734559246767
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04217394239935857
+Iteration: 2 in progress...
+RMS: 0.005267718668141405
+Iteration: 3 in progress...
+RMS: 0.005220318601610493
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04282897513886383
+Iteration: 2 in progress...
+RMS: 0.005415393355608218
+Iteration: 3 in progress...
+RMS: 0.005367896445129396
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for TerraSAR-X
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.1356290746785487
+Iteration: 2 in progress...
+RMS: 0.010038940307252098
+Iteration: 3 in progress...
+RMS: 0.010299152735979908
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05846507739573964
+Iteration: 2 in progress...
+RMS: 0.008122963437147874
+Iteration: 3 in progress...
+RMS: 0.008249033558082633
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.031664846194975914
+Iteration: 2 in progress...
+RMS: 0.006868674101890597
+Iteration: 3 in progress...
+RMS: 0.006839252650120334
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03105582642770274
+Iteration: 2 in progress...
+RMS: 0.006656793872457334
+Iteration: 3 in progress...
+RMS: 0.006630080882707442
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.029554729786363372
+Iteration: 2 in progress...
+RMS: 0.006230446865492802
+Iteration: 3 in progress...
+RMS: 0.006208359030796806
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03133584183843492
+Iteration: 2 in progress...
+RMS: 0.006384683269781021
+Iteration: 3 in progress...
+RMS: 0.0063667300092649145
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.031691795941774036
+Iteration: 2 in progress...
+RMS: 0.006383216927834417
+Iteration: 3 in progress...
+RMS: 0.006365200145958237
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.032112264522035194
+Iteration: 2 in progress...
+RMS: 0.006377860601388853
+Iteration: 3 in progress...
+RMS: 0.006360075333929981
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.032099430218661136
+Iteration: 2 in progress...
+RMS: 0.00638735058440449
+Iteration: 3 in progress...
+RMS: 0.006369364206932337
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for TanDEM-X
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.1364311079151641
+Iteration: 2 in progress...
+RMS: 0.01036701890490949
+Iteration: 3 in progress...
+RMS: 0.010604433075004685
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05852202769444061
+Iteration: 2 in progress...
+RMS: 0.008384596845902101
+Iteration: 3 in progress...
+RMS: 0.008531502918938522
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.029191601850831108
+Iteration: 2 in progress...
+RMS: 0.0069614105310684534
+Iteration: 3 in progress...
+RMS: 0.0069496727427010305
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.02871270264770512
+Iteration: 2 in progress...
+RMS: 0.00677656218123274
+Iteration: 3 in progress...
+RMS: 0.006767139161363646
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.027313312372607722
+Iteration: 2 in progress...
+RMS: 0.006363593807175167
+Iteration: 3 in progress...
+RMS: 0.006357881063557538
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.029207361264666082
+Iteration: 2 in progress...
+RMS: 0.006518469372033132
+Iteration: 3 in progress...
+RMS: 0.006517577753463448
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.029396390808412377
+Iteration: 2 in progress...
+RMS: 0.006500899531044942
+Iteration: 3 in progress...
+RMS: 0.006499770699224919
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.029614036040287978
+Iteration: 2 in progress...
+RMS: 0.006468186418846816
+Iteration: 3 in progress...
+RMS: 0.006466899225243672
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.02961463363966458
+Iteration: 2 in progress...
+RMS: 0.006483282391946858
+Iteration: 3 in progress...
+RMS: 0.006481905728210176
+Converged!
+BLS Done. Iterations: 3
+MC job generation complete.

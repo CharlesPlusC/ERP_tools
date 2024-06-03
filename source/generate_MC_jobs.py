@@ -81,8 +81,8 @@ def create_and_submit_job_scripts(sat_name, fm_num, num_perturbations):
     script_filename = f"{folder_for_jobs}/prop_fm{fm_num}_{sat_name}.sh"
 
     script_content = f"""#!/bin/bash -l
-#$ -l h_rt=3:0:0
-#$ -l mem=6G
+#$ -l h_rt=7:0:0
+#$ -l mem=16G
 #$ -l tmpfs=10G
 #$ -N Prop_fm{fm_num}_{sat_name}
 #$ -t 1-{num_perturbations}
@@ -150,7 +150,7 @@ def generate_nominal_and_perturbed_states(sat_name, num_perturbations):
         create_and_submit_job_scripts(sat_name, fm_num, num_perturbations)
 
 def main():
-    sat_names_to_test = ["GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
+    sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TerraSAR-X", "TanDEM-X"]
     num_perturbations = 10000
     print(f"Generating nominal and perturbed states for {sat_names_to_test}")
     for sat_name in sat_names_to_test:

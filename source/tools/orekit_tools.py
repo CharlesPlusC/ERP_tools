@@ -17,17 +17,16 @@ from org.hipparchus.ode.nonstiff import DormandPrince853Integrator
 from orekit import JArray_double
 from org.orekit.orbits import OrbitType
 from org.orekit.forces.gravity.potential import GravityFieldFactory, TideSystem
-from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, OceanTides, ThirdBodyAttraction, Relativity, NewtonianAttraction
+from org.orekit.forces.gravity import HolmesFeatherstoneAttractionModel, SolidTides, OceanTides,ThirdBodyAttraction, Relativity, NewtonianAttraction
 # from org.orekit.forces import BoxAndSolarArraySpacecraft
-from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient, KnockeRediffusedForceModel
+from org.orekit.forces.radiation import SolarRadiationPressure, IsotropicRadiationSingleCoefficient,KnockeRediffusedForceModel
 from org.orekit.forces.drag import DragForce, IsotropicDrag
 from org.orekit.propagation.numerical import NumericalPropagator
 from org.orekit.propagation import SpacecraftState
 from org.orekit.utils import Constants
-from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData
+from org.orekit.models.earth.atmosphere.data import JB2008SpaceEnvironmentData, CssiSpaceWeatherData
 from org.orekit.models.earth.atmosphere import JB2008, DTM2000, NRLMSISE00
 from org.orekit.data import DataSource
-from org.orekit.models.earth.atmosphere.data import MarshallSolarActivityFutureEstimation
 from org.orekit.time import TimeScalesFactory   
 from tools.utilities import extract_acceleration, download_file_url, pos_vel_from_orekit_ephem
 
@@ -42,8 +41,10 @@ INTEGRATOR_INIT_STEP = 60.0
 POSITION_TOLERANCE = 1e-2 # 1 cm
 
 # Download SOLFSMY and DTCFILE files for JB2008 model
-solfsmy_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", "external/jb08_inputs/SOLFSMY.TXT")
-dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", "external/jb08_inputs/DTCFILE.TXT")
+solfsmy_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT", 
+"external/jb08_inputs/SOLFSMY.TXT")
+dtcfile_file = download_file_url("https://sol.spacenvironment.net/JB2008/indices/DTCFILE.TXT", 
+"external/jb08_inputs/DTCFILE.TXT")
 
 # Create DataSource instances
 solfsmy_data_source = DataSource(solfsmy_file)
@@ -73,11 +74,9 @@ def query_jb08(position, datetime):
 def query_dtm2000(position, datetime):
     frame = FramesFactory.getEME2000()
     wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-    msafe = MarshallSolarActivityFutureEstimation(
-        MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-        MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+    cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
     sun = CelestialBodyFactory.getSun()
-    atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+    atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
     absolute_date = datetime_to_absolutedate(datetime)
     #make vector3d object
     position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
@@ -87,11 +86,9 @@ def query_dtm2000(position, datetime):
 def query_nrlmsise00(position, datetime):
     frame = FramesFactory.getEME2000()
     wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-    msafe = MarshallSolarActivityFutureEstimation(
-        MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-        MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+    cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
     sun = CelestialBodyFactory.getSun()
-    atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+    atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
     absolute_date = datetime_to_absolutedate(datetime)
     #make vector3d object
     position_vector = Vector3D(float(position[0]), float(position[1]), float(position[2]))
@@ -113,7 +110,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         newattr = NewtonianAttraction(MU)
         propagator.addForceModel(newattr)
         gravityProvider = GravityFieldFactory.getNormalizedProvider(120, 120)
-        gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
+        gravityAttractionModel = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False),gravityProvider)
         propagator.addForceModel(gravityAttractionModel)
 
     if config_flags.get('3BP', False):
@@ -152,7 +149,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
             radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         earth_ellipsoid =  OneAxisEllipsoid(Constants.IERS2010_EARTH_EQUATORIAL_RADIUS, Constants.IERS2010_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth_ellipsoid, radiation_sensitive)
-        solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(), Constants.MOON_EQUATORIAL_RADIUS)
+        solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(),Constants.MOON_EQUATORIAL_RADIUS)
         propagator.addForceModel(solarRadiationPressure)
 
     if config_flags.get('knocke_erp', False):
@@ -160,7 +157,7 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         onedeg_in_rad = np.radians(1.0)
         angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
-        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
+        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS,angularResolution)
         propagator.addForceModel(knockeModel)
 
     if config_flags.get('relativity', False):
@@ -177,9 +174,8 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
         propagator.addForceModel(ceres_erp_force_model)
 
     if config_flags.get('jb08drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
-        jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
-                                            dtcfile_data_source)
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010,False))
+        jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,dtcfile_data_source)
 
         utc = TimeScalesFactory.getUTC()
         sun = CelestialBodyFactory.getSun()
@@ -193,28 +189,24 @@ def configure_force_models(propagator,cr,cross_section,cd,boxwing, **config_flag
 
     elif config_flags.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
 
     elif config_flags.get('nrlmsise00drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010,True))
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         propagator.addForceModel(dragForce)
     return propagator
 
-def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass, boxwing, ephem=False,dt=None, **config_flags):
+def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_section, mass, boxwing,ephem=False,dt=None, **config_flags):
     """Propagate the state of a spacecraft from a start date to an end date using DP853 integrator.
     Either returns the final state vector or an ephemeris.
 
@@ -271,9 +263,9 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
     
     if ephem:
         ephemGen = configured_propagator.getEphemerisGenerator()
-        configured_propagator.propagate(datetime_to_absolutedate(start_date), datetime_to_absolutedate(end_date))
+        configured_propagator.propagate(datetime_to_absolutedate(start_date),datetime_to_absolutedate(end_date))
         ephemeris = ephemGen.getGeneratedEphemeris()
-        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(start_date), datetime_to_absolutedate(end_date), dt)
+        times, state_vectors = pos_vel_from_orekit_ephem(ephemeris, datetime_to_absolutedate(start_date),datetime_to_absolutedate(end_date), dt)
         optimized_times_df = pd.DataFrame({'UTC': pd.to_datetime([start_date + datetime.timedelta(seconds=sec) for sec in times])})
         optimized_states_df = pd.DataFrame(state_vectors, columns=['x', 'y', 'z', 'xv', 'yv', 'zv'])
         ephem_df = pd.concat([optimized_times_df, optimized_states_df], axis=1)
@@ -281,8 +273,8 @@ def propagate_state(start_date, end_date, initial_state_vector, cr, cd, cross_se
     else:
         final_state = configured_propagator.propagate(datetime_to_absolutedate(end_date))
         pv_coordinates = final_state.getPVCoordinates()
-        position = [pv_coordinates.getPosition().getX(), pv_coordinates.getPosition().getY(), pv_coordinates.getPosition().getZ()]
-        velocity = [pv_coordinates.getVelocity().getX(), pv_coordinates.getVelocity().getY(), pv_coordinates.getVelocity().getZ()]
+        position = [pv_coordinates.getPosition().getX(), pv_coordinates.getPosition().getY(),pv_coordinates.getPosition().getZ()]
+        velocity = [pv_coordinates.getVelocity().getX(), pv_coordinates.getVelocity().getY(),pv_coordinates.getVelocity().getZ()]
         return position + velocity
 
 def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_drag=False, **force_model_config):
@@ -300,14 +292,14 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         monopolegrav = NewtonianAttraction(MU)
         force_models.append(monopolegrav)
         monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, monopolegrav)
-        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(),monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         accelerations_t0+=monopole_gravity_eci_t0
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(36,36)
-        gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
+        gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010,False), gravityProvider)
         force_models.append(gravityfield)
         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, gravityfield)
-        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(),gravityfield_eci_t0[0].getZ()])
         accelerations_t0+=gravityfield_eci_t0
 
     if force_model_config.get('120x120gravity', False):
@@ -315,14 +307,14 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         monopolegrav = NewtonianAttraction(MU)
         force_models.append(monopolegrav)
         monopole_gravity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, monopolegrav)
-        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(),monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         accelerations_t0+=monopole_gravity_eci_t0
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(120,120)
         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         force_models.append(gravityfield)
         gravityfield_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, gravityfield)
-        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(),gravityfield_eci_t0[0].getZ()])
         accelerations_t0+=gravityfield_eci_t0
 
     if force_model_config.get('3BP', False):
@@ -354,21 +346,21 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         force_models.append(solid_tides_moon)
         solid_tides_sun = SolidTides(central_frame, ae, mu, tidesystem, iersConv, ut1scale, sun)
         force_models.append(solid_tides_sun)
-        solid_tides_moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solid_tides_moon)
-        solid_tides_moon_eci_t0 = np.array([solid_tides_moon_eci_t0[0].getX(), solid_tides_moon_eci_t0[0].getY(), solid_tides_moon_eci_t0[0].getZ()])
+        solid_tides_moon_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass,solid_tides_moon)
+        solid_tides_moon_eci_t0 = np.array([solid_tides_moon_eci_t0[0].getX(),solid_tides_moon_eci_t0[0].getY(), solid_tides_moon_eci_t0[0].getZ()])
         accelerations_t0+=solid_tides_moon_eci_t0
         solid_tides_sun_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solid_tides_sun)
-        solid_tides_sun_eci_t0 = np.array([solid_tides_sun_eci_t0[0].getX(), solid_tides_sun_eci_t0[0].getY(), solid_tides_sun_eci_t0[0].getZ()])
+        solid_tides_sun_eci_t0 = np.array([solid_tides_sun_eci_t0[0].getX(),solid_tides_sun_eci_t0[0].getY(), solid_tides_sun_eci_t0[0].getZ()])
         accelerations_t0+=solid_tides_sun_eci_t0
 
     if force_model_config.get('ocean_tides', False):
         central_frame = FramesFactory.getITRF(IERSConventions.IERS_2010, False)
         ae = Constants.WGS84_EARTH_EQUATORIAL_RADIUS
         mu = Constants.WGS84_EARTH_MU
-        ocean_tides = OceanTides(central_frame, ae, mu, 4, 4, IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False))
+        ocean_tides = OceanTides(central_frame, ae, mu, 4, 4, IERSConventions.IERS_2010,TimeScalesFactory.getUT1(IERSConventions.IERS_2010, False))
         force_models.append(ocean_tides)
         ocean_tides_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ocean_tides)
-        ocean_tides_eci_t0 = np.array([ocean_tides_eci_t0[0].getX(), ocean_tides_eci_t0[0].getY(), ocean_tides_eci_t0[0].getZ()])
+        ocean_tides_eci_t0 = np.array([ocean_tides_eci_t0[0].getX(), ocean_tides_eci_t0[0].getY(),ocean_tides_eci_t0[0].getZ()])
         accelerations_t0+=ocean_tides_eci_t0
 
     if force_model_config.get('SRP', False):
@@ -378,10 +370,10 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         radiation_sensitive = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         earth_ellipsoid =  OneAxisEllipsoid(Constants.IERS2010_EARTH_EQUATORIAL_RADIUS, Constants.IERS2010_EARTH_FLATTENING, FramesFactory.getITRF(IERSConventions.IERS_2010, False))
         solarRadiationPressure = SolarRadiationPressure(CelestialBodyFactory.getSun(), earth_ellipsoid, radiation_sensitive)
-        solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(), Constants.MOON_EQUATORIAL_RADIUS)
+        solarRadiationPressure.addOccultingBody(CelestialBodyFactory.getMoon(),Constants.MOON_EQUATORIAL_RADIUS)
         force_models.append(solarRadiationPressure)
         solar_radiation_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, solarRadiationPressure)
-        solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(), solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
+        solar_radiation_eci_t0 = np.array([solar_radiation_eci_t0[0].getX(),solar_radiation_eci_t0[0].getY(), solar_radiation_eci_t0[0].getZ()])
         accelerations_t0+=solar_radiation_eci_t0
 
     if force_model_config.get('knocke_erp', False):
@@ -389,7 +381,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         spacecraft = IsotropicRadiationSingleCoefficient(float(cross_section), float(cr))
         onedeg_in_rad = np.radians(1.0)
         angularResolution = float(onedeg_in_rad)  # Angular resolution in radians
-        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, angularResolution)
+        knockeModel = KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS,angularResolution)
         force_models.append(knockeModel)
         knocke_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, knockeModel)
         knocke_eci_t0 = np.array([knocke_eci_t0[0].getX(), knocke_eci_t0[0].getY(), knocke_eci_t0[0].getZ()])
@@ -399,14 +391,14 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
     #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr) # pass the time and radiation data to the force model
     #     force_models.append(ceres_erp_force_model)
     #     ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
-    #     ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
+    #     ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(),ceres_erp_eci_t0[0].getZ()])
     #     accelerations_t0+=ceres_erp_eci_t0
 
     if force_model_config.get('relativity', False):
         relativity = Relativity(Constants.WGS84_EARTH_MU)
         force_models.append(relativity)
         relativity_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, relativity)
-        relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(), relativity_eci_t0[0].getZ()])
+        relativity_eci_t0 = np.array([relativity_eci_t0[0].getX(), relativity_eci_t0[0].getY(),relativity_eci_t0[0].getZ()])
         accelerations_t0+=relativity_eci_t0
 
     ###NOTE: Drag force model has to stay last in the if-loop (see below)
@@ -424,35 +416,31 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
         dragForce = DragForce(atmosphere, drag_sensitive)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
-        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(),atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
     elif force_model_config.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
-        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(),atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
     elif force_model_config.get('nrlmsise00drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         force_models.append(dragForce)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, dragForce)
-        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(),atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_t0+=atmospheric_drag_eci_t0
 
     state_perturbation = 0.1
@@ -477,16 +465,12 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
                 atmosphere = JB2008(jb08_data, sun, wgs84Ellipsoid, utc)
             elif force_model_config.get('dtm2000drag', False):
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-                msafe = MarshallSolarActivityFutureEstimation(
-                    MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-                    MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-                atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+                cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
+                atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
             elif force_model_config.get('nrlmsise00drag', False):
                 wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-                msafe = MarshallSolarActivityFutureEstimation(
-                    MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-                    MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
-                atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+                cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
+                atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
             # if boxwing:
             #     drag_sensitive = boxwing
             # else:
@@ -499,7 +483,7 @@ def propagate_STM(state_ti, t0, dt, phi_i, cr, cd, cross_section,mass, estimate_
             if isinstance(acc_perturbed, np.ndarray): #deal with stupid output of extract_acceleration
                 acc_perturbed_values = acc_perturbed
             else:
-                acc_perturbed_values = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(), acc_perturbed[0].getZ()])
+                acc_perturbed_values = np.array([acc_perturbed[0].getX(), acc_perturbed[0].getY(),acc_perturbed[0].getZ()])
             perturbed_accelerations += acc_perturbed_values
 
         current_perturbation = cd_perturbation if i == 6 else state_perturbation
@@ -543,13 +527,13 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
         MU = Constants.WGS84_EARTH_MU
         monopolegrav = NewtonianAttraction(MU)
         monopole_gravity_eci_t0 = extract_acceleration(state_vector, epochDate, mass, monopolegrav)
-        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(), monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
+        monopole_gravity_eci_t0 = np.array([monopole_gravity_eci_t0[0].getX(),monopole_gravity_eci_t0[0].getY(), monopole_gravity_eci_t0[0].getZ()])
         grav_3636_acc+=monopole_gravity_eci_t0
 
         gravityProvider = GravityFieldFactory.getNormalizedProvider(36,36)
         gravityfield = HolmesFeatherstoneAttractionModel(FramesFactory.getITRF(IERSConventions.IERS_2010, False), gravityProvider)
         gravityfield_eci_t0 = extract_acceleration(state_vector, epochDate, mass, gravityfield)
-        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(), gravityfield_eci_t0[0].getZ()])
+        gravityfield_eci_t0 = np.array([gravityfield_eci_t0[0].getX(), gravityfield_eci_t0[0].getY(),gravityfield_eci_t0[0].getZ()])
         grav_3636_acc+=gravityfield_eci_t0
         accelerations_dict['36x36gravity'] = grav_3636_acc
 
@@ -633,7 +617,8 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
         accelerations_dict['knocke_erp'] = knocke_eci_t0
 
     # if force_model_config.get('ceres_erp', False):
-    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr) # pass the time and radiation data to the force model
+    #     ceres_erp_force_model = CERES_ERP_ForceModel(ceres_times, combined_radiation_data, mass, cross_section, cr)
+    # pass the time and radiation data to the force model
     #     force_models.append(ceres_erp_force_model)
     #     ceres_erp_eci_t0 = extract_acceleration(state_vector_data, epochDate, mass, ceres_erp_force_model)
     #     ceres_erp_eci_t0 = np.array([ceres_erp_eci_t0[0].getX(), ceres_erp_eci_t0[0].getY(), ceres_erp_eci_t0[0].getZ()])
@@ -647,7 +632,7 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
 
     ###NOTE: Drag force model has to stay last in the if-loop (see below)
     if force_model_config.get('jb08drag', False):
-        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, False))
+        wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010,False))
         jb08_data = JB2008SpaceEnvironmentData(solfsmy_data_source,
                                             dtcfile_data_source)
         utc = TimeScalesFactory.getUTC()
@@ -661,24 +646,20 @@ def state2acceleration(state_vector, t0, cr, cd, cross_section, mass, **force_mo
 
     elif force_model_config.get('dtm2000drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = DTM2000(msafe, sun, wgs84Ellipsoid)
+        atmosphere = DTM2000(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)
-        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(), atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
+        atmospheric_drag_eci_t0 = np.array([atmospheric_drag_eci_t0[0].getX(),atmospheric_drag_eci_t0[0].getY(), atmospheric_drag_eci_t0[0].getZ()])
         accelerations_dict['dtm2000drag'] = atmospheric_drag_eci_t0
 
     elif force_model_config.get('nrlmsise00drag', False):
         wgs84Ellipsoid = ReferenceEllipsoid.getWgs84(FramesFactory.getITRF(IERSConventions.IERS_2010, True))
-        msafe = MarshallSolarActivityFutureEstimation(
-            MarshallSolarActivityFutureEstimation.DEFAULT_SUPPORTED_NAMES,
-            MarshallSolarActivityFutureEstimation.StrengthLevel.AVERAGE)
+        cssi_sw_data = CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES)
         sun = CelestialBodyFactory.getSun()
-        atmosphere = NRLMSISE00(msafe, sun, wgs84Ellipsoid)
+        atmosphere = NRLMSISE00(cssi_sw_data, sun, wgs84Ellipsoid)
         isotropicDrag = IsotropicDrag(float(cross_section), float(cd))
         dragForce = DragForce(atmosphere, isotropicDrag)
         atmospheric_drag_eci_t0 = extract_acceleration(state_vector, epochDate, mass, dragForce)

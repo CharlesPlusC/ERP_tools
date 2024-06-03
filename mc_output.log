@@ -1,0 +1,527 @@
+nohup: ignoring input
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Your job-array 501109.1-10000:1 ("Prop_fm0_Sentinel-1A") has been submitted
+Your job-array 501156.1-10000:1 ("Prop_fm1_Sentinel-1A") has been submitted
+Your job-array 501222.1-10000:1 ("Prop_fm2_Sentinel-1A") has been submitted
+Your job-array 501422.1-10000:1 ("Prop_fm3_Sentinel-1A") has been submitted
+Your job-array 501640.1-10000:1 ("Prop_fm4_Sentinel-1A") has been submitted
+Your job-array 501832.1-10000:1 ("Prop_fm5_Sentinel-1A") has been submitted
+Your job-array 502076.1-10000:1 ("Prop_fm6_Sentinel-1A") has been submitted
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:23: FutureWarning: 'S' is deprecated and will be removed in a future version, please use 's' instead.
+  df_resampled = df.reindex(pd.date_range(start=start_time, end=end_time, freq=freq), method='nearest').asfreq(freq)
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:34: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[:start_time - pd.Timedelta(freq), :],  # Data before the interpolation interval
+/lustre/home/zcesccc/mc_collisions/ERP_tools/source/generate_MC_jobs.py:36: FutureWarning: 'S' is deprecated and will be removed in a future version. Please use 's' instead of 'S'.
+  df.loc[end_time + pd.Timedelta(freq):, :]    # Data after the interpolation interval
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Unable to run job: job rejected: only 1000 jobs are allowed per user (current job count: 1000)
+Exiting.
+Running MC job generation script.
+Generating nominal and perturbed states for ['Sentinel-1A', 'Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B']
+Generating nominal and perturbed states for Sentinel-1A
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04000509552853489
+Iteration: 2 in progress...
+RMS: 0.005907163245025978
+Iteration: 3 in progress...
+RMS: 0.00597810568866242
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.020266158850889022
+Iteration: 2 in progress...
+RMS: 0.004312944873002467
+Iteration: 3 in progress...
+RMS: 0.004321082154152756
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.0546437653740102
+Iteration: 2 in progress...
+RMS: 0.007376404044947439
+Iteration: 3 in progress...
+RMS: 0.007332696306208319
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.053604977880807717
+Iteration: 2 in progress...
+RMS: 0.007239074772194066
+Iteration: 3 in progress...
+RMS: 0.0071959833199254945
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05066452927762146
+Iteration: 2 in progress...
+RMS: 0.0068551629145733725
+Iteration: 3 in progress...
+RMS: 0.006814224174487668
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05117720658301404
+Iteration: 2 in progress...
+RMS: 0.0068885950128363075
+Iteration: 3 in progress...
+RMS: 0.006846767953471812
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05131840328649811
+Iteration: 2 in progress...
+RMS: 0.006929927303582785
+Iteration: 3 in progress...
+RMS: 0.006886736652314562
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05156442843085596
+Iteration: 2 in progress...
+RMS: 0.007001756638397828
+Iteration: 3 in progress...
+RMS: 0.0069563968020541714
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.051500900294705776
+Iteration: 2 in progress...
+RMS: 0.006990112844951399
+Iteration: 3 in progress...
+RMS: 0.006945160644128077
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for Sentinel-2A
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04308419590003799
+Iteration: 2 in progress...
+RMS: 0.008563777906392102
+Iteration: 3 in progress...
+RMS: 0.008694387581180197
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.02123173765118583
+Iteration: 2 in progress...
+RMS: 0.004777348559678275
+Iteration: 3 in progress...
+RMS: 0.004848515730926007
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05277243008480847
+Iteration: 2 in progress...
+RMS: 0.006369867335192253
+Iteration: 3 in progress...
+RMS: 0.0063594239294691955
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05201066920339741
+Iteration: 2 in progress...
+RMS: 0.0062440646588475925
+Iteration: 3 in progress...
+RMS: 0.006234316207941621
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04924630727094817
+Iteration: 2 in progress...
+RMS: 0.005857682881404929
+Iteration: 3 in progress...
+RMS: 0.005850503962396721
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04988215663718015
+Iteration: 2 in progress...
+RMS: 0.0059957652928110195
+Iteration: 3 in progress...
+RMS: 0.005985868143973577
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.04989386320659316
+Iteration: 2 in progress...
+RMS: 0.006002096152418907
+Iteration: 3 in progress...
+RMS: 0.005991420734308491
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.049934810218793695
+Iteration: 2 in progress...
+RMS: 0.006011006851476037
+Iteration: 3 in progress...
+RMS: 0.005999320077297605
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.049916396236799145
+Iteration: 2 in progress...
+RMS: 0.0060097981029113
+Iteration: 3 in progress...
+RMS: 0.0059982445550945725
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for Sentinel-2B
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.02467236044217358
+Iteration: 2 in progress...
+RMS: 0.0047592685022985505
+Iteration: 3 in progress...
+RMS: 0.004775237801373118
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.031144850064313324
+Iteration: 2 in progress...
+RMS: 0.005331040520369472
+Iteration: 3 in progress...
+RMS: 0.005369095645897766
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.06228533090806988
+Iteration: 2 in progress...
+RMS: 0.0077075030148060905
+Iteration: 3 in progress...
+RMS: 0.007651099485742659
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.061941134873900724
+Iteration: 2 in progress...
+RMS: 0.007666821748158524
+Iteration: 3 in progress...
+RMS: 0.007610798346458718
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05922451949102162
+Iteration: 2 in progress...
+RMS: 0.007334549002760526
+Iteration: 3 in progress...
+RMS: 0.007281502501252234
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05871230253748224
+Iteration: 2 in progress...
+RMS: 0.007303202024818159
+Iteration: 3 in progress...
+RMS: 0.0072509170191864415
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05874647653097206
+Iteration: 2 in progress...
+RMS: 0.0073122652595352215
+Iteration: 3 in progress...
+RMS: 0.0072598312527334535
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.0587997525912508
+Iteration: 2 in progress...
+RMS: 0.007324736784343256
+Iteration: 3 in progress...
+RMS: 0.007272086388989756
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.05878076288000415
+Iteration: 2 in progress...
+RMS: 0.00732088299795166
+Iteration: 3 in progress...
+RMS: 0.007268305738633464
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for Sentinel-3A
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.019113482973135303
+Iteration: 2 in progress...
+RMS: 0.008270515033588258
+Iteration: 3 in progress...
+RMS: 0.008254477938512752
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.010468022352693961
+Iteration: 2 in progress...
+RMS: 0.0032753315974552864
+Iteration: 3 in progress...
+RMS: 0.0032687599293861835
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.028599572876813337
+Iteration: 2 in progress...
+RMS: 0.0037158858493329676
+Iteration: 3 in progress...
+RMS: 0.003703454287527633
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.030443101753282645
+Iteration: 2 in progress...
+RMS: 0.003783302224280429
+Iteration: 3 in progress...
+RMS: 0.0037677356825220514
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.033077091200847605
+Iteration: 2 in progress...
+RMS: 0.0038985636060138358
+Iteration: 3 in progress...
+RMS: 0.003879203823499906
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03143651896916411
+Iteration: 2 in progress...
+RMS: 0.004001736686161784
+Iteration: 3 in progress...
+RMS: 0.003980704310188405
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03126915493440425
+Iteration: 2 in progress...
+RMS: 0.00395162342438448
+Iteration: 3 in progress...
+RMS: 0.003931035133072594
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03110590775137072
+Iteration: 2 in progress...
+RMS: 0.0038855292944466806
+Iteration: 3 in progress...
+RMS: 0.003865429483043194
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.03110706319835418
+Iteration: 2 in progress...
+RMS: 0.0038894050550135535
+Iteration: 3 in progress...
+RMS: 0.003869305261489277
+Converged!
+BLS Done. Iterations: 3
+Generating nominal and perturbed states for Sentinel-3B
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.0481216049161287
+Iteration: 2 in progress...
+RMS: 0.006068448749788566
+Iteration: 3 in progress...
+RMS: 0.006136100588116128
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.026476090906662194
+Iteration: 2 in progress...
+RMS: 0.005010819741347562
+Iteration: 3 in progress...
+RMS: 0.005087589643567525
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.014559186155639102
+Iteration: 2 in progress...
+RMS: 0.0030441834256855014
+Iteration: 3 in progress...
+RMS: 0.003054165509711004
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.015084925270912451
+Iteration: 2 in progress...
+RMS: 0.0031797909288899667
+Iteration: 3 in progress...
+RMS: 0.003189262717438169
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.016695063912404908
+Iteration: 2 in progress...
+RMS: 0.0035396741679153505
+Iteration: 3 in progress...
+RMS: 0.003547662543013282
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.016695063912404908
+Iteration: 2 in progress...
+RMS: 0.0035396741679153505
+Iteration: 3 in progress...
+RMS: 0.003547662543013282
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.016821530492841325
+Iteration: 2 in progress...
+RMS: 0.0035517913274706265
+Iteration: 3 in progress...
+RMS: 0.003560190943495729
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.016928212063773377
+Iteration: 2 in progress...
+RMS: 0.003561406838786703
+Iteration: 3 in progress...
+RMS: 0.003570137345951511
+Converged!
+BLS Done. Iterations: 3
+Starting Batch Least Squares Orbit Determination
+Iteration: 1 in progress...
+RMS: 0.016912918159402043
+Iteration: 2 in progress...
+RMS: 0.0035597966131166434
+Iteration: 3 in progress...
+RMS: 0.003568488474692224
+Converged!
+BLS Done. Iterations: 3
+MC job generation complete.
