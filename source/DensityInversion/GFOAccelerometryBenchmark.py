@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 from ..tools.GFODataReadTools import get_gfo_inertial_accelerations
 
 # podaac-data-downloader -c GRACEFO_L1B_ASCII_GRAV_JPL_RL04 -d ./GRACE-FO_A_DATA -sd 2023-05-10T06:00:00Z -ed 2023-05-11T23:59:59Z -e ".*" --verbose
+# podaac-data-downloader -c GRACEFO_L1B_ASCII_GRAV_JPL_RL04 -d ./GRACE-FO_A_DATA -sd 2024-05-10T06:00:00Z -ed 2024-05-12T23:59:59Z -e ".*" --verbose
 
 def ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data):
     
@@ -40,7 +41,7 @@ def ACT_vs_EDR_vs_POD_plot(POD_and_ACT_data, EDR_data):
     merged_data = merged_data[(merged_data['UTC'].dt.hour >= 2) & (merged_data['UTC'].dt.hour <= 18)]
     POD_and_ACT_data = POD_and_ACT_data[(POD_and_ACT_data['UTC'].dt.hour >= 2) & (POD_and_ACT_data['UTC'].dt.hour <= 18)]
     fig, ax = plt.subplots(2, 1, figsize=(8, 6))
-    #multiply ACT_computed density by -1
+    #multiply ACT_computed density by -1 
     merged_data['ACT_Computed Density'] = -1 * merged_data['ACT_Computed Density']
 
     ax[0].plot(mdates.date2num(merged_data['UTC']), merged_data['ACT_Computed Density'], label='ACT Density', color="xkcd:teal", linewidth=1)

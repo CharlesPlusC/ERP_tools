@@ -12,3 +12,4 @@ output/OD_BLS/Tapley/saved_runs/
 !output/Collisions/MC/TCA_DCA/*/data/*.csv
 !output/DensityInversion/EDR/Data/*
 *.jpg
+*Myriad_FM_Bench
