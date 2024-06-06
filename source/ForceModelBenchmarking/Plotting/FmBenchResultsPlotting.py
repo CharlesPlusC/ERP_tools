@@ -12,6 +12,10 @@ def find_file(directory, keyword):
                 return os.path.join(root, file)
     return None
 
+def calculate_rms(diff_series):
+    values = next(iter(diff_series.values()))
+    return np.sqrt(np.mean(np.square(values)))
+
 def extract_data(root_folder):
     data = []
 
@@ -35,82 +39,89 @@ def extract_data(root_folder):
                     
                     try:
                         diffs_file = find_file(fm_path, 'hcl_diffs.npy')
-                        residuals_file = find_file(fm_path, 'prop_residuals.npy')
-                        if not diffs_file or not residuals_file:
-                            continue
                         
-                        epoch = diffs_file.split('_')[1]
+                        epoch = diffs_file.split('False_')[1].split('_fm')[0]
+                        epoch = pd.to_datetime(epoch, format='%Y-%m-%d_%H-%M-%S')
                         
                         diffs = np.load(diffs_file, allow_pickle=True).item()
-                        residuals = np.load(residuals_file, allow_pickle=True).item()
-                        residuals_3d = next(iter(residuals.values()))
                         
                         cov_file = find_file(fm_path, 'cov_mats.npy')
-                        rms_file = find_file(fm_path, 'RMSs.npy')
-
-                        if not cov_file or not rms_file:
-                            continue
+                        od_rms_file = find_file(fm_path, 'RMSs.npy')
                         
                         cov_matrix = np.load(cov_file, allow_pickle=True)
-                        rms = np.load(rms_file, allow_pickle=True)
+                        od_rmss = np.load(od_rms_file, allow_pickle=True)
+                        # select the smallest OD RMS value since this is the one associated with the best fit (which the state vector is based on)
+                        od_rms = np.min(od_rmss)
 
                         force_model_number = int(force_model.split('_')[1][2:])
 
-                        for i, (cov, rms_value) in enumerate(zip(cov_matrix, rms)):
-                            data.append([
-                                satellite, arc_number, period.split('_')[-1], epoch, rms_value,
-                                residuals_3d, diffs['H'], diffs['C'], diffs['L'], cov, force_model_number
-                            ])
+                        rms_H = calculate_rms(diffs['H'])
+                        rms_C = calculate_rms(diffs['C'])
+                        rms_L = calculate_rms(diffs['L'])
+
+                        data.append([
+                            satellite, arc_number, period.split('_')[-1], epoch, od_rms,
+                            rms_H, rms_C, rms_L, cov_matrix, force_model_number
+                        ])
+
                     except Exception as e:
                         print(f"Error processing {fm_path}: {e}")
 
-    columns = ["Satellite Name", "Arc Number", "Year", "arc epoch", "OD Fit RMS", 
-               "3D diffs time series", "H diffs time series", "C diffs time series", 
-               "L diffs time series", "cov matrix", "Force Model Number"]
+    columns = ["Satellite Name", "Arc Number", "Year", "arc epoch", "OD Fit RMS",
+               "H RMS", "C RMS", "L RMS", "cov matrix", "Force Model Number"]
 
     df = pd.DataFrame(data, columns=columns)
     return df
 
-
-def calculate_rms_for_h_diffs(df):
-    df['H diffs RMS'] = df['H diffs time series'].apply(
-        lambda x: np.sqrt(np.mean(np.square(np.abs(list(x.values())[0])))) if isinstance(x, dict) else np.nan)
-    return df
-
-def calculate_percentage_improvement(df):
-    df = df.sort_values(by=['Satellite Name', 'Force Model Number'])
-    df['Previous RMS'] = df.groupby('Satellite Name')['H diffs RMS'].shift(1)
-
-    for satellite in df['Satellite Name'].unique():
-        for model in [6, 7, 8]:
-            prev_rms = df[(df['Satellite Name'] == satellite) & (df['Force Model Number'] == 5)]['H diffs RMS'].values
-            df.loc[(df['Satellite Name'] == satellite) & (df['Force Model Number'] == model), 'Previous RMS'] = prev_rms
-
-    df['RMS Improvement %'] = ((df['Previous RMS'] - df['H diffs RMS']) / df['Previous RMS']) * 100
-    df = df.dropna(subset=['RMS Improvement %'])
-    df = df[(df['RMS Improvement %'] <= 110) & (df['RMS Improvement %'] >= -110)]
+def calculate_percentage_improvement(df, diff_type):
+    df = df.sort_values(by=['Satellite Name', 'Arc Number', 'arc epoch', 'Force Model Number'])
+    df[f'{diff_type} RMS Improvement %'] = np.nan
     
-    # Drop 0% RMS improvement values
-    df = df[df['RMS Improvement %'] != 0]
+    for satellite in df['Satellite Name'].unique():
+        for arc in df['Arc Number'].unique():
+            for epoch in df['arc epoch'].unique():
+                for model in range(1, 9):
+                    current_rms = df.loc[(df['Satellite Name'] == satellite) & 
+                                         (df['Arc Number'] == arc) & 
+                                         (df['arc epoch'] == epoch) & 
+                                         (df['Force Model Number'] == model), f'{diff_type} RMS']
+                    
+                    previous_rms = df.loc[(df['Satellite Name'] == satellite) & 
+                                          (df['Arc Number'] == arc) & 
+                                          (df['arc epoch'] == epoch) & 
+                                          (df['Force Model Number'] == model-1), f'{diff_type} RMS']
+                    
+                    if not current_rms.empty and not previous_rms.empty:
+                        improvement = 100 * (previous_rms.values[0] - current_rms.values[0]) / previous_rms.values[0]
+                        df.loc[(df['Satellite Name'] == satellite) & 
+                               (df['Arc Number'] == arc) & 
+                               (df['arc epoch'] == epoch) & 
+                               (df['Force Model Number'] == model), f'{diff_type} RMS Improvement %'] = improvement
 
+    df = df.dropna(subset=[f'{diff_type} RMS Improvement %'])
+    df = df[(df[f'{diff_type} RMS Improvement %'] <= 110) & (df[f'{diff_type} RMS Improvement %'] >= -110)]
+    df = df[df[f'{diff_type} RMS Improvement %'] != 0]
+    
     return df
 
-def plot_stripplot(df):
+def plot_stripplot(df, diff_type):
     colors = px.colors.qualitative.Plotly
     satellite_colors = {satellite: colors[i % len(colors)] for i, satellite in enumerate(df['Satellite Name'].unique())}
     
     fig = make_subplots(rows=1, cols=2, subplot_titles=['2019', '2023'], shared_yaxes=True)
 
     for col, year in enumerate(['2019', '2023'], start=1):
-        df_year = df[df['Year'] == year]
-
-        df_year['Force Model Number'] = df_year['Force Model Number'] + np.random.uniform(-0.1, 0.1, size=len(df_year))
+        df_year = df[df['Year'] == year].copy()
+        df_year.loc[:, 'Force Model Number'] += np.random.uniform(-0.1, 0.1, size=len(df_year))
 
         for satellite in df_year['Satellite Name'].unique():
             satellite_data = df_year[df_year['Satellite Name'] == satellite]
+            y_values = satellite_data['Force Model Number']
+            x_values = satellite_data[f'{diff_type} RMS Improvement %'] if diff_type != 'OD Fit RMS' else satellite_data['OD Fit RMS']
+
             fig.add_trace(go.Scatter(
-                x=satellite_data['RMS Improvement %'],
-                y=satellite_data['Force Model Number'],
+                x=x_values,
+                y=y_values,
                 mode='markers',
                 marker=dict(
                     size=5,
@@ -122,8 +133,8 @@ def plot_stripplot(df):
             ), row=1, col=col)
 
     fig.update_layout(
-        title='RMS Improvement % by Force Model Number and Satellite for 2019 and 2023',
-        xaxis_title='% Improvement in RMS',
+        title=f'{diff_type} by Force Model Number and Satellite for 2019 and 2023',
+        xaxis_title=f'{diff_type}',
         yaxis_title='Force Model Number',
         legend_title='Satellite Name',
         template='plotly_white',
@@ -132,14 +143,18 @@ def plot_stripplot(df):
 
     fig.show()
 
+
 if __name__ == "__main__":
-    df = pd.read_pickle('output/Myriad_FM_Bench/ProcessedResults/df.pkl')
+    df = extract_data('output/Myriad_FM_Bench')
 
-    # df = calculate_rms_for_h_diffs(df)
+    print(f"head of OD Fit RMS: {df['OD Fit RMS'].head()}")
+    print(f"head of H RMS: {df['H RMS'].head()}")
 
-    # df = calculate_percentage_improvement(df)
+    # Calculate RMS improvement for each diff type ('H', 'C', 'L')
+    for diff_type in ['H', 'C', 'L', 'OD Fit RMS']:
+        df_improvement = calculate_percentage_improvement(df, diff_type)
+        plot_stripplot(df_improvement, diff_type)
 
-    # plot_stripplot(df)
 
     #TODO: strip plots for L_diffs, C_diffs, 3D_diffs, and OD Fit RMS
     #TODO: add median value to plot + box and whisker or violin plot
