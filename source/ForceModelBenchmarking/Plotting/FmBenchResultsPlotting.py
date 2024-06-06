@@ -313,70 +313,82 @@ def plot_force_model_mean(df, metric, year, window_size=10):
 
     fig.show()
 
-def plot_all_metrics_all_years(df, metrics, window_size=10):
+def plot_force_model_mean_grouped(df, metrics, window_size=10):
     colors = px.colors.qualitative.Plotly
-    satellites = df['Satellite Name'].unique()
+
+    low_altitude = ['GRACE-FO-A', 'GRACE-FO-B', 'TerraSAR-X', 'TanDEM-X']
+    high_altitude = ['Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B']
+
+    groups = {
+        'Low Altitude': low_altitude,
+        'High Altitude': high_altitude
+    }
+
+    num_rows = len(groups)
+    num_cols = len(metrics) * 2
 
     fig = make_subplots(
-        rows=len(satellites), 
-        cols=len(metrics) * 2, 
+        rows=num_rows, 
+        cols=num_cols, 
         subplot_titles=[
-            f'{sat} {metric} (2019)' for sat in satellites for metric in metrics
+            f'{metric} (2019) {group}' for metric in metrics for group in groups
         ] + [
-            f'{sat} {metric} (2023)' for sat in satellites for metric in metrics
+            f'{metric} (2023) {group}' for metric in metrics for group in groups
         ],
         shared_yaxes=True
     )
 
-    col_idx = {f'{metric}_{year}': idx + 1 for idx, (metric, year) in enumerate([(m, '2019') for m in metrics] + [(m, '2023') for m in metrics])}
+    col_idx = {f'{metric}_{year}_{group}': idx + 1 for idx, (metric, year, group) in enumerate([(m, '2019', g) for m in metrics for g in groups] + [(m, '2023', g) for m in metrics for g in groups])}
 
-    for row, satellite in enumerate(satellites, start=1):
+    for row, (group_name, satellites) in enumerate(groups.items(), start=1):
         for metric in metrics:
             for year in ['2019', '2023']:
-                col = col_idx[f'{metric}_{year}']
-                df_satellite = df[(df['Year'] == year) & (df['Satellite Name'] == satellite)].copy()
+                col = col_idx[f'{metric}_{year}_{group_name}']
+                df_group = df[(df['Year'] == year) & (df['Satellite Name'].isin(satellites))].copy()
 
-                for force_model in df_satellite['Force Model Number'].unique():
-                    fm_data = df_satellite[df_satellite['Force Model Number'] == force_model]
+                if not df_group.empty:
+                    for force_model in df_group['Force Model Number'].unique():
+                        fm_data = df_group[df_group['Force Model Number'] == force_model]
 
-                    combined_data = pd.DataFrame(fm_data[f'{metric}_diffs'].tolist()).T
+                        if not fm_data[f'{metric}_diffs'].empty:
+                            combined_data = pd.DataFrame(fm_data[f'{metric}_diffs'].tolist()).T
 
-                    running_median, iqr1, iqr3 = calculate_running_statistics(combined_data, window_size)
+                            running_median, iqr1, iqr3 = calculate_running_statistics(combined_data, window_size)
 
-                    fig.add_trace(go.Scatter(
-                        x=combined_data.index,
-                        y=np.log10(running_median.median(axis=1)),
-                        mode='lines',
-                        line=dict(color=colors[force_model % len(colors)], width=2),
-                        name=f'FM {force_model} Median',
-                        legendgroup=f'FM {force_model}',
-                        showlegend=(row == 1 and col == 1)
-                    ), row=row, col=col)
+                            fig.add_trace(go.Scatter(
+                                x=combined_data.index,
+                                y=np.log10(running_median.median(axis=1)),
+                                mode='lines',
+                                line=dict(color=colors[force_model % len(colors)], width=2),
+                                name=f'FM {force_model} Median',
+                                legendgroup=f'FM {force_model}',
+                                showlegend=(row == 1 and col == 1)
+                            ), row=row, col=col)
 
-                    fig.add_trace(go.Scatter(
-                        x=combined_data.index,
-                        y=np.log10(iqr1.median(axis=1)),
-                        fill=None,
-                        mode='lines',
-                        line=dict(color=colors[force_model % len(colors)], dash='dash', width=1),
-                        name=f'FM {force_model} IQR1',
-                        legendgroup=f'FM {force_model}',
-                        showlegend=False
-                    ), row=row, col=col)
+                            fig.add_trace(go.Scatter(
+                                x=combined_data.index,
+                                y=np.log10(iqr1.median(axis=1)),
+                                fill=None,
+                                mode='lines',
+                                line=dict(color=colors[force_model % len(colors)], dash='dash', width=1),
+                                name=f'FM {force_model} IQR1',
+                                legendgroup=f'FM {force_model}',
+                                showlegend=False
+                            ), row=row, col=col)
 
-                    fig.add_trace(go.Scatter(
-                        x=combined_data.index,
-                        y=np.log10(iqr3.median(axis=1)),
-                        fill='tonexty',
-                        mode='lines',
-                        line=dict(color=colors[force_model % len(colors)], dash='dash', width=1),
-                        name=f'FM {force_model} IQR3',
-                        legendgroup=f'FM {force_model}',
-                        showlegend=False
-                    ), row=row, col=col)
+                            fig.add_trace(go.Scatter(
+                                x=combined_data.index,
+                                y=np.log10(iqr3.median(axis=1)),
+                                fill='tonexty',
+                                mode='lines',
+                                line=dict(color=colors[force_model % len(colors)], dash='dash', width=1),
+                                name=f'FM {force_model} IQR3',
+                                legendgroup=f'FM {force_model}',
+                                showlegend=False
+                            ), row=row, col=col)
 
     fig.update_layout(
-        title='Running Median and IQR of Time Series Data by Satellite, Metric, and Year (Log Scale)',
+        title='Running Median and IQR of Time Series Data by Group, Metric, and Year (Log Scale)',
         xaxis_title='Index Number',
         yaxis_title='Log(Value)',
         template='plotly_white',
@@ -391,7 +403,98 @@ def plot_all_metrics_all_years(df, metrics, window_size=10):
     fig.update_annotations(font_size=10)
 
     fig.show()
-    
+
+def plot_force_model_mean_grouped(df, metrics, window_size=10):
+    colors = px.colors.qualitative.Plotly
+
+    low_altitude = ['GRACE-FO-A', 'GRACE-FO-B', 'TerraSAR-X', 'TanDEM-X']
+    high_altitude = ['Sentinel-2A', 'Sentinel-2B', 'Sentinel-3A', 'Sentinel-3B']
+
+    groups = {
+        'Low Altitude': low_altitude,
+        'High Altitude': high_altitude
+    }
+
+    num_rows = len(groups)
+    num_cols = len(metrics) * 2
+
+    fig = make_subplots(
+        rows=num_rows, 
+        cols=num_cols, 
+        subplot_titles=[
+            f'{metric} (2019) {group}' for metric in metrics for group in groups
+        ] + [
+            f'{metric} (2023) {group}' for metric in metrics for group in groups
+        ],
+        shared_yaxes=True,
+        vertical_spacing=0.1,  # Adjust vertical spacing between plots
+        horizontal_spacing=0.05  # Adjust horizontal spacing between plots
+    )
+
+    fig.print_grid()
+
+    for row, (group_name, satellites) in enumerate(groups.items(), start=1):
+        for col_idx, (metric, year) in enumerate([(m, y) for y in ['2019', '2023'] for m in metrics], start=1):
+            df_group = df[(df['Year'] == year) & (df['Satellite Name'].isin(satellites))].copy()
+
+            if not df_group.empty:
+                for force_model in df_group['Force Model Number'].unique():
+                    fm_data = df_group[df_group['Force Model Number'] == force_model]
+
+                    if not fm_data[f'{metric}_diffs'].empty:
+                        combined_data = pd.DataFrame(fm_data[f'{metric}_diffs'].tolist()).T
+
+                        running_median, iqr1, iqr3 = calculate_running_statistics(combined_data, window_size)
+
+                        fig.add_trace(go.Scatter(
+                            x=combined_data.index,
+                            y=np.log10(running_median.median(axis=1)),
+                            mode='lines',
+                            line=dict(color=colors[force_model % len(colors)], width=2),
+                            name=f'FM {force_model} Median',
+                            legendgroup=f'FM {force_model}',
+                            showlegend=(row == 1 and col_idx == 1)
+                        ), row=row, col=col_idx)
+
+                        fig.add_trace(go.Scatter(
+                            x=combined_data.index,
+                            y=np.log10(iqr1.median(axis=1)),
+                            fill=None,
+                            mode='lines',
+                            line=dict(color=colors[force_model % len(colors)], dash='dash', width=1),
+                            name=f'FM {force_model} IQR1',
+                            legendgroup=f'FM {force_model}',
+                            showlegend=False
+                        ), row=row, col=col_idx)
+
+                        fig.add_trace(go.Scatter(
+                            x=combined_data.index,
+                            y=np.log10(iqr3.median(axis=1)),
+                            fill='tonexty',
+                            mode='lines',
+                            line=dict(color=colors[force_model % len(colors)], dash='dash', width=1),
+                            name=f'FM {force_model} IQR3',
+                            legendgroup=f'FM {force_model}',
+                            showlegend=False
+                        ), row=row, col=col_idx)
+
+    fig.update_layout(
+        title='Running Median and IQR of Time Series Data by Group, Metric, and Year (Log Scale)',
+        xaxis_title='Index Number',
+        yaxis_title='Log(Value)',
+        template='plotly_white',
+        showlegend=True,
+        height=1500,
+        width=2000,
+        title_font=dict(size=14)
+    )
+
+    fig.update_xaxes(showgrid=True, zeroline=True)
+    fig.update_yaxes(showgrid=True, zeroline=True)
+    fig.update_annotations(font_size=10)
+
+    fig.show()
+
 if __name__ == "__main__":
     df = extract_data('output/Myriad_FM_Bench')
 
@@ -410,7 +513,8 @@ if __name__ == "__main__":
 
     # plot_timeseries_raw(df, metrics=['H', 'C', 'L'])
     # plot_force_model_mean(df, metric='H', year='2023')
-    plot_all_metrics_all_years(df, metrics=['H', 'C', 'L'])
+    # plot_all_metrics_all_years(df, metrics=['H', 'C', 'L'])
+    plot_force_model_mean_grouped(df, metrics=['H', 'C', 'L'])
 
 
     #TODO: strip plots for L_diffs, C_diffs, 3D_diffs, and OD Fit RMS
