@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+import plotly.io as pio
 
 def find_file(directory, keyword):
     for root, dirs, files in os.walk(directory):
@@ -164,6 +165,17 @@ def plot_stripplot(df, diff_type):
     )
 
     fig.show()
+    #save the plot as html
+    # Define the output path
+    output_path = os.path.join("output", "Myriad_FM_Bench", "Plots")
+    os.makedirs(output_path, exist_ok=True)
+
+    # Define the file name
+    file_name = f"{diff_type.replace(' ', '_')}_stripplot.html"
+    file_path = os.path.join(output_path, file_name)
+
+    # Save the plot as an HTML file
+    pio.write_html(fig, file=file_path)
 
 def calculate_running_statistics(data, window_size=10):
     """Calculate running median, IQR1, and IQR3 for a given time series."""
@@ -498,23 +510,15 @@ def plot_force_model_mean_grouped(df, metrics, window_size=10):
 if __name__ == "__main__":
     df = extract_data('output/Myriad_FM_Bench')
 
-    print(f"length of H_diffs: {len(df['H_diffs'])}")
-    print(f"total number of values in the first H_diffs: {len(df['H_diffs'][0])}")
-
-    # print(f"head of OD Fit RMS: {df['OD Fit RMS'].head()}")
-    # print(f"head of H RMS: {df['H RMS'].head()}")
-    # print(f"head of h timeseries: {df['H_diffs'].head()}")
-    print(f"head of 3D residuals: {df['Prop 3D Residuals'].head()}")
-
     # Calculate RMS improvement for each diff type ('H', 'C', 'L', '3D', 'OD Fit')
-    # for diff_type in ['3D', 'OD Fit']:
-    #     df_improvement = calculate_percentage_improvement(df, diff_type)
-    #     plot_stripplot(df_improvement, diff_type)
+    for diff_type in ['H', 'C', 'L','3D', 'OD Fit']:
+        df_improvement = calculate_percentage_improvement(df, diff_type)
+        plot_stripplot(df_improvement, diff_type)
 
     # plot_timeseries_raw(df, metrics=['H', 'C', 'L'])
     # plot_force_model_mean(df, metric='H', year='2023')
     # plot_all_metrics_all_years(df, metrics=['H', 'C', 'L'])
-    plot_force_model_mean_grouped(df, metrics=['H', 'C', 'L'])
+    # plot_force_model_mean_grouped(df, metrics=['H', 'C', 'L'])
 
 
     #TODO: strip plots for L_diffs, C_diffs, 3D_diffs, and OD Fit RMS

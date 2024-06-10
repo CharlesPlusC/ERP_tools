@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
+import os
 
 def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
     cmap = plt.cm.get_cmap('tab20')
@@ -73,34 +75,15 @@ def plot_all_indices_in_one(merged_data, kp_details, hourly_long_df, daily_dst=F
     plt.title('Geomagnetic and Solar Indices Over Time Including Dst')
 
     plt.show()
-
 def plot_all_indices_in_one_plotly(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
     cmap = ['rgb(31, 119, 180)', 'rgb(255, 127, 14)', 'rgb(44, 160, 44)', 'rgb(214, 39, 40)', 'rgb(148, 103, 189)']
     g_index_colors = {f'G{i}': cmap[i - 1] for i in range(1, 6)}  # Define colors for G1 to G5
 
     fig = go.Figure()
 
-    # Set background color blocks based on G-index, merging consecutive periods
-    current_start = None
-    current_g_index = None
-    for idx, row in kp_details.iterrows():
-        if current_g_index != row['storm_scale']:
-            if current_start is not None:
-                fig.add_vrect(
-                    x0=current_start, x1=row['DateTime'],
-                    fillcolor=g_index_colors[current_g_index], opacity=0.3,
-                    layer="below", line_width=0
-                )
-            current_start = row['DateTime']
-            current_g_index = row['storm_scale']
-
-    # Add the last vrect if needed
-    if current_start is not None:
-        fig.add_vrect(
-            x0=current_start, x1=kp_details['DateTime'].iloc[-1] + pd.Timedelta(hours=3),
-            fillcolor=g_index_colors[current_g_index], opacity=0.3,
-            layer="below", line_width=0
-        )
+    # Removed the background color blocks based on G-index
+    first_date = kp_details['DateTime'].min()
+    last_date = kp_details['DateTime'].max()
 
     # Plot Dst or hourly data
     if daily_dst:
@@ -138,10 +121,19 @@ def plot_all_indices_in_one_plotly(merged_data, kp_details, hourly_long_df, dail
         yaxis3=dict(title='Ap', color='green', overlaying='y', side='right', position=0.90),
         yaxis4=dict(title='SN', color='purple', overlaying='y', side='right', position=0.85),
         yaxis5=dict(title='F10.7obs', color='orange', overlaying='y', side='right', position=0.80),
-        title='Geomagnetic and Solars Indices Over Time Including Dst'
+        title='Geomagnetic and Solar Indices Over Time'
     )
 
     fig.show()
+    output_path = os.path.join("output/SWIndices")
+    os.makedirs(output_path, exist_ok=True)
+
+    # Define the file name
+    file_name = f"sw_indicesplot{first_date}_{last_date}.html"
+    file_path = os.path.join(output_path, file_name)
+
+    # Save the plot as an HTML file
+    pio.write_html(fig, file=file_path)
 
 def plot_all_indices_separate(merged_data, kp_details, hourly_long_df, daily_dst=False, daily_kp=False):
     fig, ax1 = plt.subplots(figsize=(15, 9))

@@ -363,11 +363,11 @@ def read_imf(start_date, end_date):
 if __name__ == "__main__":
     pass
     ####Plot Space Weather Indices
-    # daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
+    daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
-    # kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2000-01-01']
-    # daily_indices = daily_indices[daily_indices['Date'] > '2000-01-01']  
-    # hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2000-01-01'] 
+    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2019-01-01']
+    daily_indices = daily_indices[daily_indices['Date'] > '2019-01-01']  
+    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2019-01-01'] 
 
     # select_storms(kp_3hrly)
 
@@ -375,7 +375,7 @@ if __name__ == "__main__":
 
     # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
-    # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
 
     ####Test reading AE index
     # start_date = '2019-01-01'
