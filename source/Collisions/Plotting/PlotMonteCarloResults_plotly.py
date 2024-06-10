@@ -195,22 +195,6 @@ def plot_tca_vs_dca_matrix(dataframes, filenames, save_path, sat_name):
     fig.show()
     fig.write_image(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_Matrix_plotly.jpg'), scale=2)
 
-
-# Function to plot all TCA vs. DCA data on a single plot with KDE and hue differentiation
-def plot_tca_vs_dca_jointplot(dataframes, filenames, save_path, sat_name):
-    combined_df = pd.DataFrame()
-    for df, filename in zip(dataframes, filenames):
-        unique_id = filename.split('_')[3]
-        label = f"fm{unique_id}"
-        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') - pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
-        temp_df = pd.DataFrame({'TCA': tca_seconds, 'DCA': df['DCA'], 'Force Model': label})
-        combined_df = pd.concat([combined_df, temp_df], ignore_index=True)
-
-    fig = px.scatter(combined_df, x='TCA', y='DCA', color='Force Model', title=f'{sat_name} - TCA vs. DCA KDE')
-    fig.update_yaxes(type='log')
-    fig.show()
-    fig.write_image(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_KDE_plotly.jpg'), scale=2)
-
 sat_names_to_test = ["GRACE-FO-A", "GRACE-FO-B", "TanDEM-X", "TerraSAR-X"]
 
 for sat_name in sat_names_to_test:
@@ -236,4 +220,3 @@ for sat_name in sat_names_to_test:
     plot_tca_vs_dca_matrix(dataframes, files, save_path, sat_name)
     plot_tca_distributions_facetgrid(dataframes, files, save_path, sat_name)
     plot_dca_distributions_facetgrid(dataframes, files, save_path, sat_name)
-    plot_tca_vs_dca_jointplot(dataframes, files, save_path, sat_name)
