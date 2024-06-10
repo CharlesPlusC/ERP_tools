@@ -115,62 +115,86 @@ def plot_cumulative_distribution_dca(dataframes, filenames, save_path, sat_name)
 
 # Function to plot TCA vs. DCA in a 3x3 subplot matrix
 def plot_tca_vs_dca_matrix(dataframes, filenames, save_path, sat_name):
-    fig = make_subplots(rows=3, cols=3, subplot_titles=filenames[:9])
-    
+    # Create a 3x3 subplot layout
+    fig = make_subplots(
+        rows=3, cols=3,
+        subplot_titles=filenames[:9],
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+
+    all_tca_seconds = []
+    all_dca_pseudo_log = []
+
+    # Collect all data for consistent axis ranges
+    for df in dataframes[:9]:  # Limit to 9 for 3x3 matrix
+        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') -
+                       pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
+        dca_pseudo_log = np.log10(df['DCA'] + 1e-6)  # Pseudo-log transformation
+        all_tca_seconds.extend(tca_seconds)
+        all_dca_pseudo_log.extend(dca_pseudo_log)
+
+    tca_min, tca_max = min(all_tca_seconds), max(all_tca_seconds)
+    dca_min, dca_max = min(all_dca_pseudo_log), max(all_dca_pseudo_log)
+
     for i, (df, filename) in enumerate(zip(dataframes, filenames)):
         if i >= 9:
             break
         
-        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') - pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
+        tca_seconds = (pd.to_datetime(df['TCA'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce') -
+                       pd.to_datetime('2023-05-05 09:59:42.000000', format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')).dt.total_seconds()
 
-        # Apply log transformation to DCA to match the logarithmic scale
-        dca_log = np.log10(df['DCA'].replace(0, np.nan).dropna())
+        dca_pseudo_log = np.log10(df['DCA'] + 1e-6)  # Pseudo-log transformation
 
         row, col = divmod(i, 3)
+        row += 1  # Plotly rows are 1-indexed
+        col += 1  # Plotly columns are 1-indexed
         
         # Create 2D density plot
         heatmap = go.Histogram2d(
             x=tca_seconds,
-            y=dca_log,
+            y=dca_pseudo_log,
             colorscale='Turbo',
-            nbinsx=200,
-            nbinsy=200,
+            nbinsx=100,
+            nbinsy=100,
             showscale=False,
-            name=filename
+            zmax=4  # Adjust to keep the color range consistent
         )
-        fig.add_trace(heatmap, row=row+1, col=col+1)
+        fig.add_trace(heatmap, row=row, col=col)
 
-        # Add scatter plot overlay
-        scatter = go.Scatter(
+        # Add contour lines
+        contour = go.Histogram2dContour(
             x=tca_seconds,
-            y=dca_log,
-            mode='markers',
-            marker=dict(size=1, color='white', opacity=0.8),
-            name='Data Points',
-            showlegend=False
+            y=dca_pseudo_log,
+            colorscale='Turbo',
+            nbinsx=100,
+            nbinsy=100,
+            line=dict(width=0.5, color='white'),
+            showscale=False,
+            zmax=4  # Adjust to keep the color range consistent
         )
-        fig.add_trace(scatter, row=row+1, col=col+1)
+        fig.add_trace(contour, row=row, col=col)
+
+        fig.update_xaxes(range=[tca_min, tca_max], title_text='Δ Nominal TCA (seconds)', row=row, col=col)
+        fig.update_yaxes(
+            range=[dca_min, dca_max],
+            title_text='Δ log Nominal DCA (meters)',
+            tickmode='array',
+            tickvals=[-6, -3, 0, 3, 6],
+            ticktext=['1e-6', '1e-3', '1', '1e3', '1e6'],
+            row=row, col=col
+        )
 
     fig.update_layout(
         title=f'{sat_name} - TCA vs. DCA Comparison',
-        showlegend=False,
-        height=1200,  # Adjust height to better fit 3x3 plots
-        width=1200    # Adjust width to better fit 3x3 plots
+        height=1200,
+        width=1700,
+        showlegend=False
     )
-
-    # Update y-axes to reflect log scale ticks
-    for i in range(1, 10):
-        fig.update_yaxes(
-            type='log',
-            tickmode='array',
-            tickvals=[-3, -2, -1, 0, 1, 2, 3],
-            ticktext=['0.001', '0.01', '0.1', '1', '10', '100', '1000'],
-            row=(i-1)//3 + 1,
-            col=(i-1)%3 + 1
-        )
 
     fig.show()
     fig.write_image(os.path.join(save_path, f'{sat_name}_TCA_vs_DCA_Matrix_plotly.jpg'), scale=2)
+
 
 # Function to plot all TCA vs. DCA data on a single plot with KDE and hue differentiation
 def plot_tca_vs_dca_jointplot(dataframes, filenames, save_path, sat_name):
