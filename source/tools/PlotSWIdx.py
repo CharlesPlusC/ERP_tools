@@ -249,7 +249,7 @@ def plot_indices_dual(daily_indices, kp_3hrly, hourly_dst, time_period_1, time_p
                         subplot_titles=[f'Period 1: {time_period_1[0]} to {time_period_1[1]}',
                                         f'Period 2: {time_period_2[0]} to {time_period_2[1]}',
                                         "", "", "", "", "", "", "", ""],
-                        vertical_spacing=0.08)
+                        vertical_spacing=0.05)
 
     # Plot Dst as scatter
     if daily_dst:
@@ -289,21 +289,28 @@ def plot_indices_dual(daily_indices, kp_3hrly, hourly_dst, time_period_1, time_p
     fig.update_yaxes(title_text="F10.7obs", range=[f10_min, f10_max], row=5, col=1)
     fig.update_yaxes(title_text="F10.7obs", range=[f10_min, f10_max], row=5, col=2)
 
-    # Update layout
-    fig.update_layout(height=900, width=1200, title_text="Geomagnetic and Solar Indices Over Two Periods")
-    fig.update_xaxes(title_text="Date", row=1, col=1)
-    fig.update_xaxes(title_text="Date", row=2, col=1)
-    fig.update_xaxes(title_text="Date", row=3, col=1)
-    fig.update_xaxes(title_text="Date", row=4, col=1)
+    # Update layout with smaller fonts and size adjustments
+    fig.update_layout(
+        height=500, width=800, 
+        title_text="Geomagnetic and Solar Indices Over Two Periods",
+        font=dict(size=10),
+        title_font=dict(size=12)
+    )
+    
+    # fig.update_xaxes(title_text="Date", row=1, col=1)
+    # fig.update_xaxes(title_text="Date", row=2, col=1)
+    # fig.update_xaxes(title_text="Date", row=3, col=1)
+    # fig.update_xaxes(title_text="Date", row=4, col=1)
     fig.update_xaxes(title_text="Date", row=5, col=1)
 
-    fig.update_xaxes(title_text="Date", row=1, col=2)
-    fig.update_xaxes(title_text="Date", row=2, col=2)
-    fig.update_xaxes(title_text="Date", row=3, col=2)
-    fig.update_xaxes(title_text="Date", row=4, col=2)
+    # fig.update_xaxes(title_text="Date", row=1, col=2)
+    # fig.update_xaxes(title_text="Date", row=2, col=2)
+    # fig.update_xaxes(title_text="Date", row=3, col=2)
+    # fig.update_xaxes(title_text="Date", row=4, col=2)
     fig.update_xaxes(title_text="Date", row=5, col=2)
 
     fig.show()
+
     #save
     file_name = f"output/SWIndices/sw_indicesplot{time_period_1[0]}_{time_period_2[1]}.html"
     pio.write_html(fig, file=file_name)
