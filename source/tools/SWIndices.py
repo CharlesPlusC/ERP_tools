@@ -4,7 +4,7 @@ import datetime
 import os
 import gzip
 import netCDF4 as nc
-from source.tools.PlotSWIdx import plot_imf_components, plot_all_indices_separate, plot_all_indices_in_one, plot_all_indices_in_one_plotly
+from source.tools.PlotSWIdx import plot_imf_components, plot_all_indices_separate, plot_all_indices_in_one, plot_all_indices_in_one_plotly, plot_indices_dual
 
 def read_ae(start_date, end_date, components=['AE']):
     """
@@ -365,9 +365,24 @@ if __name__ == "__main__":
     ####Plot Space Weather Indices
     daily_indices, kp_3hrly, hourly_dst = get_kp_ap_dst_f107()
 
-    kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2019-01-01']
-    daily_indices = daily_indices[daily_indices['Date'] > '2019-01-01']  
-    hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2019-01-01'] 
+    #slice from 2019 onwards
+    # kp_3hrly = kp_3hrly[kp_3hrly['DateTime'] > '2019-01-01']
+    # daily_indices = daily_indices[daily_indices['Date'] > '2019-01-01']  
+    # hourly_dst = hourly_dst[hourly_dst['DateTime'] > '2019-01-01'] 
+
+    #now slice 2 weeks before and after 2023-04-23 18:00:12_20240523-025436.png
+    # kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] > '2023-04-09') & (kp_3hrly['DateTime'] < '2023-05-07')]
+    # daily_indices = daily_indices[(daily_indices['Date'] > '2023-04-09') & (daily_indices['Date'] < '2023-05-07')]
+    # hourly_dst = hourly_dst[(hourly_dst['DateTime'] > '2023-04-09') & (hourly_dst['DateTime'] < '2023-05-07')]
+
+    # #now slice 2 weeks before and after 2019-11-30 22:24:42_20240507-180445
+    # kp_3hrly = kp_3hrly[(kp_3hrly['DateTime'] > '2019-11-16') & (kp_3hrly['DateTime'] < '2019-12-14')]
+    # daily_indices = daily_indices[(daily_indices['Date'] > '2019-11-16') & (daily_indices['Date'] < '2019-12-14')]
+    # hourly_dst = hourly_dst[(hourly_dst['DateTime'] > '2019-11-16') & (hourly_dst['DateTime'] < '2019-12-14')]
+
+    time_period_1 = ('2019-11-16', '2019-12-14')
+    time_period_2 = ('2023-04-09', '2023-05-07')
+    plot_indices_dual(daily_indices, kp_3hrly, hourly_dst,time_period_1, time_period_2, daily_dst=False, daily_kp=False)
 
     # select_storms(kp_3hrly)
 
@@ -375,7 +390,7 @@ if __name__ == "__main__":
 
     # plot_all_indices_separate(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
     # plot_all_indices_in_one(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
-    plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
+    # plot_all_indices_in_one_plotly(daily_indices, kp_3hrly, hourly_dst, daily_dst=False, daily_kp=False)
 
     ####Test reading AE index
     # start_date = '2019-01-01'
