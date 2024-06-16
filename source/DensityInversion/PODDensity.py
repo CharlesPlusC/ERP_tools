@@ -112,39 +112,38 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
 
 if __name__ == "__main__":
 
-    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-06')
-    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+    # force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    # ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2024-05-10')
+    # ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
 
-    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-06 00:00:00']
-    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2023-05-06 18:00:00']
-    print(f"first and last time in ephemeris_df: {ephemeris_df['UTC'].iloc[0]}, {ephemeris_df['UTC'].iloc[-1]}")
-    #plot the norm of the position vector
-    print(f"ephemeris_df: {ephemeris_df.head()}")
-    pos_norm = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values, axis=1)
-    ephemeris_df['pos_norm'] = pos_norm
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ax.plot(ephemeris_df['UTC'], ephemeris_df['pos_norm'])
-    ax.set_ylabel('Position Norm (km)')
-    ax.set_xlabel('UTC')
-    ax.set_title('GRACE-FO-A Position Norm')
-    plt.show()
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2024-05-10 00:00:00']
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2024-05-13 00:00:00']
+    # print(f"first and last time in ephemeris_df: {ephemeris_df['UTC'].iloc[0]}, {ephemeris_df['UTC'].iloc[-1]}")
+    # #plot the norm of the position vector
+    # print(f"ephemeris_df: {ephemeris_df.head()}")
+    # pos_norm = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values, axis=1)
+    # ephemeris_df['pos_norm'] = pos_norm
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots()
+    # ax.plot(ephemeris_df['UTC'], ephemeris_df['pos_norm'])
+    # ax.set_ylabel('Position Norm (km)')
+    # ax.set_xlabel('UTC')
+    # ax.set_title('GRACE-FO-A Position Norm')
+    # plt.show()
 
-    interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-    velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
-    print(f"velacc_ephem: {velacc_ephem.head()}")
-    vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
-    density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
-                                    models_to_query=[None], density_freq='15S')
+    # interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
+    # velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+    # print(f"velacc_ephem: {velacc_ephem.head()}")
+    # vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
+    # density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
+    #                                 models_to_query=[None], density_freq='15S')
     # #save datafram to csv
-    density_df.to_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/NRT_2023-05-06_GRACE-FO-A_density_inversion.csv", index=False)
+    # density_df.to_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-05-10_GRACE-FO-A_density_inversion.csv", index=False)
     
     # NRT_density_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/NRT_2023-04-22_GRACE-FO-A_density_inversion.csv")
     # RSO_density_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_2_1_20240511200639.csv")
 
     # # Apply 45 min (90*2) rolling average
-    # NRT_density_df['Computed Density'] = NRT_density_df['Computed Density'].rolling(window=90*2, min_periods=1).mean()
     # RSO_density_df['Computed Density'] = RSO_density_df['Computed Density'].rolling(window=90*2, min_periods=1).mean()
 
     # # Merge the data on 'UTC'
@@ -250,57 +249,10 @@ if __name__ == "__main__":
 
 
     #### Checking storm denstiy
-    # import matplotlib.pyplot as plt
-    # import pandas as pd
-    # import numpy as np
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import numpy as np
 
     # storm_g5_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_0_1_20240524153130.csv")
-
-    # storm_g5_df['UTC'] = pd.to_datetime(storm_g5_df['UTC'])
-    # storm_g5_df.set_index('UTC', inplace=True)
-
-    # start_time = '2024-05-10 23:00:00'
-    # end_time = '2024-05-11 11:00:00'
-
-    # mask = (storm_g5_df.index < start_time) | (storm_g5_df.index > end_time)
-    # mean_computed_density = storm_g5_df.loc[mask, 'Computed Density'].mean()
-
-    # storm_g5_df.loc[start_time:end_time, 'Computed Density'] = mean_computed_density
-
-    # storm_g5_df[['Computed Density']].plot()
-    # plt.xlabel('UTC')
-    # plt.ylabel('Density')
-    # plt.title('Computed Density over UTC')
-    # plt.show()
-
-    # storm_g5_df['norm'] = np.linalg.norm(storm_g5_df[['x', 'y', 'z']].values, axis=1)
-    # storm_g5_df['vel_norm'] = np.linalg.norm(storm_g5_df[['xv', 'yv', 'zv']].values, axis=1)
-    # storm_g5_df['norm'] = (storm_g5_df['norm']/1000) - 6378.137
-    # storm_g5_df['vel_norm'] = storm_g5_df['vel_norm']/1000
-    # storm_g5_df['UTC'] = pd.to_datetime(storm_g5_df['UTC'])
-    # storm_g5_df.set_index('UTC', inplace=True)
-
-    # fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-
-    # # Plot altitude
-    # axs[0].plot(storm_g5_df.index, storm_g5_df['norm'], label='Altitude')
-    # axs[0].set_ylabel('Altitude (km)')
-    # axs[0].axhline(y=500, color='r', linestyle='--')
-    # axs[0].axhline(y=1000, color='g', linestyle='--')
-    # axs[0].text(storm_g5_df.index[0], 500, '500km', color='r')
-    # axs[0].text(storm_g5_df.index[0], 1000, '1000km', color='g')
-    # axs[0].grid()
-    # axs[0].set_title('GRACE-FO-A Storm Density Altitude')
-    # axs[0].set_yscale('log')
-
-    # # Plot velocity
-    # axs[1].plot(storm_g5_df.index, storm_g5_df['vel_norm'], label='Velocity', color='b')
-    # axs[1].set_xlabel('UTC')
-    # axs[1].set_ylabel('Velocity (km/s)')
-    # axs[1].grid()
-    # axs[1].set_title('GRACE-FO-A Storm Density Velocity')
-
-    # plt.tight_layout()
-    # plt.show()
-    
-    # plot_densities_and_indices([storm_g5_df], 90, "GRACE-FO-A")
+    storm_g5_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-05-10_GRACE-FO-A_density_inversion.csv") #StormDesntiy
+    plot_densities_and_indices([storm_g5_df], 45, "GRACE-FO-A")

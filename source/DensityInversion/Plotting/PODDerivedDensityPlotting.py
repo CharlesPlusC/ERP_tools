@@ -286,7 +286,6 @@ def plot_densities_and_residuals(data_frames, moving_avg_minutes, sat_name):
     import matplotlib.pyplot as plt
     import pandas as pd
     import seaborn as sns
-    from scipy.signal import savgol_filter
     from datetime import datetime, timedelta
 
     sns.set_style(style="whitegrid")
@@ -394,7 +393,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
     hourly_dst = hourly_dst.sort_values(by='DateTime')
     max_kp_time = kp_3hrly.loc[kp_3hrly['Kp'].idxmax(), 'DateTime']
     analysis_start_time = max_kp_time - timedelta(hours=24)
-    analysis_end_time = max_kp_time + timedelta(hours=36)
+    analysis_end_time = max_kp_time + timedelta(hours=48)
 
     kp_3hrly_analysis = kp_3hrly[(kp_3hrly['DateTime'] >= analysis_start_time) & (kp_3hrly['DateTime'] <= analysis_end_time)]
     hourly_dst_analysis = hourly_dst[(hourly_dst['DateTime'] >= analysis_start_time) & (hourly_dst['DateTime'] <= analysis_end_time)]
@@ -425,7 +424,7 @@ def plot_densities_and_indices(data_frames, moving_avg_minutes, sat_name):
         sym['minute_value'] = -sym['minute_value']
 
     for i, density_df in enumerate(data_frames):
-        seconds_per_point = 30
+        seconds_per_point = 15
         window_size = (moving_avg_minutes * 60) // seconds_per_point
         density_df['Computed Density'] = density_df['Computed Density'].rolling(window=window_size, center=True).mean()
         median_density = density_df['Computed Density'].median()
