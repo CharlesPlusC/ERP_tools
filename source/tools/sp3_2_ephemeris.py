@@ -229,4 +229,4 @@ def main(satellite_list=None):
 
 
 if __name__ == "__main__":
-    main(satellite_list = ['GRACE-FO-B'])
+    main(satellite_list = ['GRACE-FO-A'])

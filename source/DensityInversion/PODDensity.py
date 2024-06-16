@@ -111,35 +111,93 @@ def density_inversion(sat_name, ephemeris_df, x_acc_col, y_acc_col, z_acc_col, f
     return density_inversion_df
 
 if __name__ == "__main__":
-    # main()
-    # daily_indices, kp3hrly, dst_hrly = get_kp_ap_dst_f107()
 
-    # force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
-    # ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2024-05-11')
-    # ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
-    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2024-05-10 15:00:00']
-    # #make the ephemeris stop 24hrs after the start time
-    # print(f"ephemeris_df: {ephemeris_df.head()}")
-    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2024-05-12 07:00:00']
-    # print(f"ephemeris_df: {ephemeris_df.head()}")
-    # #plot the norm of the position vector
-    # pos_norm = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values, axis=1)
-    # ephemeris_df['pos_norm'] = pos_norm
-    # import matplotlib.pyplot as plt
+    force_model_config = {'120x120gravity': True, '3BP': True, 'solid_tides': True, 'ocean_tides': True, 'knocke_erp': True, 'relativity': True, 'SRP': True}
+    ephemeris_df = sp3_ephem_to_df("GRACE-FO-A", date = '2023-05-06')
+    ephemeris_df['UTC'] = pd.to_datetime(ephemeris_df['UTC'])
+
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] >= '2023-05-06 00:00:00']
+    # ephemeris_df = ephemeris_df[ephemeris_df['UTC'] <= '2023-05-06 18:00:00']
+    print(f"first and last time in ephemeris_df: {ephemeris_df['UTC'].iloc[0]}, {ephemeris_df['UTC'].iloc[-1]}")
+    #plot the norm of the position vector
+    print(f"ephemeris_df: {ephemeris_df.head()}")
+    pos_norm = np.linalg.norm(ephemeris_df[['x', 'y', 'z']].values, axis=1)
+    ephemeris_df['pos_norm'] = pos_norm
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.plot(ephemeris_df['UTC'], ephemeris_df['pos_norm'])
+    ax.set_ylabel('Position Norm (km)')
+    ax.set_xlabel('UTC')
+    ax.set_title('GRACE-FO-A Position Norm')
+    plt.show()
+
+    interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
+    velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
+    print(f"velacc_ephem: {velacc_ephem.head()}")
+    vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
+    density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
+                                    models_to_query=[None], density_freq='15S')
+    # #save datafram to csv
+    density_df.to_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/NRT_2023-05-06_GRACE-FO-A_density_inversion.csv", index=False)
+    
+    # NRT_density_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/NRT_2023-04-22_GRACE-FO-A_density_inversion.csv")
+    # RSO_density_df = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/GRACE-FO-A/GRACE-FO-A_storm_density_2_1_20240511200639.csv")
+
+    # # Apply 45 min (90*2) rolling average
+    # NRT_density_df['Computed Density'] = NRT_density_df['Computed Density'].rolling(window=90*2, min_periods=1).mean()
+    # RSO_density_df['Computed Density'] = RSO_density_df['Computed Density'].rolling(window=90*2, min_periods=1).mean()
+
+    # # Merge the data on 'UTC'
+    # merged_df = pd.merge(NRT_density_df, RSO_density_df, on='UTC', suffixes=('_NRT', '_RSO'))
+
+    # # Remove extreme values and replace with the median
+    # median_NRT = np.median(merged_df['Computed Density_NRT'].dropna())
+    # merged_df['Computed Density_NRT'] = np.where(merged_df['Computed Density_NRT'] > 5 * median_NRT, median_NRT, merged_df['Computed Density_NRT'])
+    # merged_df['Computed Density_NRT'] = np.where(merged_df['Computed Density_NRT'] < 1/5 * median_NRT, median_NRT, merged_df['Computed Density_NRT'])
+
+    # median_RSO = np.median(merged_df['Computed Density_RSO'].dropna())
+    # merged_df['Computed Density_RSO'] = np.where(merged_df['Computed Density_RSO'] > 5 * median_RSO, median_RSO, merged_df['Computed Density_RSO'])
+    # merged_df['Computed Density_RSO'] = np.where(merged_df['Computed Density_RSO'] < 1/5 * median_RSO, median_RSO, merged_df['Computed Density_RSO'])
+
+    # # Interpolate NaNs before applying Savitzky-Golay filter
+    # merged_df['Computed Density_NRT'] = merged_df['Computed Density_NRT'].interpolate(method='linear').fillna(method='bfill').fillna(method='ffill')
+    # merged_df['Computed Density_RSO'] = merged_df['Computed Density_RSO'].interpolate(method='linear').fillna(method='bfill').fillna(method='ffill')
+
+    # # Apply Savitzky-Golay filter
+    # merged_df['Computed Density_NRT'] = savgol_filter(merged_df['Computed Density_NRT'], 51, 7)
+    # merged_df['Computed Density_RSO'] = savgol_filter(merged_df['Computed Density_RSO'], 51, 7)
+
+    # merged_df = merged_df[merged_df['UTC'] >= '2023-04-22 19:00:00']
+
+    # # Plot computed density vs time for both NRT and RSO
     # fig, ax = plt.subplots()
-    # ax.plot(ephemeris_df['UTC'], ephemeris_df['pos_norm'])
-    # ax.set_ylabel('Position Norm (km)')
+    # ax.plot(merged_df['UTC'], merged_df['Computed Density_NRT'], label='NRT')
+    # ax.plot(merged_df['UTC'], merged_df['Computed Density_RSO'], label='RSO')
+
+    # # Calculate and print RMS error
+    # rms_error = np.sqrt(np.mean((merged_df['Computed Density_NRT'] - merged_df['Computed Density_RSO'])**2))
+    # print(f"RMS Error: {rms_error}")
+
+    # # Calculate and print percentage difference
+    # percentage_diff = np.abs((merged_df['Computed Density_NRT'] - merged_df['Computed Density_RSO']) / merged_df['Computed Density_RSO'])
+    # print(f"Percentage Difference: {percentage_diff.mean() * 100:.2f}%")
+
+    # #calculate realtive density change (density_i - density_0)
+    # merged_df['Rel NRT Density Change'] = merged_df['Computed Density_NRT'] - merged_df['Computed Density_NRT'].iloc[0]
+    # merged_df['Rel RSO Density Change'] = merged_df['Computed Density_RSO'] - merged_df['Computed Density_RSO'].iloc[0]
+
+
+    # ax.set_ylabel('Computed Density')
     # ax.set_xlabel('UTC')
-    # ax.set_title('GRACE-FO-A Position Norm')
+    # ax.set_xticks(ax.get_xticks()[::1000])
+    # ax.set_yscale('log')
+    # #add a grid
+    # ax.grid()
+    # ax.set_title('Computed Density vs Time')
+    # ax.legend()
     # plt.show()
 
-
-    # interp_ephemeris_df = interpolate_positions(ephemeris_df, '0.01S')
-    # velacc_ephem = calculate_acceleration(interp_ephemeris_df, '0.01S', filter_window_length=21, filter_polyorder=7)
-    # print(f"velacc_ephem: {velacc_ephem.head()}")
-    # vel_acc_col_x, vel_acc_col_y, vel_acc_col_z = 'vel_acc_x', 'vel_acc_y', 'vel_acc_z'
-    # density_df = density_inversion("GRACE-FO-A", velacc_ephem, 'vel_acc_x', 'vel_acc_y', 'vel_acc_z', force_model_config, nc_accs=False, 
-    #                                 models_to_query=['JB08', 'DTM2000', "NRLMSISE00"], density_freq='15S')
+    # now read the datafram from csv
     # TODO:# # Do a more systematic analysis of the effect of the interpolation window length and polynomial order on the RMS error
     # densitydf_gfoa = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/GRACE-FO-A/2024-04-26_01-22-32_GRACE-FO-A_fm12597_density_inversion.csv")
     # densitydf_tsx = pd.read_csv("output/DensityInversion/PODBasedAccelerometry/Data/TerraSAR-X/2024-04-26_06-24-57_TerraSAR-X_fm12597_density_inversion.csv")
@@ -147,27 +205,27 @@ if __name__ == "__main__":
 
     # instead of continuing to manually list the paths just iterate over the list of satellite names in "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # Base directory for storm analysis
-    base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
+    # base_dir = "output/DensityInversion/PODBasedAccelerometry/Data/StormAnalysis/"
     # List of satellite names
-    sat_names = ["GRACE-FO-A", "TerraSAR-X"] #"GRACE-FO-A", "TerraSAR-X", "CHAMP"
+    # sat_names = ["TerraSAR-X", "GRACE-FO-A"] #"GRACE-FO-A", "TerraSAR-X", "CHAMP"
 
-    for sat_name in sat_names:
-        storm_analysis_dir = os.path.join(base_dir, sat_name)
+    # for sat_name in sat_names:
+        # storm_analysis_dir = os.path.join(base_dir, sat_name)
         
         # Check if the directory exists before listing files
-        if os.path.exists(storm_analysis_dir):
-            for storm_file in os.listdir(storm_analysis_dir):
+        # if os.path.exists(storm_analysis_dir):
+            # for storm_file in os.listdir(storm_analysis_dir):
                 # Form the full path to the storm file
-                storm_file_path = os.path.join(storm_analysis_dir, storm_file)
+                # storm_file_path = os.path.join(storm_analysis_dir, storm_file)
                 
                 # Check if it's actually a file
-                if os.path.isfile(storm_file_path):
-                    storm_df = pd.read_csv(storm_file_path) 
+                # if os.path.isfile(storm_file_path):
+                    # storm_df = pd.read_csv(storm_file_path) 
                     # density_compare_scatter(storm_df, 45, sat_name)
                     # plot_relative_density_change([storm_df], 45, sat_name)
-                    plot_density_arglat_diff([storm_df], 90, sat_name)
+                    # plot_density_arglat_diff([storm_df], 90, sat_name)
                     # plot_densities_and_residuals([storm_df], 90, sat_name)
-                    plot_densities_and_indices([storm_df], 90, sat_name)
+                    # plot_densities_and_indices([storm_df], 90, sat_name)
                     # density_compare_scatter([storm_df], 45, sat_name) 
 
     # Example Usage
